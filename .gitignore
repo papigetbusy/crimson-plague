@@ -2,3 +2,5 @@
 .claude-wip.md
 node_modules
 site
+__pycache__
+*.pyc
