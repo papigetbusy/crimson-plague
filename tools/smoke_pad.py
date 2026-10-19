@@ -98,6 +98,26 @@ with sync_playwright() as p:
     check('touch settings: sizes and hidden buttons are remembered after a reload', not shown(page, '#bAds') and page.evaluate("()=>document.getElementById('bFire').getBoundingClientRect().width") > w0 * 1.3)
     page.evaluate("()=>document.getElementById('tuneReset').click()"); wait(page, 150)
     check('touch settings: Reset brings every button back at normal size', shown(page, '#bAds') and abs(page.evaluate("()=>document.getElementById('bFire').getBoundingClientRect().width") - w0) < 2)
+    # no two visible touch buttons may overlap, whatever is hidden and however big they are
+    OVERLAP = """(sizes)=>{
+      const view = window.__game.view, ids = ['bFire','bAds','bSlide','bSprint','bReload'], out = [];
+      for (let m = 0; m < 16; m++) {
+        for (const s of sizes) {
+          const set = (k, v) => { const e = document.getElementById('touch_' + k); if (e.type === 'checkbox') e.checked = v; else e.value = v; e.dispatchEvent(new Event(e.type === 'checkbox' ? 'change' : 'input')); };
+          set('showAds', !(m & 1)); set('showSlide', !(m & 2)); set('showSprint', !(m & 4)); set('showReload', !(m & 8));
+          for (const k of ['tFire','tAds','tSlide','tSprint','tReload']) set(k, s);
+          const r = ids.map(i => { const e = document.getElementById(i); return getComputedStyle(e).display === 'none' ? null : [i, e.getBoundingClientRect()]; }).filter(Boolean);
+          for (let a = 0; a < r.length; a++) for (let b = a + 1; b < r.length; b++) {
+            const A = r[a][1], B = r[b][1];
+            const w = Math.min(A.right, B.right) - Math.max(A.left, B.left), h = Math.min(A.bottom, B.bottom) - Math.max(A.top, B.top);
+            if (w > 2 && h > 2) out.push(r[a][0] + '+' + r[b][0] + ' hidden=' + m + ' size=' + s);
+          }
+        }
+      }
+      return out;
+    }"""
+    clashes = page.evaluate(OVERLAP, [1, 1.3])
+    check('touch settings: no two visible buttons overlap in any hide combination (normal and 1.3x sizes)', not clashes, clashes[:4])
     page.context.close()
 
     # ---------- desktop ----------

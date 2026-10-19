@@ -101,14 +101,17 @@ body.touch .act {
 body.touch .act.on { background: var(--glass-hi); border-color: var(--crimson-hi); color: #fff; box-shadow: 0 0 14px rgba(226, 58, 66, 0.7); }
 /* touch button sizes: each is its base size times a setting (--s-fire and so on, 0.6 to 1.6, from the settings panel); a hidden Aim button gives its room back */
 body.touch { --edge: max(16px, env(safe-area-inset-right, 0px)); --bot: env(safe-area-inset-bottom, 0px); --fw: calc(clamp(84px, 25vh, 124px) * var(--s-fire, 1)); --aw: calc(clamp(58px, 17vh, 84px) * var(--s-ads, 1)); --lw: calc(clamp(52px, 15vh, 76px) * var(--s-slide, 1)); --rw: calc(clamp(52px, 15vh, 76px) * var(--s-sprint, 1)); --ew: calc(clamp(52px, 15vh, 76px) * var(--s-reload, 1)); }
-body.touch.hide-ads { --aw: 0px; }
+/* layout slots: Reload sits beside Aim; with Aim hidden Reload takes Aim's place, and Run stacks above whichever is bigger */
+body.touch { --aoff: calc(var(--aw) + 2vh); --avis: var(--aw); --evis: var(--ew); --slot: max(var(--avis), var(--evis)); }
+body.touch.hide-ads { --aoff: 0px; --avis: 0px; }
+body.touch.hide-reload { --evis: 0px; }
 body.touch.hide-ads #bAds, body.touch.hide-slide #bSlide, body.touch.hide-sprint #bSprint, body.touch.hide-reload #bReload { display: none; }
 body.touch #bFire { width: var(--fw); height: var(--fw); right: calc(var(--edge) + 3vh); bottom: calc(var(--bot) + 9vh); background: radial-gradient(circle at 35% 30%, rgba(190, 40, 48, 0.9), rgba(90, 10, 16, 0.92)); font-size: clamp(14px, 4vh, 19px); }
 body.touch #bAds { width: var(--aw); height: var(--aw); right: calc(var(--edge) + 3vh + var(--fw) + 2vh); bottom: calc(var(--bot) + 12vh); }
 body.touch #bSlide { width: var(--lw); height: var(--lw); right: calc(var(--edge) + 3vh + 4vh); bottom: calc(var(--bot) + 9vh + var(--fw) + 2vh); }
-body.touch #bSprint { width: var(--rw); height: var(--rw); right: calc(var(--edge) + 3vh + var(--fw) + 2vh + 7vh); bottom: calc(var(--bot) + 12vh + var(--aw) + 2vh); }
+body.touch #bSprint { width: var(--rw); height: var(--rw); right: calc(var(--edge) + 3vh + var(--fw) + 2vh + 7vh); bottom: calc(var(--bot) + 12vh + var(--slot) + 2vh); }
 
-body.touch #bReload { width: var(--ew); height: var(--ew); font-size: clamp(9px, 2.4vh, 12px); letter-spacing: 0.06em; right: calc(var(--edge) + 3vh + var(--fw) + 2vh + var(--aw) + 2vh); bottom: calc(var(--bot) + 12vh); }
+body.touch #bReload { width: var(--ew); height: var(--ew); font-size: clamp(9px, 2.4vh, 12px); letter-spacing: 0.06em; right: calc(var(--edge) + 3vh + var(--fw) + 2vh + var(--aoff)); bottom: calc(var(--bot) + 12vh); }
 #gear {
   position: fixed; z-index: 7; width: 40px; height: 40px; border-radius: 50%; cursor: pointer;
   top: calc(env(safe-area-inset-top, 0px) + 10px); right: max(16px, env(safe-area-inset-right, 0px));
