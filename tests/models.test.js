@@ -37,4 +37,14 @@ t('The golem has glowing ember cracks and the demon lord has glowing eyes', gole
 t('The hound has glowing eyes', hound.grids.head.glow.size > 0);
 t('Each new monster is under 30,000 faces so six on screen stays light', total(hound) < 30000 && total(golem) < 30000 && total(demon) < 30000);
 console.log('     (hound ' + total(hound) + ', golem ' + total(golem) + ', demon lord ' + total(demon) + ' faces)');
+// ---- signed off 2026-10-19: the v2 hound and fiend are the ones the game uses (v1 files stay as the fallback) ----
+const hound2 = require('../src/models/bone_hound_v2.js').build();
+t('Bone hound v2 has the same seven parts as v1, so the rig does not change', Object.keys(hound.grids).sort().join() === Object.keys(hound2.grids).sort().join() && Object.keys(hound.joints).sort().join() === Object.keys(hound2.joints).sort().join());
+t('Bone hound v2 is a low dog about the same height as v1, with glowing eyes and glowing ribs, under 25,000 faces', Math.abs(tallest(hound2) - tallest(hound)) < 0.25 && hound2.grids.head.glow.size > 0 && hound2.grids.body.glow.size > 0 && total(hound2) < 25000);
+console.log('     (hound v2 ' + total(hound2) + ' faces)');
+const fiend2 = require('../src/models/horned_fiend_v2.js').build(), fiend1 = Fiend.build();
+t('Horned fiend v2 has the same nine parts and joints as v1, so the walk and attack animation do not change', Object.keys(fiend1.grids).sort().join() === Object.keys(fiend2.grids).sort().join() && JSON.stringify(fiend1.joints) === JSON.stringify(fiend2.joints));
+t('Horned fiend v2 is no more than 0.3 taller than v1 (the horns), has glowing eyes, and stays under 60,000 faces', tallest(fiend2) - tallest(fiend1) < 0.3 && tallest(fiend2) >= tallest(fiend1) && fiend2.grids.head.glow.size > 0 && total(fiend2) < 60000);
+t('Horned fiend v2 keeps its feet on the floor', Math.min(...Object.values(fiend2.grids).flatMap((g) => [...g.solid.values()].map((v) => v.y))) === 0);
+console.log('     (fiend v1 ' + total(fiend1) + ', fiend v2 ' + total(fiend2) + ' faces, tallest ' + tallest(fiend1).toFixed(2) + ' -> ' + tallest(fiend2).toFixed(2) + ')');
 process.exit(bad ? 1 : 0);

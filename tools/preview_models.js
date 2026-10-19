@@ -15,11 +15,11 @@ if (which === 'rifle') {
   const mp = m.anchors.magPivot;
   parts.push(dump(m.parts.mag.grid, m.parts.mag.pivot, m.vox, mp));
   parts.push(dump(m.parts.bolt.grid, m.parts.bolt.pivot, m.vox, m.anchors.boltRest));
-} else if (which === 'hound' || which === 'golem' || which === 'demon') {
-  const m = require({ hound: '../src/models/bone_hound.js', golem: '../src/models/rock_golem.js', demon: '../src/models/demon_lord.js' }[which]).build();
+} else if (which === 'hound' || which === 'hound2' || which === 'golem' || which === 'demon') {
+  const m = require({ hound: '../src/models/bone_hound.js', hound2: '../src/models/bone_hound_v2.js', golem: '../src/models/rock_golem.js', demon: '../src/models/demon_lord.js' }[which]).build();
   for (const p of m.pose) parts.push(dump(p.grid, p.pivot, m.vox, p.off));
-} else if (which === 'fiend') {
-  const m = require('../src/models/horned_fiend.js').build();
+} else if (which === 'fiend' || which === 'fiend2') {
+  const m = require(which === 'fiend2' ? '../src/models/horned_fiend_v2.js' : '../src/models/horned_fiend.js').build();
   for (const p of m.pose) parts.push(dump(p.grid, p.pivot, m.vox, p.off));
 }
 fs.writeFileSync(out, JSON.stringify(parts));

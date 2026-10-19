@@ -3,7 +3,7 @@ const fs = require('fs'), path = require('path');
 const root = path.join(__dirname, '..');
 const read = f => fs.readFileSync(path.join(root, 'src', f), 'utf8');
 const label = process.argv[2] || 'local';
-const models = ['models/voxel.js', 'models/gothic_rifle_data.js', 'models/gothic_rifle.js', 'models/horned_fiend_data.js', 'models/horned_fiend.js', 'models/bestiary_kit.js', 'models/bone_hound.js', 'models/rock_golem.js', 'models/demon_lord.js'].map(read).join('\n');
+const models = ['models/voxel.js', 'models/gothic_rifle_data.js', 'models/gothic_rifle.js', 'models/horned_fiend_data.js', 'models/horned_fiend.js', 'models/bestiary_kit.js', 'models/horned_fiend_v2.js', 'models/bone_hound.js', 'models/bone_hound_v2.js', 'models/rock_golem.js', 'models/demon_lord.js'].map(read).join('\n');
 const html = read('index.template.html')
   .replace('/*__REFEREE__*/', () => read('referee_data.js') + '\n' + read('referee.js'))
   .replace('/*__MODELS__*/', () => models)

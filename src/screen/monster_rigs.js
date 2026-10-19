@@ -5,7 +5,7 @@ const MonsterRigs = (function () {
   const MODEL = 0.72;
   function create(THREE) {
     const glowMat = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
-    const SOURCES = { fiend: HornedFiend, golem: RockGolem, demon: DemonLord, hound: BoneHound };
+    const SOURCES = { fiend: HornedFiendV2, golem: RockGolem, demon: DemonLord, hound: BoneHoundV2 };   // the signed-off versions; horned_fiend.js and bone_hound.js stay as the fallback
     const cache = {};       // kind -> { model, geo: { part: { solid, glow } } }  (built once, shared by every monster of that kind)
     function prepare(kind) {
       if (cache[kind]) return cache[kind];
