@@ -7,7 +7,7 @@ const models = ['models/voxel.js', 'models/gothic_rifle_data.js', 'models/gothic
 const html = read('index.template.html')
   .replace('/*__REFEREE__*/', () => read('referee_data.js') + '\n' + read('referee.js'))
   .replace('/*__MODELS__*/', () => models)
-  .replace('/*__SCREEN__*/', () => ['screen/monster_rigs.js', 'screen/loot_view.js', 'screen/hud.js', 'screen/pad_input.js', 'screen/touch_layout.js', 'screen.js'].map(read).join('\n'))
+  .replace('/*__SCREEN__*/', () => ['screen/monster_rigs.js', 'screen/loot_view.js', 'screen/hud.js', 'screen/pad_input.js', 'screen/touch_layout.js', ...(fs.existsSync(path.join(root, 'src', 'screen', 'fx_data.js')) ? ['screen/fx_data.js'] : []), 'screen/fx_plan.js', 'screen/fx_sprites.js', 'screen/fx_picker.js', ...(fs.existsSync(path.join(root, 'src', 'screen', 'wall_data.js')) ? ['screen/wall_data.js'] : []), 'screen/wall_skin.js', 'screen.js'].map(read).join('\n'))
   .replace(/__BUILD__/g, label);
 fs.mkdirSync(path.join(root, 'site'), { recursive: true });
 fs.writeFileSync(path.join(root, 'site', 'index.html'), html);

@@ -98,6 +98,25 @@ with sync_playwright() as p:
     check('touch settings: sizes and hidden buttons are remembered after a reload', not shown(page, '#bAds') and page.evaluate("()=>document.getElementById('bFire').getBoundingClientRect().width") > w0 * 1.3)
     page.evaluate("()=>document.getElementById('tuneReset').click()"); wait(page, 150)
     check('touch settings: Reset brings every button back at normal size', shown(page, '#bAds') and abs(page.evaluate("()=>document.getElementById('bFire').getBoundingClientRect().width") - w0) < 2)
+    # effects: the preset buttons, saved choice, and the sprite effects starting on a shot
+    nb = page.evaluate("()=>document.querySelectorAll('.fxb').length")
+    check('effects: the settings panel has a button for every look preset when the art is in the build', nb == 10, nb)
+    page.evaluate("()=>document.querySelector('.fxb[data-fx=legendary]').click()"); wait(page, 100)
+    check('effects: picking Legendary is remembered', page.evaluate("()=>window.__game.view.fxPreset") == 'legendary' and page.evaluate("()=>document.querySelector('.fxb.on').dataset.fx") == 'legendary')
+    page.reload(); wait(page, 700)
+    check('effects: the choice is still Legendary after a reload', page.evaluate("()=>window.__game.view.fxPreset") == 'legendary')
+    page.evaluate("()=>{window.__game.ref.setCfg({playerHp:1e7,regen:0});window.__game.ref.reset();}")
+    pad(page, held=[A]); wait(page); pad(page); wait(page, 200)
+    s0 = page.evaluate("()=>window.__game.fx.spawned()")
+    pad(page, held=[RT]); wait(page, 600); pad(page); wait(page)
+    s1 = page.evaluate("()=>window.__game.fx.spawned()")
+    check('effects: firing starts sprite effects (muzzle, hits)', s1 > s0, '%s -> %s' % (s0, s1))
+    page.evaluate("()=>document.querySelector('.fxb[data-fx=original]').click()"); wait(page, 100)
+    s2 = page.evaluate("()=>window.__game.fx.spawned()")
+    pad(page, held=[RT]); wait(page, 600); pad(page); wait(page)
+    check('effects: Original starts no sprite effects', page.evaluate("()=>window.__game.fx.spawned()") == s2)
+    page.evaluate("()=>document.getElementById('tuneReset').click()"); wait(page, 150)
+    check('effects: Reset goes back to Common', page.evaluate("()=>window.__game.view.fxPreset") == 'common')
     # no two visible touch buttons may overlap, whatever is hidden and however big they are
     OVERLAP = """(sizes)=>{
       const view = window.__game.view, ids = ['bFire','bAds','bSlide','bSprint','bReload'], out = [];

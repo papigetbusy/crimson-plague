@@ -22,7 +22,7 @@
 
   // presentation-only numbers (the tuning panel edits these too)
   const GUN_DEFAULTS = { gunX: 0.29, gunY: -0.36, gunZ: -0.5, gunScale: 1.15 };
-  const view = Object.assign({ pixelH: 300, brightness: 1, fogFar: 34, sound: 1 }, GUN_DEFAULTS, TouchLayout.DEFAULTS);
+  const view = Object.assign({ pixelH: 300, brightness: 1, fogFar: 34, sound: 1, fxPreset: 'common', wallSkin: 'original' }, GUN_DEFAULTS, TouchLayout.DEFAULTS);
   const LS_KEY = 'crimsonhall.tune.v2';
   try {
     let saved = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
@@ -439,6 +439,9 @@
   const dying = [];
   const smoothLight = (x, z) => { const l = bakeLight(x, 1.5, z, 0, 1, 0); return l; };
   const loot = LootView.create(THREE, scene, glowTex);       // XP orbs and pickups
+  const fx = FxSprites.create(THREE, camera, scene);          // sprite explosions, sparks and lightning (look presets, see fx_plan.js)
+  const fxOn = () => fx.art() && view.fxPreset !== 'original';
+  let shakeAmp = 0, shakeT = 0;
 
   /* ============ effects ============ */
   const parts = [];
@@ -471,12 +474,14 @@
   function addTracer(ex, ey, ez) {
     muzzle.getWorldPosition(tmpV);
     tmpV2.set(ex, ey, ez);
-    const t = tracers[tracerCursor++ % tracers.length];
+    const t = tracers[tracerCursor++ % tracers.length], tr = FxPlan.tracer(fxOn() ? view.fxPreset : 'original');
     const len = tmpV.distanceTo(tmpV2);
     t.m.position.copy(tmpV).add(tmpV2).multiplyScalar(0.5);
     t.m.lookAt(tmpV2);
-    t.m.scale.set(0.03, 0.03, len);
-    t.m.visible = true; t.life = 0.07; t.m.material.opacity = 0.9;
+    t.m.scale.set(tr.width, tr.width, len);
+    t.m.material.color.setHex(tr.color);
+    t.m.visible = true; t.life = t.dur = tr.life; t.m.material.opacity = 0.9;
+    if (fxOn() && tr.trail) fx.trail(view.fxPreset, tmpV, tmpV2);
   }
 
   /* ---- floating damage numbers ---- */
@@ -755,6 +760,8 @@
   const panel = $('panel'), panelBody = $('panelBody');
   const sliderEls = {};
   // touch button sizes and show/hide switches sit at the top of the panel (phones only); a hidden toggle button is switched off so it cannot stay stuck on
+  const fxSet = FxPicker.mount(panelBody, view, { save: () => saveTune(), art: fx.art() });
+  const wallSet = WallSkin.mount(panelBody, view, WallSkin.create(texStone), { save: () => saveTune() });
   const touchSet = TouchLayout.mount(panelBody, view, { save: () => saveTune(), hid: (id) => {
     if (id === 'ads') { tch.ads = false; bAds.classList.remove('on'); }
     if (id === 'sprint') { tch.sprint = false; bSprint.classList.remove('on'); }
@@ -787,7 +794,7 @@
   function pick(cfg, tgt) { const o = {}; for (const k in sliderEls) if (sliderEls[k].tgt === tgt && k !== 'startWave') o[k] = cfg[k]; return o; }
   $('tuneReset').addEventListener('click', () => {
     ref.setCfg(ref.defaults);
-    Object.assign(view, { pixelH: 300, brightness: 1, fogFar: 34, sound: 1 }, GUN_DEFAULTS, TouchLayout.DEFAULTS); touchSet.sync();
+    Object.assign(view, { pixelH: 300, brightness: 1, fogFar: 34, sound: 1, fxPreset: 'common', wallSkin: 'original' }, GUN_DEFAULTS, TouchLayout.DEFAULTS); touchSet.sync(); fxSet.sync(); wallSet.sync();
     for (const k in sliderEls) { const s = sliderEls[k]; s.inp.value = s.tgt === 'ref' ? ref.cfg[k] : view[k]; s.val.textContent = fmt(+s.inp.value, s.st); }
     scene.fog.far = view.fogFar; resize(); saveTune();
   });
@@ -820,15 +827,17 @@
     q.life = 0.8; q.grav = 14;
   }
 
+  function bigShake(a) { if (a > shakeAmp * 0.5) { shakeAmp = a; shakeT = 0.22; } }
   function handleEvents(events) {
     for (const e of events) {
       hud.event(e);
       if (e.type === 'shot') {
-        if (!e.extra) { flashT = 0.06; kickG = 1; sfx('shot'); ejectShell(); }
+        if (!e.extra) { flashT = 0.06; kickG = 1; sfx('shot'); ejectShell(); if (fxOn()) { muzzle.getWorldPosition(tmpV); camera.getWorldDirection(tmpV2); fx.play(view.fxPreset, 'muzzle', tmpV.x + tmpV2.x * 0.12, tmpV.y + tmpV2.y * 0.12, tmpV.z + tmpV2.z * 0.12); } }
         addTracer(e.ex, e.ey, e.ez);
-        if (e.hit === 'wall') burst(e.ex, e.ey, e.ez, 5, [0xffb347, 0xff7a1a, 0x888078], 4, 0.35, 12, 0.7);
+        if (e.hit === 'wall') { burst(e.ex, e.ey, e.ez, 5, [0xffb347, 0xff7a1a, 0x888078], 4, 0.35, 12, 0.7); if (fxOn()) fx.play(view.fxPreset, 'wall', e.ex, e.ey, e.ez); }
       } else if (e.type === 'hit') {
         burst(e.x, e.y, e.z, e.crit ? 9 : 5, [0xb01818, 0x701010, 0xe03030], 3.5, 0.4, 10, 0.8);
+        if (fxOn() && !e.splash) fx.play(view.fxPreset, 'flesh', e.x, e.y, e.z, { crit: e.crit });
         if (!e.splash) damageNumber(e.x, e.y + 0.2, e.z, e.dmg, e.crit);
         hitT = 0.14; hitKill = false; sfx(e.crit ? 'crit' : 'hit');
       } else if (e.type === 'kill') {
@@ -836,7 +845,8 @@
         const en = mons.get(e.id);
         if (en) { mons.delete(e.id); dying.push({ en, t: 0 }); }
         burst(e.x, 1.2 * e.scale, e.z, e.boss ? 40 : 24, [0xb01818, 0x701010, 0x3a0a0a, 0xff6a20], 5, 0.8, 11, e.boss ? 2 : 1.3);
-      } else if (e.type === 'blast') { burst(e.x, e.y, e.z, 10, [0xff9a1c, 0xff4500, 0xffd060], 5, 0.4, 4, 1.1); sfx('blast'); }
+        if (fxOn()) { fx.play(view.fxPreset, 'kill', e.x, 1.2 * e.scale, e.z, { scale: e.scale, boss: e.boss }); bigShake(FxPlan.shake(view.fxPreset, 'kill') * (e.boss ? 1.6 : 1)); }
+      } else if (e.type === 'blast') { burst(e.x, e.y, e.z, 10, [0xff9a1c, 0xff4500, 0xffd060], 5, 0.4, 4, 1.1); sfx('blast'); if (fxOn()) { fx.play(view.fxPreset, 'blast', e.x, e.y, e.z, { r: e.r }); bigShake(FxPlan.shake(view.fxPreset, 'blast')); } }
       else if (e.type === 'playerHit') { sfx('hurt'); }
       else if (e.type === 'slide') { sfx('slide'); }
       else if (e.type === 'orb') { sfx('orb'); }
@@ -845,7 +855,7 @@
       else if (e.type === 'waveStart') { sfx(e.boss ? 'boss' : 'wave'); }
       else if (e.type === 'bossSummon') { sfx('boss'); }
       else if (e.type === 'dead') { diedT = 1.4; sfx('dead'); rlPrev = 0; }
-      else if (e.type === 'restart') { diedT = 0; rlPrev = 0; }
+      else if (e.type === 'restart') { diedT = 0; rlPrev = 0; fx.clear(); }
       else if (e.type === 'reloadStart') { rlPrev = 0; }
     }
   }
@@ -881,6 +891,7 @@
     roll += ((p.sliding ? 0.09 : -strafe * 0.025) - roll) * Math.min(1, dt * 10);
     camera.rotation.set(p.pitch + Math.sin(bob * 2) * 0.0035 * bobAmt, -p.yaw, roll);
     camera.position.y += Math.abs(Math.sin(bob)) * 0.05 * bobAmt;
+    if (shakeT > 0) { shakeT = Math.max(0, shakeT - dt); const k = shakeAmp * (shakeT / 0.22); camera.position.x += (Math.random() - 0.5) * k; camera.position.y += (Math.random() - 0.5) * k; if (shakeT === 0) shakeAmp = 0; }
     if (Math.abs(camera.fov - p.fov) > 0.01) { camera.fov = p.fov; camera.updateProjectionMatrix(); }
 
     // gun pose
@@ -923,8 +934,9 @@
       q.v.y -= q.grav * dt; q.m.position.addScaledVector(q.v, dt);
       if (q.m.position.y < 0.05) { q.m.position.y = 0.05; q.v.y *= -0.3; q.v.x *= 0.6; q.v.z *= 0.6; }
     }
-    for (const t of tracers) { if (!t.m.visible) continue; t.life -= dt; if (t.life <= 0) t.m.visible = false; else t.m.material.opacity = t.life / 0.07 * 0.9; }
+    for (const t of tracers) { if (!t.m.visible) continue; t.life -= dt; if (t.life <= 0) t.m.visible = false; else t.m.material.opacity = t.life / t.dur * 0.9; }
     camera.updateMatrixWorld(true);
+    fx.update(dt);
     for (const n of dnPool) {
       if (n.d.hidden) continue;
       n.life -= dt; if (n.life <= 0) { n.d.hidden = true; continue; }
@@ -971,5 +983,5 @@
   }
   requestAnimationFrame((t) => { clock.last = t; frame(t); });
   setRunning(false);
-  window.__game = { ref, view, THREE };   // handy for poking at numbers from the console
+  window.__game = { ref, view, THREE, fx };   // handy for poking at numbers from the console
 })();
