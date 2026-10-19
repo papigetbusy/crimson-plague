@@ -17,7 +17,7 @@
   const GW = map.W, GH = map.H, rows = map.rows, torches = map.torches;
 
   // presentation-only numbers (the tuning panel edits these too)
-  const GUN_DEFAULTS = { gunX: 0.26, gunY: -0.27, gunZ: -0.5, gunScale: 0.9 };
+  const GUN_DEFAULTS = { gunX: 0.29, gunY: -0.36, gunZ: -0.5, gunScale: 1.15 };
   const view = Object.assign({ pixelH: 300, brightness: 1, fogFar: 34, sound: 1 }, GUN_DEFAULTS);
   const LS_KEY = 'crimsonhall.tune.v2';
   try {
@@ -317,63 +317,36 @@
   camera.add(gun);
   const gunBody = new THREE.Group(); gun.add(gunBody);
   const gb = (w, h, d, m, x, y, z, p) => boxMesh(w, h, d, m, x, y, z, p || gunBody);
-  // receiver and dust cover
-  gb(0.15, 0.16, 0.62, ironMat, 0, 0, -0.05);
-  gb(0.125, 0.025, 0.6, goldLit, 0, 0.092, -0.05);
-  // handguard, gas block, barrel, muzzle brake
-  gb(0.17, 0.14, 0.46, stoneLit, 0, -0.005, -0.6);
-  gb(0.12, 0.05, 0.42, ironMat, 0, -0.095, -0.6);
-  gb(0.19, 0.16, 0.035, goldLit, 0, 0, -0.42);
-  gb(0.19, 0.16, 0.035, goldLit, 0, 0, -0.8);
-  gb(0.05, 0.05, 0.5, ironMat, 0, 0.012, -1.08);
-  gb(0.075, 0.075, 0.07, goldLit, 0, 0.012, -0.9);
-  gb(0.09, 0.09, 0.13, goldLit, 0, 0.012, -1.36);
-  gb(0.05, 0.05, 0.04, ironMat, 0, 0.012, -1.44);
-  gb(0.02, 0.075, 0.02, ironMat, 0, 0.075, -1.16);
-  // pistol grip, trigger guard, stock
-  const grip = gb(0.1, 0.22, 0.12, stoneLit, 0, -0.19, 0.2); grip.rotation.x = -0.3;
-  gb(0.035, 0.03, 0.22, ironMat, 0, -0.105, 0.04);
-  gb(0.12, 0.15, 0.4, stoneLit, 0, -0.02, 0.6);
-  gb(0.13, 0.17, 0.03, goldLit, 0, -0.02, 0.82);
-  // gold plates and red gems down both sides
-  for (const sx of [-1, 1]) {
-    gb(0.02, 0.12, 0.34, goldLit, sx * 0.085, 0, -0.06);
-    gb(0.02, 0.07, 0.07, gemMat, sx * 0.098, 0.005, -0.12);
-    gb(0.02, 0.04, 0.04, gemMat, sx * 0.098, 0.005, 0.0);
-    gb(0.02, 0.06, 0.14, goldLit, sx * 0.095, 0, -0.6);
-    gb(0.02, 0.04, 0.09, gemMat, sx * 0.106, 0, -0.6);
-    gb(0.02, 0.02, 0.02, gemHi, sx * 0.118, 0.012, -0.64);
-    gb(0.02, 0.1, 0.3, goldLit, sx * 0.065, -0.02, 0.6);
+  // the rifle itself: Grok's gothic assault rifle, built from voxels (src/models/gothic_rifle.js)
+  const RIFLE = GothicRifle.build(), RA = RIFLE.anchors;
+  const gunMat = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x1c0c0c });
+  const glowVoxMat = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
+  // a model part becomes a group holding one lit mesh and one glowing mesh
+  function voxelPart(part, vox, parent, mat, glowM) {
+    const grp = new THREE.Group(); parent.add(grp);
+    for (const kind of ['solid', 'glow']) {
+      const m = Voxel.mesh(part.grid, kind, vox, part.pivot);
+      if (!m.faces) continue;
+      const mesh = new THREE.Mesh(Voxel.toGeometry(THREE, m), kind === 'glow' ? glowM : mat);
+      mesh.frustumCulled = false; grp.add(mesh);
+    }
+    return grp;
   }
-  gb(0.012, 0.05, 0.14, blackMat, 0.078, 0.03, -0.1);          // ejection port
-  // charging handle (right side)
-  const charge = new THREE.Group(); charge.position.set(0.1, 0.045, -0.2); gunBody.add(charge);
-  gb(0.05, 0.03, 0.07, goldLit, 0, 0, 0, charge); gb(0.035, 0.035, 0.035, goldLit, 0.04, 0, 0.02, charge);
-  const CHARGE_Z = -0.2;
-  // magazine (curved AK shape built from two angled blocks)
-  const mag = new THREE.Group(); mag.position.set(0, -0.08, -0.1); mag.rotation.x = 0.25; gunBody.add(mag);
-  gb(0.09, 0.42, 0.15, ironMat, 0, -0.22, 0, mag);
-  gb(0.1, 0.03, 0.16, goldLit, 0, -0.44, 0, mag);
-  gb(0.1, 0.03, 0.16, goldLit, 0, -0.04, 0, mag);
-  for (const sx of [-1, 1]) gb(0.016, 0.12, 0.06, gemMat, sx * 0.052, -0.22, 0, mag);
-  const MAG_BASE = new THREE.Vector3(0, -0.08, -0.1);
+  voxelPart(RIFLE.parts.body, RIFLE.vox, gunBody, gunMat, glowVoxMat);
+  // charging handle (right side) and magazine are their own parts so they can move
+  const charge = voxelPart(RIFLE.parts.bolt, RIFLE.vox, gunBody, gunMat, glowVoxMat); charge.position.set(RA.boltRest[0], RA.boltRest[1], RA.boltRest[2]);
+  const CHARGE_Z = RA.boltRest[2];
+  const mag = voxelPart(RIFLE.parts.mag, RIFLE.vox, gunBody, gunMat, glowVoxMat); mag.rotation.x = 0.1;
+  const MAG_BASE = new THREE.Vector3(RA.magPivot[0], RA.magPivot[1], RA.magPivot[2]);
+  mag.position.copy(MAG_BASE);
 
-  // red dot sight: low, slim open reflex. Tiny base, hairline posts, thin hood; the dot sits at the window centre
-  const SIGHT = { y: 0.16, z: -0.094 };   // the dot plane in gun space; ADS lines this up with the eye
-  const EYE_RELIEF = 0.42;
-  const sight = new THREE.Group(); sight.position.set(0, 0.105, -0.12); gunBody.add(sight);
-  gb(0.062, 0.014, 0.17, goldLit, 0, 0.007, 0.0, sight);              // low base
-  gb(0.008, 0.07, 0.07, ironMat, -0.034, 0.05, 0.0, sight);           // hairline posts
-  gb(0.008, 0.07, 0.07, ironMat, 0.034, 0.05, 0.0, sight);
-  gb(0.076, 0.008, 0.074, ironMat, 0, 0.088, 0.0, sight);             // thin hood
-  gb(0.02, 0.003, 0.076, goldLit, 0, 0.0935, 0.0, sight);             // gold trim line
-  gb(0.008, 0.008, 0.077, gemMat, 0, 0.088, 0.0, sight);              // tiny gem
-  const lensMat = new THREE.MeshBasicMaterial({ color: 0xff3a3a, transparent: true, opacity: 0.07, depthWrite: false, fog: false });
-  gb(0.06, 0.07, 0.003, lensMat, 0, 0.05, 0.03, sight);
+  // the red dot floats between the scope rings; ADS lines it up with the eye
+  const SIGHT = { y: RA.sightDot[1], z: RA.sightDot[2] };
+  const EYE_RELIEF = 0.5;
   const dotMat = new THREE.MeshBasicMaterial({ color: 0xff2424, fog: false });
-  gb(0.007, 0.007, 0.004, dotMat, 0, 0.055, 0.026, sight);
+  gb(0.008, 0.008, 0.004, dotMat, 0, SIGHT.y, SIGHT.z);
   const dotGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xff2a2a, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, transparent: true }));
-  dotGlow.scale.setScalar(0.035); dotGlow.position.set(0, 0.055, 0.024); sight.add(dotGlow);
+  dotGlow.scale.setScalar(0.035); dotGlow.position.set(0, SIGHT.y, SIGHT.z + 0.004); gunBody.add(dotGlow);
 
   // gloved hands and forearms (forearms stretch between a fixed elbow and the hand)
   const limbGeo = new THREE.BoxGeometry(1, 1, 1);
@@ -385,14 +358,14 @@
   gb(0.035, 0.1, 0.11, gloveMat, 0.08, 0.05, 0, handL);
   gb(0.05, 0.035, 0.09, gloveMat, 0.07, 0.1, -0.03, handL);
   gb(0.15, 0.1, 0.05, goldLit, 0, -0.015, 0.11, handL);
-  const handR = new THREE.Group(); handR.position.set(0, -0.2, 0.27); gunBody.add(handR);
+  const handR = new THREE.Group(); handR.position.set(0, -0.15, 0.15); gunBody.add(handR);
   gb(0.12, 0.14, 0.07, gloveMat, 0, 0, 0, handR);
   for (const y of [0.045, 0.005, -0.035]) gb(0.11, 0.035, 0.08, gloveMat, 0, y, -0.075, handR);
   gb(0.035, 0.04, 0.1, gloveMat, -0.075, 0.07, -0.03, handR);
   gb(0.14, 0.1, 0.045, goldLit, 0, -0.01, 0.07, handR);
   const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
-  const HOLD = V3(0, -0.17, -0.6), MAGH = V3(0, -0.3, -0.2), BELT = V3(-0.15, -0.8, -0.05);
-  const CH_F = V3(0.1, 0.1, -0.16), CH_B = V3(0.1, 0.1, 0.0);
+  const HOLD = V3(0, -0.12, -0.45), MAGH = V3(0, -0.15, -0.13), BELT = V3(-0.15, -0.8, -0.05);
+  const CH_F = V3(0.1, 0.1, -0.17), CH_B = V3(0.1, 0.1, 0.0);
   const ELBOW_L = V3(-0.55, -1.0, 0.7), ELBOW_R = V3(0.3, -0.9, 1.0);
   const Zaxis = V3(0, 0, 1), tA = V3(0, 0, 0), tB = V3(0, 0, 0);
   function placeLimb(m, a, b, th) {
@@ -401,7 +374,7 @@
     m.quaternion.setFromUnitVectors(Zaxis, tA.divideScalar(len));
     m.scale.set(th, th * 0.9, len);
   }
-  const muzzle = new THREE.Object3D(); muzzle.position.set(0, 0.012, -1.46); gunBody.add(muzzle);
+  const muzzle = new THREE.Object3D(); muzzle.position.set(RA.muzzle[0], RA.muzzle[1], RA.muzzle[2]); gunBody.add(muzzle);
   const flashMat = new THREE.MeshBasicMaterial({ color: 0xffc860, transparent: true, opacity: 0.95, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
   const flashMesh = new THREE.Group(); muzzle.add(flashMesh);
   boxMesh(0.14, 0.14, 0.06, flashMat, 0, 0, -0.04, flashMesh);
@@ -456,51 +429,35 @@
   }
   const shellV = V3(0, 0, 0);
 
-  /* ============ monsters (voxel demons from textured boxes) ============ */
+  /* ============ monsters: Grok's Crimson Horned Fiend, built from voxels (src/models/horned_fiend.js) ============ */
   const MODEL = 0.72;
-  const boneMat = new THREE.MeshLambertMaterial({ map: texBone, emissive: 0x1a1610 });
-  const darkMat = new THREE.MeshLambertMaterial({ map: texDark });
-  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffa21f, fog: false });
-  const mouthMat = new THREE.MeshBasicMaterial({ color: 0xff4a12, fog: false });
-  const emberMat = new THREE.MeshBasicMaterial({ color: 0x8a1a10 });
+  const FIEND = HornedFiend.build(), FA = FIEND.at;
+  const fiendGeo = {};       // geometry is built once and shared by every monster
+  for (const k in FIEND.grids) {
+    fiendGeo[k] = {};
+    for (const kind of ['solid', 'glow']) { const m = Voxel.mesh(FIEND.grids[k], kind, FIEND.vox, [0, 0, 0]); if (m.faces) fiendGeo[k][kind] = Voxel.toGeometry(THREE, m); }
+  }
+  const fiendGlowMat = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
   function buildMonster() {
-    const skin = new THREE.MeshLambertMaterial({ map: texSkin, emissive: 0x000000 });
+    const skin = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x000000 });   // one per monster, so hit flashes stay separate
     const root = new THREE.Group(); root.rotation.order = 'YXZ';
     const body = new THREE.Group(); root.add(body);
-    const part = (w, h, d, m, x, y, z, p) => boxMesh(w, h, d, m, x, y, z, p || body);
-    const legs = [];
-    for (const sx of [-1, 1]) {
-      const pv = new THREE.Group(); pv.position.set(sx * 0.3, 0.95, 0); body.add(pv);
-      part(0.4, 0.95, 0.46, skin, 0, -0.475, 0, pv);
-      part(0.5, 0.14, 0.64, darkMat, 0, -0.93, -0.09, pv);
-      for (const cx of [-0.15, 0, 0.15]) part(0.07, 0.1, 0.16, boneMat, cx, -0.93, -0.44, pv);
-      legs.push(pv);
-    }
-    part(0.95, 0.42, 0.6, skin, 0, 1.05, 0);
-    const torso = new THREE.Group(); torso.position.set(0, 1.25, 0); torso.rotation.x = 0.16; body.add(torso);
-    part(1.2, 1.05, 0.75, skin, 0, 0.55, 0, torso);
-    part(0.34, 0.34, 0.05, emberMat, 0, 0.55, -0.39, torso);
+    // a jointed part: a group at the joint holding its lit mesh and its glowing mesh
+    const joint = (name, parent, at) => {
+      const grp = new THREE.Group(); grp.position.set(at[0], at[1], at[2]); parent.add(grp);
+      if (fiendGeo[name].solid) grp.add(new THREE.Mesh(fiendGeo[name].solid, skin));
+      if (fiendGeo[name].glow) grp.add(new THREE.Mesh(fiendGeo[name].glow, fiendGlowMat));
+      return grp;
+    };
+    joint('body', body, [0, 0, 0]);
+    const legs = [joint('leg', body, FA.legR), joint('leg', body, FA.legL)];
+    const torso = joint('torso', body, FA.torso); torso.rotation.x = -0.06;
+    const head = joint('head', torso, FA.head);
     const arms = [];
-    for (const sx of [-1, 1]) {
-      part(0.56, 0.5, 0.62, skin, sx * 0.82, 1.02, 0, torso);
-      const sh = new THREE.Group(); sh.position.set(sx * 0.84, 0.95, 0); torso.add(sh);
-      part(0.38, 0.8, 0.42, skin, 0, -0.4, 0, sh);
-      const fore = new THREE.Group(); fore.position.set(0, -0.8, 0); sh.add(fore);
-      part(0.34, 0.8, 0.38, skin, 0, -0.4, 0, fore);
-      part(0.44, 0.3, 0.4, darkMat, 0, -0.88, 0, fore);
-      for (const cx of [-0.13, 0, 0.13]) part(0.07, 0.24, 0.07, boneMat, cx, -1.1, -0.1, fore);
-      arms.push({ sh, fore });
+    for (const sh of [FA.shoulderR, FA.shoulderL]) {
+      const s = joint('arm', torso, sh);
+      arms.push({ sh: s, fore: joint('fore', s, FA.elbow) });
     }
-    const head = new THREE.Group(); head.position.set(0, 1.2, -0.12); torso.add(head);
-    part(0.7, 0.62, 0.66, skin, 0, 0.3, 0, head);
-    part(0.5, 0.16, 0.5, darkMat, 0, -0.02, -0.04, head);
-    for (const sx of [-1, 1]) {
-      part(0.14, 0.08, 0.05, eyeMat, sx * 0.17, 0.4, -0.34, head);
-      const h1 = part(0.16, 0.3, 0.16, boneMat, sx * 0.3, 0.7, 0.02, head); h1.rotation.z = -sx * 0.3;
-      const h2 = part(0.12, 0.3, 0.12, boneMat, sx * 0.43, 0.97, 0.02, head); h2.rotation.z = -sx * 0.7;
-    }
-    part(0.36, 0.16, 0.04, mouthMat, 0, 0.14, -0.33, head);
-    for (const cx of [-0.12, -0.04, 0.04, 0.12]) part(0.05, 0.08, 0.04, boneMat, cx, 0.22, -0.345, head);
     return { root, body, legs, arms, torso, head, skin };
   }
   const mons = new Map();     // id -> entry
@@ -833,7 +790,7 @@
   let bob = 0, kickG = 0, flashT = 0, sway = 0, roll = 0, lastSlideK = 0;
   const gunHip = new THREE.Vector3(), gunAds = new THREE.Vector3();
   function ejectShell() {
-    gunBody.localToWorld(shellV.set(0.09, 0.03, -0.02));
+    gunBody.localToWorld(shellV.set(0.09, 0.07, -0.05));
     const q = parts[partCursor++ % parts.length], e = camera.matrixWorld.elements;
     q.m.visible = true; q.m.position.copy(shellV); q.m.material.color.setHex(0xe0b050); q.m.scale.setScalar(0.7);
     q.v.set(e[0] * 2.4 + e[4] * 1.8 + e[8] * 0.4 + (Math.random() - 0.5) * 0.6, e[1] * 2.4 + e[5] * 1.8 + e[9] * 0.4, e[2] * 2.4 + e[6] * 1.8 + e[10] * 0.4 + (Math.random() - 0.5) * 0.6);
@@ -876,11 +833,11 @@
       en.torso.rotation.z = sw * 0.05;
       if (m.state === 'attack') {
         const k = Math.sin(st.t * 11 + m.id);
-        en.arms[0].sh.rotation.x = -1.3 + k * 0.8; en.arms[1].sh.rotation.x = -1.3 - k * 0.8;
-        en.arms[0].fore.rotation.x = -0.5; en.arms[1].fore.rotation.x = -0.5;
+        en.arms[0].sh.rotation.x = 1.3 + k * 0.8; en.arms[1].sh.rotation.x = 1.3 - k * 0.8;
+        en.arms[0].fore.rotation.x = 0.5; en.arms[1].fore.rotation.x = 0.5;
       } else {
-        en.arms[0].sh.rotation.x = -sw * 0.55 - 0.15; en.arms[1].sh.rotation.x = sw * 0.55 - 0.15;
-        en.arms[0].fore.rotation.x = -0.35; en.arms[1].fore.rotation.x = -0.35;
+        en.arms[0].sh.rotation.x = -sw * 0.55 + 0.1; en.arms[1].sh.rotation.x = sw * 0.55 + 0.1;
+        en.arms[0].fore.rotation.x = 0.35; en.arms[1].fore.rotation.x = 0.35;
       }
       en.head.rotation.x = Math.sin(st.t * 3 + m.id) * 0.04;
       const lt = smoothLight(m.x, m.z), f = clamp(m.flash / 0.12, 0, 1);

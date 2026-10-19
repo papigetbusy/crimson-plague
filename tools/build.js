@@ -3,8 +3,10 @@ const fs = require('fs'), path = require('path');
 const root = path.join(__dirname, '..');
 const read = f => fs.readFileSync(path.join(root, 'src', f), 'utf8');
 const label = process.argv[2] || 'local';
+const models = ['models/voxel.js', 'models/gothic_rifle.js', 'models/horned_fiend.js'].map(read).join('\n');
 const html = read('index.template.html')
   .replace('/*__REFEREE__*/', () => read('referee.js'))
+  .replace('/*__MODELS__*/', () => models)
   .replace('/*__SCREEN__*/', () => read('screen.js'))
   .replace(/__BUILD__/g, label);
 fs.mkdirSync(path.join(root, 'site'), { recursive: true });

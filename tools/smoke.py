@@ -1,4 +1,4 @@
-import sys, json
+import os, sys, json
 from playwright.sync_api import sync_playwright
 
 STUB = """
@@ -23,7 +23,7 @@ with sync_playwright() as p:
     page.on('console', lambda m: errors.append('CONSOLE.'+m.type+': '+m.text) if m.type in ('error',) and 'ERR_' not in m.text and 'Failed to load resource' not in m.text else None)
     page.route('**/three.min.js', lambda r: r.fulfill(body=STUB, content_type='application/javascript'))
     page.route('**/fonts.googleapis.com/**', lambda r: r.abort())
-    page.goto('file:///home/claude/hordegame/game.html')
+    page.goto('file://' + os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'site', 'index.html') + '')
     page.wait_for_timeout(600)
     page.screenshot(path='/home/claude/hordegame/shot_overlay_%s.png' % ('desk' if desktop else 'phone'))
     if desktop:
