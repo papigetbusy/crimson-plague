@@ -84,7 +84,7 @@ body.touch #joyZone { left: 0; width: 46%; }
 body.touch #lookZone { right: 0; width: 54%; }
 body.touch #joyBase {
   display: block; position: fixed; z-index: 6; pointer-events: none;
-  width: clamp(96px, 28vh, 150px); height: clamp(96px, 28vh, 150px); border-radius: 50%;
+  width: calc(clamp(96px, 28vh, 150px) * var(--s-joy, 1)); height: calc(clamp(96px, 28vh, 150px) * var(--s-joy, 1)); border-radius: 50%;
   left: calc(max(16px, env(safe-area-inset-left, 0px)) + 14vh); top: calc(100% - env(safe-area-inset-bottom, 0px) - 22vh);
   transform: translate(-50%, -50%);
   border: 2px solid rgba(207, 165, 74, 0.4); background: radial-gradient(circle, rgba(120, 20, 28, 0.16), rgba(12, 6, 8, 0.4));
@@ -99,12 +99,16 @@ body.touch .act {
   padding: 0; font-size: clamp(11px, 3vh, 14px);
 }
 body.touch .act.on { background: var(--glass-hi); border-color: var(--crimson-hi); color: #fff; box-shadow: 0 0 14px rgba(226, 58, 66, 0.7); }
-body.touch #bFire { width: clamp(84px, 25vh, 124px); height: clamp(84px, 25vh, 124px); right: calc(max(16px, env(safe-area-inset-right, 0px)) + 3vh); bottom: calc(env(safe-area-inset-bottom, 0px) + 9vh); background: radial-gradient(circle at 35% 30%, rgba(190, 40, 48, 0.9), rgba(90, 10, 16, 0.92)); font-size: clamp(14px, 4vh, 19px); }
-body.touch #bAds { width: clamp(58px, 17vh, 84px); height: clamp(58px, 17vh, 84px); right: calc(max(16px, env(safe-area-inset-right, 0px)) + 3vh + clamp(84px, 25vh, 124px) + 2vh); bottom: calc(env(safe-area-inset-bottom, 0px) + 12vh); }
-body.touch #bSlide { width: clamp(52px, 15vh, 76px); height: clamp(52px, 15vh, 76px); right: calc(max(16px, env(safe-area-inset-right, 0px)) + 3vh + 4vh); bottom: calc(env(safe-area-inset-bottom, 0px) + 9vh + clamp(84px, 25vh, 124px) + 2vh); }
-body.touch #bSprint { width: clamp(52px, 15vh, 76px); height: clamp(52px, 15vh, 76px); right: calc(max(16px, env(safe-area-inset-right, 0px)) + 3vh + clamp(84px, 25vh, 124px) + 2vh + 7vh); bottom: calc(env(safe-area-inset-bottom, 0px) + 12vh + clamp(58px, 17vh, 84px) + 2vh); }
+/* touch button sizes: each is its base size times a setting (--s-fire and so on, 0.6 to 1.6, from the settings panel); a hidden Aim button gives its room back */
+body.touch { --edge: max(16px, env(safe-area-inset-right, 0px)); --bot: env(safe-area-inset-bottom, 0px); --fw: calc(clamp(84px, 25vh, 124px) * var(--s-fire, 1)); --aw: calc(clamp(58px, 17vh, 84px) * var(--s-ads, 1)); --lw: calc(clamp(52px, 15vh, 76px) * var(--s-slide, 1)); --rw: calc(clamp(52px, 15vh, 76px) * var(--s-sprint, 1)); --ew: calc(clamp(52px, 15vh, 76px) * var(--s-reload, 1)); }
+body.touch.hide-ads { --aw: 0px; }
+body.touch.hide-ads #bAds, body.touch.hide-slide #bSlide, body.touch.hide-sprint #bSprint, body.touch.hide-reload #bReload { display: none; }
+body.touch #bFire { width: var(--fw); height: var(--fw); right: calc(var(--edge) + 3vh); bottom: calc(var(--bot) + 9vh); background: radial-gradient(circle at 35% 30%, rgba(190, 40, 48, 0.9), rgba(90, 10, 16, 0.92)); font-size: clamp(14px, 4vh, 19px); }
+body.touch #bAds { width: var(--aw); height: var(--aw); right: calc(var(--edge) + 3vh + var(--fw) + 2vh); bottom: calc(var(--bot) + 12vh); }
+body.touch #bSlide { width: var(--lw); height: var(--lw); right: calc(var(--edge) + 3vh + 4vh); bottom: calc(var(--bot) + 9vh + var(--fw) + 2vh); }
+body.touch #bSprint { width: var(--rw); height: var(--rw); right: calc(var(--edge) + 3vh + var(--fw) + 2vh + 7vh); bottom: calc(var(--bot) + 12vh + var(--aw) + 2vh); }
 
-body.touch #bReload { width: clamp(52px, 15vh, 76px); height: clamp(52px, 15vh, 76px); font-size: clamp(9px, 2.4vh, 12px); letter-spacing: 0.06em; right: calc(max(16px, env(safe-area-inset-right, 0px)) + 3vh + clamp(84px, 25vh, 124px) + 2vh + clamp(58px, 17vh, 84px) + 2vh); bottom: calc(env(safe-area-inset-bottom, 0px) + 12vh); }
+body.touch #bReload { width: var(--ew); height: var(--ew); font-size: clamp(9px, 2.4vh, 12px); letter-spacing: 0.06em; right: calc(var(--edge) + 3vh + var(--fw) + 2vh + var(--aw) + 2vh); bottom: calc(var(--bot) + 12vh); }
 #gear {
   position: fixed; z-index: 7; width: 40px; height: 40px; border-radius: 50%; cursor: pointer;
   top: calc(env(safe-area-inset-top, 0px) + 10px); right: max(16px, env(safe-area-inset-right, 0px));
@@ -118,6 +122,11 @@ body.touch #bReload { width: clamp(52px, 15vh, 76px); height: clamp(52px, 15vh, 
   right: max(12px, env(safe-area-inset-right, 0px)); width: min(380px, 62vw);
   display: flex; flex-direction: column; background: rgba(10, 5, 6, 0.94); border: 1px solid var(--gold-dim);
 }
+body.touch #panel { right: auto; left: max(12px, env(safe-area-inset-left, 0px)); width: min(380px, 46vw); }
+.touchset { display: none; }
+body.touch .touchset { display: block; }
+.touchset .note { margin: 0 0 6px; font-size: 13px; line-height: 1.3; color: var(--dim); }
+.row.check input { grid-column: auto; width: 24px; height: 24px; margin: 0; }
 #panel header { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--gold-dim); }
 #panel header b { font-family: var(--display); font-size: 22px; font-weight: 400; color: var(--gold); letter-spacing: 0.03em; }
 #panelBody { overflow-y: auto; padding: 4px 12px 10px; flex: 1; min-height: 0; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
@@ -187,6 +196,15 @@ body.touch .touchhelp { display: block; }
 #restart { font-family: var(--display); font-size: clamp(22px, 6vh, 32px); letter-spacing: 0.05em; color: #fff; background: linear-gradient(#b5222b, #6b0f16); border: 2px solid var(--gold); padding: 8px 36px 6px; cursor: pointer; touch-action: manipulation; }
 .kbd { font-size: 13px; letter-spacing: 0.1em; color: var(--dim); }
 body.touch .kbd { display: none; }
+/* controller: while a pad is connected the touch controls and keyboard hints give way to the pad's hints */
+.padhelp, .padk { display: none; }
+body.pad.touch #joyZone, body.pad.touch #lookZone, body.pad.touch #joyBase, body.pad.touch .act { display: none; }
+body.pad .keys, body.pad .touchhelp, body.pad .kbd { display: none; }
+body.pad .padhelp { display: block; }
+body.pad .padk { display: inline; }
+body.pad .card3.sel { border-color: var(--gold); background: linear-gradient(#3c1016, #1a080c); box-shadow: 0 0 18px rgba(207, 165, 74, 0.45); }
+#padToast { position: fixed; z-index: 30; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 12px); transform: translateX(-50%); padding: 8px 16px; font-family: var(--body); font-weight: 700; font-size: clamp(13px, 3.2vh, 16px); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink); background: var(--glass-hi); border: 1px solid var(--gold-dim); opacity: 0; pointer-events: none; transition: opacity 0.25s; }
+#padToast.show { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { #banner.show { animation: none; opacity: 1; } }
 </style>
 
@@ -233,6 +251,7 @@ body.touch .kbd { display: none; }
   </footer>
 </section>
 
+<div id="padToast" role="status"></div>
 <div class="overlay" id="start">
   <div class="card">
     <h1>Crimson Plague</h1>
@@ -242,12 +261,13 @@ body.touch .kbd { display: none; }
       <p><b>Shift</b> sprint</p><p><b>Right click</b> aim</p>
       <p><b>C</b> slide while running</p><p><b>R</b> reload</p><p><b>Tab</b> tuning</p><p></p>
     </div>
+    <p class="padhelp"><b>Left stick</b> moves, <b>right stick</b> looks. <b>RT</b> fires, <b>LT</b> aims. <b>Click the left stick</b> to sprint. <b>B</b> slides while sprinting. <b>X</b> reloads. <b>Start</b> pauses. Press <b>A</b> to begin.</p>
     <p class="touchhelp"><b>Left thumb</b> moves. <b>Drag the right side</b> to look. Hold <b>Fire</b> and drag to shoot while turning. <b>Run</b> and <b>Aim</b> toggle, <b>Slide</b> and <b>Reload</b> are taps. <b>Tune</b> is top right.</p>
     <button id="play" type="button"><span id="playLabel">ENTER THE HALL</span></button>
   </div>
 </div>
-<div class="overlay" id="levelup" hidden><div class="card"><h1>LEVEL UP</h1><p>Choose a gift for this run <span class="kbd">(press 1, 2 or 3)</span></p><div id="cards"></div></div></div>
-<div class="overlay" id="gameover" hidden><div class="card"><h1>YOU FELL</h1><p id="overStats"></p><button id="restart" type="button">RISE AGAIN</button><p class="kbd">or press Enter</p></div></div>
+<div class="overlay" id="levelup" hidden><div class="card"><h1>LEVEL UP</h1><p>Choose a gift for this run <span class="kbd">(press 1, 2 or 3)</span><span class="padk">(D-pad to choose, A to take it)</span></p><div id="cards"></div></div></div>
+<div class="overlay" id="gameover" hidden><div class="card"><h1>YOU FELL</h1><p id="overStats"></p><button id="restart" type="button">RISE AGAIN</button><p class="kbd">or press Enter</p><p class="padk">or press A</p></div></div>
 <div class="overlay" id="rotate"><div class="card"><div class="phone"></div><h1 style="font-size:clamp(34px,9vw,60px)">Turn your phone sideways</h1><p>The hall plays in landscape.</p></div></div>
 <div class="overlay" id="fatal" hidden><div class="card"><h1 style="font-size:48px">No 3D here</h1><p>This browser could not start WebGL. Try Safari or Chrome directly.</p></div></div>
 

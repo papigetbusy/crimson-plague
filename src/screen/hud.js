@@ -7,7 +7,7 @@ const Hud = (function () {
       banner: $('banner'), bannerT: $('bannerT'), bannerS: $('bannerS'), chips: $('chips'), frenzy: $('frenzy'),
       levelup: $('levelup'), cards: $('cards'), over: $('gameover'), overStats: $('overStats'), restart: $('restart')
     };
-    let last = {}, chipKey = '', cardKey = '', bannerT = 0;
+    let last = {}, chipKey = '', cardKey = '', bannerT = 0, sel = 0, cardN = 0;   // sel: the card a controller has highlighted
     const setText = (k, node, v) => { if (last[k] !== v) { node.textContent = v; last[k] = v; } };
     el.restart.addEventListener('click', () => cb.restart());
     function banner(title, sub) {
@@ -20,11 +20,15 @@ const Hud = (function () {
       else if (e.type === 'pickup') banner(e.kind === 'heal' ? '+HEALTH' : 'BLOODLUST', e.kind === 'heal' ? '' : 'More damage, faster fire');
       else if (e.type === 'bossSummon') banner('HOUNDS CALLED', '');
     }
+    const applySel = () => Array.from(el.cards.children).forEach((b, i) => b.classList.toggle('sel', i === sel));
+    function moveSel(d) { if (cardN) { sel = (sel + d + cardN) % cardN; applySel(); } }
+    function selected() { return cardN ? sel : -1; }
     function showCards(choices) {
       const key = choices ? choices.map((c) => c.id + c.stack).join() : '';
       if (key === cardKey) return;
       cardKey = key; el.levelup.hidden = !choices;
       el.cards.textContent = '';
+      cardN = choices ? choices.length : 0; sel = 0;
       if (!choices) return;
       choices.forEach((c, i) => {
         const b = document.createElement('button'); b.type = 'button'; b.className = 'card3';
@@ -36,6 +40,7 @@ const Hud = (function () {
         b.addEventListener('pointerdown', (ev) => { ev.preventDefault(); cb.pick(i); });
         el.cards.appendChild(b);
       });
+      applySel();
     }
     function update(st, dt) {
       setText('wn', el.waveN, st.wave.phase === 'intermission' && st.wave.timer > 0 ? 'WAVE ' + st.wave.n + ' IN ' + Math.ceil(st.wave.timer) : 'WAVE ' + st.wave.n);
@@ -54,7 +59,7 @@ const Hud = (function () {
       if (st.over) { const m = Math.floor(st.over.time / 60), s = Math.floor(st.over.time % 60); setText('os', el.overStats, 'You reached wave ' + st.over.wave + '  |  level ' + st.over.level + '  |  ' + st.kills + ' slain  |  ' + m + ':' + (s < 10 ? '0' : '') + s); }
       bannerT -= dt; if (bannerT <= 0) el.banner.classList.remove('show');
     }
-    return { update, event };
+    return { update, event, moveSel, selected };
   }
   return { create };
 })();

@@ -8,8 +8,9 @@
    can be ported to Go later without touching the screen.
 
    step(dt, input) -> { state, events }
-     input:  { mx, mz, lookX, lookY, touchX, touchY,
+     input:  { mx, mz, lookX, lookY, touchX, touchY, padX, padY,
                fire, ads, sprint, slide, reload }
+               (padX / padY: the controller's right stick, -1..1, already past its dead zone)
      state:  everything the screen needs to draw one frame
      events: one-shot things that happened this step
    ============================================================ */
@@ -53,6 +54,8 @@ const Referee = (function () {
     adsTime: 0.12,
     lookSens: 0.0022,     // radians per mouse pixel
     touchSens: 0.0055,    // radians per touch pixel
+    padTurn: 3.4,         // radians per second the right stick turns you at full tilt
+    padPitchMul: 0.7,     // looking up and down is slower than turning, so the aim stays easy to hold
     adsLookMul: 0.55,
     // gun
     fireRate: 10,
@@ -546,8 +549,9 @@ const Referee = (function () {
 
       // look
       const lookMul = 1 - p.adsT * (1 - cfg.adsLookMul);
-      p.yaw += ((inp.lookX || 0) * cfg.lookSens + (inp.touchX || 0) * cfg.touchSens) * lookMul;
-      p.pitch = clamp(p.pitch - ((inp.lookY || 0) * cfg.lookSens + (inp.touchY || 0) * cfg.touchSens) * lookMul, -1.45, 1.45);
+      const padX = clamp(inp.padX || 0, -1, 1), padY = clamp(inp.padY || 0, -1, 1);
+      p.yaw += ((inp.lookX || 0) * cfg.lookSens + (inp.touchX || 0) * cfg.touchSens + padX * cfg.padTurn * dt) * lookMul;
+      p.pitch = clamp(p.pitch - ((inp.lookY || 0) * cfg.lookSens + (inp.touchY || 0) * cfg.touchSens + padY * cfg.padTurn * cfg.padPitchMul * dt) * lookMul, -1.45, 1.45);
 
       // move
       const fx = Math.sin(p.yaw), fz = -Math.cos(p.yaw), rx = Math.cos(p.yaw), rz = Math.sin(p.yaw);

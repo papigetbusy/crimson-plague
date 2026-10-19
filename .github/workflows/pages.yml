@@ -28,6 +28,10 @@ jobs:
         run: node tests/models.test.js
       - name: Core loop checks
         run: node tests/loop.test.js
+      - name: Controller checks
+        run: node tests/pad.test.js
+      - name: Touch button settings checks
+        run: node tests/touch.test.js
       - name: Build the page
         run: node tools/build.js "build-$(date -u +%Y%m%d-%H%M)-${GITHUB_SHA::7}"
       - name: Publish previews and models

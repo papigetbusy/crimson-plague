@@ -22,7 +22,7 @@
 
   // presentation-only numbers (the tuning panel edits these too)
   const GUN_DEFAULTS = { gunX: 0.29, gunY: -0.36, gunZ: -0.5, gunScale: 1.15 };
-  const view = Object.assign({ pixelH: 300, brightness: 1, fogFar: 34, sound: 1 }, GUN_DEFAULTS);
+  const view = Object.assign({ pixelH: 300, brightness: 1, fogFar: 34, sound: 1 }, GUN_DEFAULTS, TouchLayout.DEFAULTS);
   const LS_KEY = 'crimsonhall.tune.v2';
   try {
     let saved = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
@@ -542,6 +542,22 @@
   let running = false, started = false, panelOpen = false, noLock = false;
   if (isTouch) document.body.classList.add('touch');
 
+  // ---- controller: any standard gamepad that is connected is picked up by itself; the touch controls hide while one is ----
+  const pad = { on: false, input: PadInput.create(), now: null };
+  const currentPad = () => { try { return PadInput.pick(navigator.getGamepads ? Array.from(navigator.getGamepads()) : []); } catch (e) { return null; } };
+  const toastEl = $('padToast'); let toastT = 0;
+  function toast(msg) { toastEl.textContent = msg; toastEl.classList.add('show'); toastT = 2.6; }
+  // once a frame: find the pad, switch the touch controls on or off, and read its input (null when there is no pad)
+  function pollPad(dt) {
+    const p = currentPad();
+    if (!!p !== pad.on) {
+      pad.on = !!p; document.body.classList.toggle('pad', pad.on); pad.input.reset();
+      toast(pad.on ? 'Controller connected' : (isTouch ? 'Controller lost. Touch controls are back' : 'Controller disconnected'));
+    }
+    toastT -= dt; if (toastT <= 0) toastEl.classList.remove('show');
+    pad.now = p ? pad.input.read(p) : null;
+  }
+
   const locked = () => document.pointerLockElement === canvas;
   function tryLock() {
     if (isTouch || noLock) return;
@@ -582,7 +598,7 @@
 
   // ---- touch: joystick (left), look (right), buttons ----
   const joyZone = $('joyZone'), lookZone = $('lookZone'), joyBase = $('joyBase'), joyKnob = $('joyKnob');
-  const joyR = () => Math.max(46, window.innerHeight * 0.14);
+  const joyR = () => Math.max(46, window.innerHeight * 0.14) * (view.tJoy || 1);
   function placeJoy(x, y) {
     joyBase.style.left = x + 'px'; joyBase.style.top = y + 'px'; joyBase.classList.add('on');
   }
@@ -652,13 +668,15 @@
     }
     const kx = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
     const kz = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0);
+    const pr = pad.now;
+    if (pr && (pr.mx || pr.mz)) { mx = pr.mx; mz = pr.mz; }
     if (kx || kz) { mx = kx; mz = kz; }
     if (tch.sprint && joy.id === null && !(kx || kz)) { tch.sprint = false; bSprint.classList.remove('on'); }
     if (tch.sprint && tch.ads) { tch.sprint = false; bSprint.classList.remove('on'); }
     const out = {
-      mx, mz, lookX: I.lookX, lookY: I.lookY, touchX: I.touchX, touchY: I.touchY,
-      fire: mouse.fire || tch.fire, ads: mouse.ads || tch.ads,
-      sprint: !!(keys.ShiftLeft || keys.ShiftRight) || tch.sprint, slide: I.slide, reload: I.reload, pick: I.pick, restart: I.restart
+      mx, mz, lookX: I.lookX, lookY: I.lookY, touchX: I.touchX, touchY: I.touchY, padX: pr ? pr.padX : 0, padY: pr ? pr.padY : 0,
+      fire: mouse.fire || tch.fire || !!(pr && pr.fire), ads: mouse.ads || tch.ads || !!(pr && pr.ads),
+      sprint: !!(keys.ShiftLeft || keys.ShiftRight) || tch.sprint || !!(pr && pr.sprint), slide: I.slide || !!(pr && pr.slide), reload: I.reload || !!(pr && pr.reload), pick: I.pick, restart: I.restart
     };
     I.lookX = I.lookY = I.touchX = I.touchY = 0; I.slide = false; I.reload = false; I.pick = undefined; I.restart = false;
     return out;
@@ -678,15 +696,25 @@
       playLabel.textContent = started ? 'RESUME' : 'ENTER THE HALL';
     }
   }
-  playBtn.addEventListener('click', () => {
+  // starts or resumes. A controller press is not a click, so it cannot ask for fullscreen or the mouse lock
+  function begin(fromPad) {
     audioInit();
     if (!started) {
       started = true;
-      if (isTouch) { try { const el = document.documentElement; (el.requestFullscreen || el.webkitRequestFullscreen).call(el); } catch (e) { /* ignore */ } try { screen.orientation.lock('landscape').catch(() => {}); } catch (e) { /* ignore */ } }
+      if (isTouch && !fromPad) { try { const el = document.documentElement; (el.requestFullscreen || el.webkitRequestFullscreen).call(el); } catch (e) { /* ignore */ } try { screen.orientation.lock('landscape').catch(() => {}); } catch (e) { /* ignore */ } }
     }
     setRunning(true);
-    tryLock();
-  });
+    if (!fromPad) tryLock();
+  }
+  playBtn.addEventListener('click', () => begin(false));
+  // controller menus: Start pauses and resumes, A starts, picks the highlighted level-up card, and rises again after a fall
+  function padMenus() {
+    const r = pad.now; if (!r) return;
+    if (r.start) { if (running) setRunning(false); else begin(true); return; }
+    if (!running) { if (r.confirm) begin(true); return; }
+    if (state.choices) { if (r.nav) hud.moveSel(r.nav); if (r.confirm && hud.selected() >= 0) I.pick = hud.selected(); }
+    else if (state.over && r.confirm) I.restart = true;
+  }
 
   const TUNE = [
     ['Movement', null],
@@ -700,6 +728,7 @@
     ['FOV aiming', 'ref', 'fovAds', 20, 70, 1],
     ['Mouse sens', 'ref', 'lookSens', 0.0008, 0.006, 0.0001],
     ['Touch sens', 'ref', 'touchSens', 0.002, 0.012, 0.0002],
+    ['Stick turn', 'ref', 'padTurn', 1, 8, 0.1],
     ['Gun', null],
     ['Fire rate', 'ref', 'fireRate', 2, 20, 0.5],
     ['Magazine', 'ref', 'magSize', 5, 60, 1],
@@ -725,6 +754,11 @@
   ];
   const panel = $('panel'), panelBody = $('panelBody');
   const sliderEls = {};
+  // touch button sizes and show/hide switches sit at the top of the panel (phones only); a hidden toggle button is switched off so it cannot stay stuck on
+  const touchSet = TouchLayout.mount(panelBody, view, { save: () => saveTune(), hid: (id) => {
+    if (id === 'ads') { tch.ads = false; bAds.classList.remove('on'); }
+    if (id === 'sprint') { tch.sprint = false; bSprint.classList.remove('on'); }
+  } });
   function fmt(v, step) { return step < 0.01 ? v.toFixed(4) : step < 0.1 ? v.toFixed(2) : step < 1 ? v.toFixed(1) : String(Math.round(v)); }
   for (const t of TUNE) {
     if (!t[1]) { const h = document.createElement('h3'); h.textContent = t[0]; panelBody.appendChild(h); continue; }
@@ -753,7 +787,7 @@
   function pick(cfg, tgt) { const o = {}; for (const k in sliderEls) if (sliderEls[k].tgt === tgt && k !== 'startWave') o[k] = cfg[k]; return o; }
   $('tuneReset').addEventListener('click', () => {
     ref.setCfg(ref.defaults);
-    Object.assign(view, { pixelH: 300, brightness: 1, fogFar: 34, sound: 1 }, GUN_DEFAULTS);
+    Object.assign(view, { pixelH: 300, brightness: 1, fogFar: 34, sound: 1 }, GUN_DEFAULTS, TouchLayout.DEFAULTS); touchSet.sync();
     for (const k in sliderEls) { const s = sliderEls[k]; s.inp.value = s.tgt === 'ref' ? ref.cfg[k] : view[k]; s.val.textContent = fmt(+s.inp.value, s.st); }
     scene.fog.far = view.fogFar; resize(); saveTune();
   });
@@ -923,6 +957,7 @@
   function frame(now) {
     requestAnimationFrame(frame);
     const dt = Math.min((now - clock.last) / 1000, 0.05); clock.last = now;
+    pollPad(dt); padMenus();
     if (running && !panelOpen) {
       const out = ref.step(dt, gatherInput());
       state = out.state;

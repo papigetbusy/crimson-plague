@@ -24,6 +24,9 @@ Keep the code neat: small focused files and functions in clear folders, never on
 - `node tests/loop.test.js` : core loop checks (waves, xp, skills, boss, game over)
 - `python3 tools/smoke_loop.py` : level-up / game over / boss HUD on a phone-sized page
 - `node tests/models.test.js` : model checks (sight clear, anchors, face budget)
+- `node tests/pad.test.js` : controller checks (Hypershot layout, dead zones, right-stick turn)
+- `node tests/touch.test.js` : touch button settings checks (size range, what can be hidden)
+- `python3 tools/smoke_pad.py` : fake-controller run on phone and desktop sizes (connect, play, level-up, pause, unplug)
 - `node tools/preview_models.js rifle|fiend out.json` then `python3 tools/preview_models.py out.json out.png side|front|back|three|top` : draws a model with no GPU
 - `node tools/guard.js` : architecture guard
 - `node tools/build.js` : builds `site/index.html` (one playable page)
