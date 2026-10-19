@@ -22,6 +22,7 @@ One small fixed hall. One gun (reload, ADS, red dot). A few respawning monsters.
 - Red dot sight is slim and low, a thin open frame so the view stays clear when aiming (owner, 2026-10-19: the first one was too clunky).
 - Reload animation is signed off (owner, 2026-10-19: "The reload is perfect"). Do not change its feel.
 - ADS alignment: the sight dot sits dead centre of the camera when aiming (`SIGHT`, `EYE_RELIEF` in screen.js). Any new gun model must keep its dot on that plane.
+- Grok's models are tested privately first and only enter the repo and the public game after the owner signs them off (`docs/sign-off.md`).
 - Grok makes the 3D models for the gun and the monsters. Claude wires them in (docs/art-contract.md).
 
 ## Clean-code rules

@@ -27,3 +27,6 @@ Make the **3D models for the gun and the monsters**, in the owner's look: chunky
 "The guns are beautiful." Chunky readable silhouette, gold trim, gems, rails and vents, a slim low red dot that does not block the view when aiming. Reference style: his attached image of the gothic hall with the chunky gun and red demon.
 
 When the owner approves a model, say so in the changelog. Approved files are never overwritten; deliver `_v2`.
+
+## Sign-off rule
+Do not push models to `main`. The owner tests your model first through Claude and says "signed off" before anything goes into the repo or the public game. See `docs/sign-off.md`.

@@ -24,7 +24,7 @@ You are working on Crimson Plague in the repository papigetbusy/crimson-plague. 
 7. Don't change how anything plays or feels unless the owner approved it.
 8. Keep each change small and finished. One task, one or a few commits, plain-words messages.
 9. Don't edit a file the other AI listed under "Now working on" unless the owner asks.
-10. Art files: only the folder named in the contract. Never overwrite a model the owner already approved; add a new version (`gun_v2.glb`) and tell the owner.
+10. **Nothing from Grok reaches `main` or Pages until the owner signs it off.** Follow `docs/sign-off.md`. Art files: only the folder named in the contract. Never overwrite a model the owner already approved; add a new version (`gun_v2.glb`) and tell the owner.
 
 **Before you push**
 11. Run `node tools/guard.js` and `node tests/referee.test.js` (both must pass), then `node tools/build.js`.
