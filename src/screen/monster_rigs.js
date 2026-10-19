@@ -5,14 +5,16 @@ const MonsterRigs = (function () {
   const MODEL = 0.72;
   function create(THREE) {
     const glowMat = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
-    const SOURCES = { fiend: HornedFiendV2, golem: RockGolem, demon: DemonLord, hound: BoneHoundV2 };   // the signed-off versions; horned_fiend.js and bone_hound.js stay as the fallback
+    const SOURCES = { fiend: HornedFiendV2, golem: RockGolem, demon: DemonLordV2, hound: BoneHoundV2 };   // the signed-off versions (the demon lord v2 is a candidate until the owner signs it off); horned_fiend.js, bone_hound.js and demon_lord.js stay as the fallback
     const cache = {};       // kind -> { model, geo: { part: { solid, glow } } }  (built once, shared by every monster of that kind)
     function prepare(kind) {
       if (cache[kind]) return cache[kind];
       const model = SOURCES[kind].build(), geo = {};
       for (const name in model.grids) {
         geo[name] = {};
-        for (const k of ['solid', 'glow']) { const m = Voxel.mesh(model.grids[name], k, model.vox, model.joints[name] || [0, 0, 0]); if (m.faces) geo[name][k] = Voxel.toGeometry(THREE, m); }
+        const fine = (model.fine && model.fine[name]) || 1;           // a part built finer than the rest (the demon lord's head is 2x), its joint given in the body's voxels
+        const piv = (model.joints[name] || [0, 0, 0]).map((v) => v * fine);
+        for (const k of ['solid', 'glow']) { const m = Voxel.mesh(model.grids[name], k, model.vox / fine, piv); if (m.faces) geo[name][k] = Voxel.toGeometry(THREE, m); }
       }
       return (cache[kind] = { model, geo });
     }

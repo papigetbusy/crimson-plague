@@ -27,7 +27,7 @@ t('The fiend is cut into body, two legs, torso, head, two upper arms and two for
 
 // ---- bestiary: monsters and bosses drawn after the Crusader Tactics sprites ----
 global.BestiaryKit = require('../src/models/bestiary_kit.js');
-const tallest = (m) => { let top = -1e9; for (const k in m.grids) for (const v of m.grids[k].solid.values()) top = Math.max(top, (v.y + 1) * m.vox); return top; };
+const tallest = (m) => { let top = -1e9; for (const k in m.grids) for (const v of m.grids[k].solid.values()) top = Math.max(top, (v.y + 1) * m.vox / ((m.fine && m.fine[k]) || 1)); return top; };
 const total = (m) => Object.values(m.grids).reduce((n, g) => n + faces(g), 0);
 const hound = require('../src/models/bone_hound.js').build(), golem = require('../src/models/rock_golem.js').build(), demon = require('../src/models/demon_lord.js').build();
 t('The bone hound is a low dog: about 1.6 world units tall, with four legs, a head and a moving jaw', tallest(hound) > 1.3 && tallest(hound) < 1.9 && ['legFR', 'legFL', 'legBR', 'legBL', 'head', 'jaw'].every((n) => hound.grids[n].count() > 20));
@@ -47,4 +47,11 @@ t('Horned fiend v2 has the same nine parts and joints as v1, so the walk and att
 t('Horned fiend v2 is no more than 0.3 taller than v1 (the horns), has glowing eyes, and stays under 60,000 faces', tallest(fiend2) - tallest(fiend1) < 0.3 && tallest(fiend2) >= tallest(fiend1) && fiend2.grids.head.glow.size > 0 && total(fiend2) < 60000);
 t('Horned fiend v2 keeps its feet on the floor', Math.min(...Object.values(fiend2.grids).flatMap((g) => [...g.solid.values()].map((v) => v.y))) === 0);
 console.log('     (fiend v1 ' + total(fiend1) + ', fiend v2 ' + total(fiend2) + ' faces, tallest ' + tallest(fiend1).toFixed(2) + ' -> ' + tallest(fiend2).toFixed(2) + ')');
+// ---- demon lord v2 (candidate) ----
+global.DemonLord = require('../src/models/demon_lord.js');
+const demon2 = require('../src/models/demon_lord_v2.js').build();
+t('Demon lord v2 has the same eleven parts and joints as v1, so the walk and attacks do not change', Object.keys(demon.grids).sort().join() === Object.keys(demon2.grids).sort().join() && Object.keys(demon.joints).sort().join() === Object.keys(demon2.joints).sort().join());
+t('Demon lord v2 is bigger and fiercer: taller horns (no more than 0.8 taller), blazing eyes, a glowing chest sigil feet on the floor', tallest(demon2) > tallest(demon) && tallest(demon2) - tallest(demon) < 0.8 && demon2.grids.head.glow.size > demon.grids.head.glow.size && demon2.grids.torso.glow.size > demon.grids.torso.glow.size * 1.5 && Math.min(...Object.values(demon2.grids).flatMap((g) => [...g.solid.values()].map((v) => v.y))) === 0);
+t('Demon lord v2 stays under 80,000 faces (one boss on screen)', total(demon2) < 80000);
+console.log('     (demon lord v1 ' + total(demon) + ', v2 ' + total(demon2) + ' faces, tallest ' + tallest(demon).toFixed(2) + ' -> ' + tallest(demon2).toFixed(2) + ')');
 process.exit(bad ? 1 : 0);
