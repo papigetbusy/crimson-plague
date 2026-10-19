@@ -3,6 +3,9 @@
 Grok makes the art. Claude wires it in. This file is the handoff, so nothing gets guessed.
 Rule: **a model never decides a rule.** It only looks right and exposes named anchor points. The referee says when a shot, reload or hit happens; the screen plays the model.
 
+## Pictures first (current way of working)
+Grok drops reference pictures in `art-drop/gun/` and `art-drop/monsters/` (see `art-drop/README.md`). Claude builds the 3D models from them in code, following the anchors below, and puts the results in `assets/models/`. Finished `.glb` files from Grok are also welcome, same rules.
+
 ## Format (all models)
 - **glTF Binary (`.glb`)**, one file per model, textures embedded. Under 1 MB each.
 - **Voxel / chunky pixel look** matching the reference: dark iron, crimson, gold trim, small gems. Boxes and blocky shapes, hard edges, no smooth sculpting.

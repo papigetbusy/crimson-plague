@@ -1,10 +1,10 @@
 # Working on Crimson Plague
 
-Read `docs/design-lock.md` and `docs/art-contract.md` before changing anything. They are the rules of this project.
+Keep the code neat: small focused files and functions in clear folders, never one long tangled monolith (owner, 2026-10-19: no fixed line limit, but no monolith). Read `docs/design-lock.md` and `docs/art-contract.md` before changing anything. They are the rules of this project.
 
 - The owner is not a programmer. Explain in plain language, one sentence per choice. He checks work on his iPhone: the green tick on GitHub and the published link (landscape phone).
 - **Claude writes code. Grok makes art** (3D models for the gun and monsters). Claude never invents final art once Grok's models are in; Grok never edits `src/`. The handoff is `docs/art-contract.md`.
-- `src/referee.js` owns every rule and number: movement, hits, damage, monster AI, ammo, reload timing, kills. It may not use the browser, clock, network, files or unseeded random (`tools/guard.js` enforces this, plus the 400-line limit).
+- `src/referee.js` owns every rule and number: movement, hits, damage, monster AI, ammo, reload timing, kills. It may not use the browser, clock, network, files or unseeded random (`tools/guard.js` enforces this).
 - `src/screen.js` only draws the referee's snapshot and sends inputs. No rules, no game state of its own.
 - Numbers live in the referee's `cfg` / defaults, never buried in screen code. Look-only numbers (colours, model offsets) live in screen.js.
 - Every referee rule gets a test in `tests/` named as a plain sentence.

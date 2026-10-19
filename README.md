@@ -8,7 +8,8 @@ First-person horde survival roguelite, Hypershot-style controls, chunky voxel go
 |---|---|
 | `src/referee.js` | every rule and number (movement, hits, ammo, reload, monsters) |
 | `src/screen.js` | draws the referee's snapshot, plays sounds, sends input |
-| `assets/models/` | Grok's gun and monster models |
+| `art-drop/` | Grok's reference pictures for the gun and monsters |
+| `assets/models/` | the finished 3D models (Grok's `.glb` or Claude's built ones) |
 | `tests/` | referee tests |
 | `tools/` | build, guard, smoke test |
 | `docs/` | design lock, art contract, changelog |

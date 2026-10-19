@@ -25,6 +25,6 @@ One small fixed hall. One gun (reload, ADS, red dot). A few respawning monsters.
 - Grok makes the 3D models for the gun and the monsters. Claude wires them in (docs/art-contract.md).
 
 ## Clean-code rules
-- Small files, clear folders, 400-line limit (three older files are on a shrinking ceiling in `tools/guard.js`; split them when you touch them).
+- Neat code, no monolith: small focused files and functions in clear folders. No fixed line limit (owner, 2026-10-19). `screen.js` is due to be split into modules (world, gun, monsters, hud, input) as it is touched.
 - Every rule has a test that runs without a screen.
 - Changes explainable in one sentence. Bug fixes come with a regression test.
