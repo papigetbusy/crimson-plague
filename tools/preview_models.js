@@ -1,7 +1,7 @@
 // Dumps a model's mesh data as JSON so tools/preview_models.py can draw it (no GPU, no THREE needed).
 // usage: node tools/preview_models.js rifle|fiend out.json
 const fs = require('fs'), path = require('path');
-global.Voxel = require('../src/models/voxel.js');
+global.Voxel = require('../src/models/voxel.js'); global.GothicRifleSheet = require('../src/models/gothic_rifle_data.js'); global.HornedFiendSheet = require('../src/models/horned_fiend_data.js');
 const which = process.argv[2], out = process.argv[3];
 const dump = (grid, pivot, vox, off) => {
   const r = [];

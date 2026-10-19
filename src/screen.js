@@ -431,33 +431,31 @@
 
   /* ============ monsters: Grok's Crimson Horned Fiend, built from voxels (src/models/horned_fiend.js) ============ */
   const MODEL = 0.72;
-  const FIEND = HornedFiend.build(), FA = FIEND.at;
-  const fiendGeo = {};       // geometry is built once and shared by every monster
+  const FIEND = HornedFiend.build(), FJ = FIEND.joints, FV = FIEND.vox;
+  const fiendGeo = {};       // geometry is built once and shared by every monster; each part is cut around its own joint
   for (const k in FIEND.grids) {
     fiendGeo[k] = {};
-    for (const kind of ['solid', 'glow']) { const m = Voxel.mesh(FIEND.grids[k], kind, FIEND.vox, [0, 0, 0]); if (m.faces) fiendGeo[k][kind] = Voxel.toGeometry(THREE, m); }
+    for (const kind of ['solid', 'glow']) { const m = Voxel.mesh(FIEND.grids[k], kind, FV, FJ[k] || [0, 0, 0]); if (m.faces) fiendGeo[k][kind] = Voxel.toGeometry(THREE, m); }
   }
   const fiendGlowMat = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
   function buildMonster() {
     const skin = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x000000 });   // one per monster, so hit flashes stay separate
     const root = new THREE.Group(); root.rotation.order = 'YXZ';
     const body = new THREE.Group(); root.add(body);
-    // a jointed part: a group at the joint holding its lit mesh and its glowing mesh
-    const joint = (name, parent, at) => {
-      const grp = new THREE.Group(); grp.position.set(at[0], at[1], at[2]); parent.add(grp);
+    // a jointed part: a group at the joint (placed relative to its parent joint) holding its lit mesh and its glowing mesh
+    const joint = (name, parent, parentName) => {
+      const j = FJ[name] || [0, 0, 0], pj = parentName ? FJ[parentName] || [0, 0, 0] : [0, 0, 0];
+      const grp = new THREE.Group(); grp.position.set((j[0] - pj[0]) * FV, (j[1] - pj[1]) * FV, (j[2] - pj[2]) * FV); parent.add(grp);
       if (fiendGeo[name].solid) grp.add(new THREE.Mesh(fiendGeo[name].solid, skin));
       if (fiendGeo[name].glow) grp.add(new THREE.Mesh(fiendGeo[name].glow, fiendGlowMat));
       return grp;
     };
-    joint('body', body, [0, 0, 0]);
-    const legs = [joint('leg', body, FA.legR), joint('leg', body, FA.legL)];
-    const torso = joint('torso', body, FA.torso); torso.rotation.x = -0.06;
-    const head = joint('head', torso, FA.head);
+    joint('body', body);
+    const legs = [joint('legR', body), joint('legL', body)];
+    const torso = joint('torso', body);
+    const head = joint('head', torso, 'torso');
     const arms = [];
-    for (const sh of [FA.shoulderR, FA.shoulderL]) {
-      const s = joint('arm', torso, sh);
-      arms.push({ sh: s, fore: joint('fore', s, FA.elbow) });
-    }
+    for (const side of ['R', 'L']) { const up = joint('arm' + side + 'U', torso, 'torso'); arms.push({ sh: up, fore: joint('arm' + side + 'F', up, 'arm' + side + 'U') }); }
     return { root, body, legs, arms, torso, head, skin };
   }
   const mons = new Map();     // id -> entry

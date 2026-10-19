@@ -20,6 +20,19 @@ const Voxel = (function () {
     if (kind === 'glow') { this.solid.delete(k); this.glow.set(k, val); } else { this.glow.delete(k); this.solid.set(k, val); }
   };
   // fills x0..x1-1, y0..y1-1, z0..z1-1
+  // a voxel whose six faces can each have their own colour (fc = [+x, -x, +y, -y, +z, -z], each a hex or null)
+  Grid.prototype.setFaces = function (x, y, z, fc, kind) {
+    const k = key(x, y, z), val = { x, y, z, c: [0, 0, 0], fc: [] };
+    let n = 0;
+    for (let i = 0; i < 6; i++) {
+      if (fc[i] === null || fc[i] === undefined) { val.fc.push(null); continue; }
+      const c = rgb(fc[i]), f = 1 + (hash(x, y, z, this.seed + i) - 0.5) * 0.08;
+      const col = [Math.min(1, c[0] * f), Math.min(1, c[1] * f), Math.min(1, c[2] * f)];
+      val.fc.push(col); val.c[0] += col[0]; val.c[1] += col[1]; val.c[2] += col[2]; n++;
+    }
+    if (n) { val.c = val.c.map((v) => v / n); }
+    if (kind === 'glow') { this.solid.delete(k); this.glow.set(k, val); } else { this.glow.delete(k); this.solid.set(k, val); }
+  };
   Grid.prototype.box = function (x0, y0, z0, x1, y1, z1, col, v, kind) {
     for (let x = x0; x < x1; x++) for (let y = y0; y < y1; y++) for (let z = z0; z < z1; z++) this.set(x, y, z, col, v, kind);
     return this;
@@ -77,7 +90,8 @@ const Voxel = (function () {
           const a = i === 1 || i === 2 ? 1 : 0, b = i >= 2 ? 1 : 0;
           pos.push((o[0] + f.u[0] * a + f.v[0] * b - p[0]) * vox, (o[1] + f.u[1] * a + f.v[1] * b - p[1]) * vox, (o[2] + f.u[2] * a + f.v[2] * b - p[2]) * vox);
           nor.push(f.d[0], f.d[1], f.d[2]);
-          col.push(t.c[0] * sh, t.c[1] * sh, t.c[2] * sh);
+          const fcol = t.fc && t.fc[FACES.indexOf(f)] ? t.fc[FACES.indexOf(f)] : t.c;
+          col.push(fcol[0] * sh, fcol[1] * sh, fcol[2] * sh);
         }
         idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
       }
