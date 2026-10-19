@@ -1,6 +1,6 @@
 # Working on Crimson Plague
 
-Keep the code neat: small focused files and functions in clear folders, never one long tangled monolith (owner, 2026-10-19: no fixed line limit, but no monolith). Read `docs/design-lock.md` and `docs/art-contract.md` before changing anything. They are the rules of this project.
+Keep the code neat: small focused files and functions in clear folders, never one long tangled monolith (owner, 2026-10-19: no fixed line limit, but no monolith). Read `docs/design-lock.md`, `docs/art-contract.md` and `docs/roadmap.md` before changing anything. They are the rules of this project. **Work only on the current phase in the roadmap**; if the owner asks for something from a later phase, say so and ask before jumping ahead.
 
 - The owner is not a programmer. Explain in plain language, one sentence per choice. He checks work on his iPhone: the green tick on GitHub and the published link (landscape phone).
 - **Claude writes code. Grok makes art** (3D models for the gun and monsters). Claude never invents final art once Grok's models are in; Grok never edits `src/`. The handoff is `docs/art-contract.md`.
