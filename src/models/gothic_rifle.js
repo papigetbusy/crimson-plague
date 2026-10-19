@@ -28,6 +28,11 @@ const GothicRifle = (function () {
     return 4;                                                    // barrel end and muzzle cap
   }
 
+  // rounded cross-section: a tall solid run is made fatter in the middle than at its top and bottom edges (a rounded rectangle,
+  // so the receiver, handguard and stock read as shaped metal instead of a flat slab). t runs 0..1 along the run.
+  const ROUND_MIN = 10, ROUND_POW = 3;
+  function rounded(hw, t) { const e = Math.abs(2 * t - 1); return Math.max(2, Math.round(hw * Math.pow(1 - Math.pow(e, ROUND_POW), 1 / ROUND_POW))); }
+
   function build() {
     const body = new Voxel.Grid(11), mag = new Voxel.Grid(12), bolt = new Voxel.Grid(13);
     const zr = (xa, xb) => { const a = Math.round(Zv(xb)), b = Math.round(Zv(xa)); return [a, Math.max(b, a + 1)]; };
@@ -37,6 +42,17 @@ const GothicRifle = (function () {
 
     /* 1. the picture, voxel by voxel, given width */
     const frontZ = SHEET.zMin;
+    // for every picture voxel: how far along its vertical run it is (0..1) and how long the run is
+    const run = SHEET.rows.map((row) => new Array(row.length).fill(null));
+    for (let ci = 0; ci < SHEET.rows[0].length; ci++) {
+      let ri = 0;
+      while (ri < SHEET.rows.length) {
+        if (SHEET.rows[ri][ci] === '.') { ri++; continue; }
+        let rj = ri; while (rj < SHEET.rows.length && SHEET.rows[rj][ci] !== '.') rj++;
+        for (let k = ri; k < rj; k++) run[k][ci] = { t: (k - ri + 0.5) / (rj - ri), len: rj - ri };
+        ri = rj;
+      }
+    }
     for (let ri = 0; ri < SHEET.rows.length; ri++) {
       const y = SHEET.yMax - ri, row = SHEET.rows[ri];
       for (let ci = 0; ci < row.length; ci++) {
@@ -44,7 +60,8 @@ const GothicRifle = (function () {
         const z = SHEET.zMax - ci, idx = parseInt(ch, 36);
         const xpx = OX - (z + 0.5) / S, ypx = OY - (y + 0.5) / S;
         const isMag = z >= magZ[0] && z < magZ[1] && y < magTop;
-        const hw = isMag ? 4 : halfWidth(xpx, ypx), g = isMag ? mag : body;
+        const base = isMag ? 4 : halfWidth(xpx, ypx), r = run[ri][ci];
+        const hw = r && r.len >= ROUND_MIN && base >= 6 ? rounded(base, r.t) : base, g = isMag ? mag : body;
         const col = SHEET.palette[idx], lit = SHEET.glow[idx] === 1;
         for (let x = -hw; x < hw; x++) {
           const outer = x === -hw || x === hw - 1;

@@ -49,7 +49,7 @@ const PadInput = (function () {
       const nav = dir !== 0 && dir !== flick ? dir : 0; flick = dir;
       const confirm = edge('A', down(pad, BTN.A));
       const start = edge('START', down(pad, BTN.START));
-      return { mx, mz: -mzUp, padX, padY, fire, ads, sprint: sprinting, slide, reload, nav, confirm, start };
+      return { mx, mz: -mzUp, padX, padY, fire, ads, sprint: sprinting, slide, reload, reloadHeld: down(pad, BTN.X), nav, confirm, start };
     }
     return { read, reset };
   }

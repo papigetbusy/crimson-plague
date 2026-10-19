@@ -12,10 +12,11 @@ def load(path):
         for m in part['meshes']:
             pos = np.array(m['pos']).reshape(-1, 3) + off
             col = np.array(m['col']).reshape(-1, 3)
+            nor = np.array(m['nor']).reshape(-1, 3) if 'nor' in m else None
             idx = np.array(m['idx']).reshape(-1, 6)
             for i in idx:
                 q = [i[0], i[1], i[2], i[5]]
-                quads.append((pos[q], col[i[0]], m['kind'] == 'glow'))
+                quads.append((pos[q], col[i[0]], m['kind'] == 'glow', nor[q].mean(axis=0) if nor is not None else None))
     return quads
 
 def render(quads, eye, target, up, size, ortho=None, fov=40):
@@ -26,7 +27,7 @@ def render(quads, eye, target, up, size, ortho=None, fov=40):
     W, H = size
     img = Image.new('RGB', size, (52, 52, 56)); d = ImageDraw.Draw(img)
     items = []
-    for P, c, glow in quads:
+    for P, c, glow, nm in quads:
         rel = P - eye
         x, y, z = rel @ r, rel @ u, rel @ f
         if (z <= 0.01).any() and ortho is None: continue
@@ -38,9 +39,14 @@ def render(quads, eye, target, up, size, ortho=None, fov=40):
         else:
             t = 1 / math.tan(math.radians(fov) / 2)
             sx = W / 2 + x / z * t * H / 2; sy = H / 2 - y / z * t * H / 2
-        items.append((z.mean(), list(zip(sx, sy)), c, glow))
+        items.append((z.mean(), list(zip(sx, sy)), c, glow, nm))
     items.sort(key=lambda a: -a[0])
-    for _, pts, c, glow in items:
+    L = np.array([0.4, 0.8, 0.5]); L /= np.linalg.norm(L); H = L + f * -1; H /= np.linalg.norm(H)
+    for _, pts, c, glow, nm in items:
+        if nm is not None and not glow:
+            nm = nm / (np.linalg.norm(nm) or 1)     # lit preview: soft normals, a shiny highlight (only when the dump has normals)
+            lit = 0.9 + 0.55 * max(0, nm @ L) + 0.9 * max(0, nm @ H) ** 24
+            c = np.array(c) * lit
         col = tuple(int(min(1, v) * 255) for v in c)
         d.polygon(pts, fill=col, outline=None)
     return img

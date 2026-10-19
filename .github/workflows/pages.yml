@@ -34,6 +34,8 @@ jobs:
         run: node tests/touch.test.js
       - name: Effect checks
         run: node tests/fx.test.js
+      - name: Gun look checks
+        run: node tests/gun.test.js
       - name: Build the page
         run: node tools/build.js "build-$(date -u +%Y%m%d-%H%M)-${GITHUB_SHA::7}"
       - name: Publish previews and models

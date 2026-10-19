@@ -27,6 +27,7 @@ Keep the code neat: small focused files and functions in clear folders, never on
 - `node tests/pad.test.js` : controller checks (Hypershot layout, dead zones, right-stick turn)
 - `node tests/touch.test.js` : touch button settings checks (size range, what can be hidden)
 - `node tests/fx.test.js` : effect checks (look presets escalate common to legendary, sprite pool)
+- `node tests/gun.test.js` : gun look checks (smoothed shape, skins, motion)
 - `python3 tools/extract_ct_assets.py` then `python3 tools/pack_fx.py` : pull the owner's free art packs out of the CT page into git-ignored `assets-private/` (full packs never go in the repo), and pack the effect sheets into `src/screen/fx_data.js` (committed, credited in `docs/credits.md`) (without it the build just shows the plain voxel effects)
 - `python3 tools/smoke_pad.py` : fake-controller run on phone and desktop sizes (connect, play, level-up, pause, unplug)
 - `node tools/preview_models.js rifle|fiend out.json` then `python3 tools/preview_models.py out.json out.png side|front|back|three|top` : draws a model with no GPU

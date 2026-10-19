@@ -117,6 +117,13 @@ with sync_playwright() as p:
     check('effects: Original starts no sprite effects', page.evaluate("()=>window.__game.fx.spawned()") == s2)
     page.evaluate("()=>document.getElementById('tuneReset').click()"); wait(page, 150)
     check('effects: Reset goes back to Common', page.evaluate("()=>window.__game.view.fxPreset") == 'common')
+    check('gun: 8 skin buttons and two inspect buttons are in the panel', page.evaluate("()=>document.querySelectorAll('.gunset .fxb[data-skin]').length") == 8 and page.evaluate("()=>document.querySelectorAll('.gunset .fxb[data-inspect]').length") == 2)
+    page.evaluate("()=>document.querySelector('.gunset .fxb[data-skin=infernal]').click()"); wait(page, 100)
+    check('gun: picking Infernal is remembered and marked', page.evaluate("()=>window.__game.view.gunSkin") == 'infernal' and page.evaluate("()=>document.querySelector('.gunset .fxb.on').dataset.skin") == 'infernal')
+    for kind in ('sides', 'mag'):
+        page.evaluate("(k)=>document.querySelector('.gunset .fxb[data-inspect='+k+']').click()", kind); wait(page, 100)
+    page.evaluate("()=>document.getElementById('tuneReset').click()"); wait(page, 150)
+    check('gun: Reset goes back to the Crimson skin', page.evaluate("()=>window.__game.view.gunSkin") == 'crimson')
     # no two visible touch buttons may overlap, whatever is hidden and however big they are
     OVERLAP = """(sizes)=>{
       const view = window.__game.view, ids = ['bFire','bAds','bSlide','bSprint','bReload'], out = [];

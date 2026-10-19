@@ -22,7 +22,7 @@
 
   // presentation-only numbers (the tuning panel edits these too)
   const GUN_DEFAULTS = { gunX: 0.29, gunY: -0.36, gunZ: -0.5, gunScale: 1.15 };
-  const view = Object.assign({ pixelH: 300, brightness: 1, fogFar: 34, sound: 1, fxPreset: 'common', wallSkin: 'original' }, GUN_DEFAULTS, TouchLayout.DEFAULTS);
+  const view = Object.assign({ pixelH: 300, brightness: 1, fogFar: 34, sound: 1, fxPreset: 'common', wallSkin: 'original', gunSkin: 'crimson' }, GUN_DEFAULTS, TouchLayout.DEFAULTS);
   const LS_KEY = 'crimsonhall.tune.v2';
   try {
     let saved = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
@@ -323,24 +323,13 @@
   const gb = (w, h, d, m, x, y, z, p) => boxMesh(w, h, d, m, x, y, z, p || gunBody);
   // the rifle itself: Grok's gothic assault rifle, built from voxels (src/models/gothic_rifle.js)
   const RIFLE = GothicRifle.build(), RA = RIFLE.anchors;
-  const gunMat = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x1c0c0c });
-  const glowVoxMat = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
-  // a model part becomes a group holding one lit mesh and one glowing mesh
-  function voxelPart(part, vox, parent, mat, glowM) {
-    const grp = new THREE.Group(); parent.add(grp);
-    for (const kind of ['solid', 'glow']) {
-      const m = Voxel.mesh(part.grid, kind, vox, part.pivot);
-      if (!m.faces) continue;
-      const mesh = new THREE.Mesh(Voxel.toGeometry(THREE, m), kind === 'glow' ? glowM : mat);
-      mesh.frustumCulled = false; grp.add(mesh);
-    }
-    return grp;
-  }
-  voxelPart(RIFLE.parts.body, RIFLE.vox, gunBody, gunMat, glowVoxMat);
+  const gunLook = GunLook.create(THREE, gunBody);                // smoothed shiny meshes, skins, glow and the little light on the hands (src/screen/gun_look.js)
+  const voxelPart = (part, vox, parent) => { const g = new THREE.Group(); parent.add(g); return gunLook.part(part, vox, g); };
+  voxelPart(RIFLE.parts.body, RIFLE.vox, gunBody);
   // charging handle (right side) and magazine are their own parts so they can move
-  const charge = voxelPart(RIFLE.parts.bolt, RIFLE.vox, gunBody, gunMat, glowVoxMat); charge.position.set(RA.boltRest[0], RA.boltRest[1], RA.boltRest[2]);
+  const charge = voxelPart(RIFLE.parts.bolt, RIFLE.vox, gunBody); charge.position.set(RA.boltRest[0], RA.boltRest[1], RA.boltRest[2]);
   const CHARGE_Z = RA.boltRest[2];
-  const mag = voxelPart(RIFLE.parts.mag, RIFLE.vox, gunBody, gunMat, glowVoxMat); mag.rotation.x = 0.1;
+  const mag = voxelPart(RIFLE.parts.mag, RIFLE.vox, gunBody); mag.rotation.x = 0.1;
   const MAG_BASE = new THREE.Vector3(RA.magPivot[0], RA.magPivot[1], RA.magPivot[2]);
   mag.position.copy(MAG_BASE);
 
@@ -390,6 +379,10 @@
   // reload choreography: hand keyframes (k = 0..1 through the reload)
   const RL_NORMAL = { hand: [[0, HOLD], [0.16, MAGH], [0.24, MAGH], [0.38, BELT], [0.46, BELT], [0.64, MAGH], [0.72, MAGH], [0.9, HOLD], [1, HOLD]], grab: 0.24, pullEnd: 0.38, newStart: 0.46, seat: 0.64, tilt: [0.14, 0.8, 1.0], snd: { magout: 0.3, magin: 0.66 }, bolt: null };
   const RL_EMPTY = { hand: [[0, HOLD], [0.12, MAGH], [0.18, MAGH], [0.3, BELT], [0.36, BELT], [0.5, MAGH], [0.55, MAGH], [0.64, CH_F], [0.72, CH_B], [0.78, CH_F], [0.9, HOLD], [1, HOLD]], grab: 0.18, pullEnd: 0.3, newStart: 0.36, seat: 0.5, tilt: [0.1, 0.86, 1.0], snd: { magout: 0.24, magin: 0.52, bolt: 0.72 }, bolt: [0.64, 0.78] };
+  // inspect (magazine): the left hand pulls the magazine out, lifts it in front of the eye (MAG_LOOK is the hand spot that puts the magazine
+  // top at camera-space (-0.03, 0.02, -0.38) while the gun is tilted away, worked out with the pose from GunMotion.inspect('mag')), then slides it home
+  const MAG_LOOK = V3(-0.094, 0.2415, 0.211), MAG_DOWN = V3(-0.04, -0.3, -0.1);
+  const INSPECT_MAG = { hand: [[0, HOLD], [0.1, MAGH], [0.17, MAGH], [0.27, MAG_DOWN], [0.4, MAG_LOOK], [0.72, MAG_LOOK], [0.8, MAG_DOWN], [0.86, MAGH], [0.93, HOLD], [1, HOLD]], grab: 0.17, pullEnd: 9, newStart: 9, seat: 0.86, snd: { magout: 0.24, magin: 0.88 }, bolt: null };
   const smooth01 = (x) => { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); };
   const handPos = V3(0, 0, 0), kfOut = V3(0, 0, 0);
   function kfLerp(frames, k, out) {
@@ -405,13 +398,14 @@
   let rlPrev = 0;
   // returns gun offsets for this frame and poses the hands, mag and charging handle
   function animateReload(p) {
-    const R = p.reloadEmpty ? RL_EMPTY : RL_NORMAL;
-    const k = p.reloading ? p.reloadK : 0;
+    const ins = !p.reloading && inspK > 0 && inspKind === 'mag';
+    const R = ins ? INSPECT_MAG : p.reloadEmpty ? RL_EMPTY : RL_NORMAL;
+    const k = p.reloading ? p.reloadK : ins ? inspK : 0;
     kfLerp(R.hand, k, handPos);
     handL.position.copy(handPos);
     let magHidden = false;
     mag.position.copy(MAG_BASE);
-    if (p.reloading && k >= R.grab && k < R.seat) {
+    if ((p.reloading || ins) && k >= R.grab && k < R.seat) {
       magHidden = k > R.pullEnd && k < R.newStart;
       mag.position.x += handPos.x - MAGH.x; mag.position.y += handPos.y - MAGH.y; mag.position.z += handPos.z - MAGH.z;
     }
@@ -422,10 +416,11 @@
     tB.copy(handR.position); tB.z += 0.08;
     placeLimb(limbR, ELBOW_R, tB, 0.12);
     // sounds on the way through
-    if (p.reloading) {
+    if (p.reloading || ins) {
       for (const n in R.snd) if (rlPrev < R.snd[n] && k >= R.snd[n]) sfx(n);
     }
-    rlPrev = p.reloading ? k : 0;
+    rlPrev = p.reloading || ins ? k : 0;
+    mag.rotation.set(0.1 + (ins ? 0.5 * smooth01((k - 0.3) / 0.1) * (1 - smooth01((k - 0.74) / 0.08)) : 0), ins ? GunMotion.magSpin(k) : 0, 0);   // the held magazine turns so you see both faces
     if (!p.reloading) return { px: 0, py: 0, pz: 0, rx: 0, ry: 0, rz: 0 };
     const tilt = smooth01(k / R.tilt[0]) * (1 - smooth01((k - R.tilt[1]) / (R.tilt[2] - R.tilt[1])));
     const bump = Math.exp(-Math.pow((k - R.seat) / 0.025, 2));
@@ -541,7 +536,7 @@
   const I = { mx: 0, mz: 0, lookX: 0, lookY: 0, touchX: 0, touchY: 0, fire: false, ads: false, sprint: false, slide: false, reload: false, pick: undefined, restart: false };
   const keys = {};
   const mouse = { fire: false, ads: false };
-  const tch = { fire: false, ads: false, sprint: false };
+  const tch = { fire: false, ads: false, sprint: false, reload: false };
   const joy = { id: null, ox: 0, oy: 0, x: 0, y: 0 };
   const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
   let running = false, started = false, panelOpen = false, noLock = false;
@@ -576,6 +571,7 @@
     keys[e.code] = true;
     if (e.code === 'KeyC' || e.code === 'ControlLeft') { if (running) I.slide = true; e.preventDefault(); }
     if (e.code === 'KeyR' && running) I.reload = true;
+    if (e.code === 'KeyF' && running) startInspect();   // F shows both sides, press again for the magazine
     if (running && e.code.startsWith('Digit') && +e.code.slice(5) >= 1 && +e.code.slice(5) <= 3) I.pick = +e.code.slice(5) - 1;   // level-up choice
     if (running && (e.code === 'Enter' || e.code === 'NumpadEnter')) I.restart = true;                                     // after you fall
     if (e.code === 'Tab') { e.preventDefault(); if (started) togglePanel(); }
@@ -662,7 +658,8 @@
   bFire.addEventListener('pointercancel', fireEnd);
   bAds.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') return; tch.ads = !tch.ads; bAds.classList.toggle('on', tch.ads); e.preventDefault(); });
   bSprint.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') return; tch.sprint = !tch.sprint; bSprint.classList.toggle('on', tch.sprint); e.preventDefault(); });
-  bReload.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') return; I.reload = true; bReload.classList.add('on'); setTimeout(() => bReload.classList.remove('on'), 180); e.preventDefault(); });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) bReload.addEventListener(ev, () => { tch.reload = false; });
+  bReload.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') return; I.reload = true; tch.reload = true; bReload.classList.add('on'); setTimeout(() => bReload.classList.remove('on'), 180); e.preventDefault(); });
   bSlide.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') return; I.slide = true; bSlide.classList.add('on'); setTimeout(() => bSlide.classList.remove('on'), 180); e.preventDefault(); });
 
   function gatherInput() {
@@ -761,6 +758,7 @@
   const sliderEls = {};
   // touch button sizes and show/hide switches sit at the top of the panel (phones only); a hidden toggle button is switched off so it cannot stay stuck on
   const fxSet = FxPicker.mount(panelBody, view, { save: () => saveTune(), art: fx.art() });
+  const skinSet = GunSkinPicker.mount(panelBody, view, { save: () => saveTune(), set: (id) => gunLook.setSkin(id), inspect: (kind) => startInspect(kind) });
   const wallSet = WallSkin.mount(panelBody, view, WallSkin.create(texStone), { save: () => saveTune() });
   const touchSet = TouchLayout.mount(panelBody, view, { save: () => saveTune(), hid: (id) => {
     if (id === 'ads') { tch.ads = false; bAds.classList.remove('on'); }
@@ -794,7 +792,7 @@
   function pick(cfg, tgt) { const o = {}; for (const k in sliderEls) if (sliderEls[k].tgt === tgt && k !== 'startWave') o[k] = cfg[k]; return o; }
   $('tuneReset').addEventListener('click', () => {
     ref.setCfg(ref.defaults);
-    Object.assign(view, { pixelH: 300, brightness: 1, fogFar: 34, sound: 1, fxPreset: 'common', wallSkin: 'original' }, GUN_DEFAULTS, TouchLayout.DEFAULTS); touchSet.sync(); fxSet.sync(); wallSet.sync();
+    Object.assign(view, { pixelH: 300, brightness: 1, fogFar: 34, sound: 1, fxPreset: 'common', wallSkin: 'original', gunSkin: 'crimson' }, GUN_DEFAULTS, TouchLayout.DEFAULTS); touchSet.sync(); fxSet.sync(); wallSet.sync(); skinSet.sync();
     for (const k in sliderEls) { const s = sliderEls[k]; s.inp.value = s.tgt === 'ref' ? ref.cfg[k] : view[k]; s.val.textContent = fmt(+s.inp.value, s.st); }
     scene.fog.far = view.fogFar; resize(); saveTune();
   });
@@ -817,6 +815,9 @@
 
   /* ============ per-frame presentation ============ */
   const clock = { last: performance.now() };
+  const reloadHold = { t: 0, done: false };
+  let equipK = 0, inspK = 0, inspKind = 'sides', kickDir = [0, 0], emberT = 0, nextInspect = 'sides';
+  const startInspect = (kind) => { if (running && inspK === 0 && !state.over && !state.player.reloading) { inspKind = kind || nextInspect; nextInspect = inspKind === 'sides' ? 'mag' : 'sides'; inspK = 0.0001; } };
   let bob = 0, kickG = 0, flashT = 0, sway = 0, roll = 0, lastSlideK = 0;
   const gunHip = new THREE.Vector3(), gunAds = new THREE.Vector3();
   function ejectShell() {
@@ -832,7 +833,7 @@
     for (const e of events) {
       hud.event(e);
       if (e.type === 'shot') {
-        if (!e.extra) { flashT = 0.06; kickG = 1; sfx('shot'); ejectShell(); if (fxOn()) { muzzle.getWorldPosition(tmpV); camera.getWorldDirection(tmpV2); fx.play(view.fxPreset, 'muzzle', tmpV.x + tmpV2.x * 0.12, tmpV.y + tmpV2.y * 0.12, tmpV.z + tmpV2.z * 0.12); } }
+        if (!e.extra) { flashT = 0.06; kickG = 1; kickDir = [Math.random() * 2 - 1, Math.random() * 2 - 1]; inspK = 0; sfx('shot'); ejectShell(); if (fxOn()) { muzzle.getWorldPosition(tmpV); camera.getWorldDirection(tmpV2); fx.play(view.fxPreset, 'muzzle', tmpV.x + tmpV2.x * 0.12, tmpV.y + tmpV2.y * 0.12, tmpV.z + tmpV2.z * 0.12); } }
         addTracer(e.ex, e.ey, e.ez);
         if (e.hit === 'wall') { burst(e.ex, e.ey, e.ez, 5, [0xffb347, 0xff7a1a, 0x888078], 4, 0.35, 12, 0.7); if (fxOn()) fx.play(view.fxPreset, 'wall', e.ex, e.ey, e.ez); }
       } else if (e.type === 'hit') {
@@ -855,7 +856,7 @@
       else if (e.type === 'waveStart') { sfx(e.boss ? 'boss' : 'wave'); }
       else if (e.type === 'bossSummon') { sfx('boss'); }
       else if (e.type === 'dead') { diedT = 1.4; sfx('dead'); rlPrev = 0; }
-      else if (e.type === 'restart') { diedT = 0; rlPrev = 0; fx.clear(); }
+      else if (e.type === 'restart') { diedT = 0; rlPrev = 0; equipK = 0; inspK = 0; fx.clear(); }
       else if (e.type === 'reloadStart') { rlPrev = 0; }
     }
   }
@@ -901,16 +902,26 @@
     const gs = view.gunScale;
     gunHip.set(view.gunX, view.gunY, view.gunZ);
     gunAds.set(0, -SIGHT.y * gs, -EYE_RELIEF - SIGHT.z * gs);   // puts the sight window dead centre
-    const gx = lerp(gunHip.x, gunAds.x, ad) - sp * 0.1 - sl * 0.05 + Math.sin(bob) * 0.012 * bobAmt + rl.px;
-    const gy = lerp(gunHip.y, gunAds.y, ad) - sp * 0.07 + Math.abs(Math.cos(bob)) * 0.012 * bobAmt - sl * 0.06 + rl.py;
-    const gz = lerp(gunHip.z, gunAds.z, ad) + kickG * 0.075 * (1 - ad * 0.5) + sp * 0.05 + rl.pz;
+    const still = clamp(1 - planar, 0, 1) * (1 - sp) * (1 - sl);
+    // hold Reload for 2 seconds with a full magazine: gun inspect (keyboard R, the touch Reload button, or the controller X button)
+    const pr = currentPad(), rHeld = !!keys.KeyR || tch.reload || !!(pr && pr.reloadHeld);
+    if (GunMotion.holdStep(reloadHold, dt, rHeld, running && p.ammo >= p.magSize && !p.reloading && !state.over && inspK === 0)) startInspect();
+    if (equipK < 1) equipK = Math.min(1, equipK + dt / 0.7);
+    if (inspK > 0) { inspK += dt / GunMotion.LENGTH[inspKind]; if (inspK >= 1 || p.reloading || p.sprintK > 0.2 || p.adsT > 0.15 || flashT > 0.04) inspK = 0; }
+    if (gunLook.skin().embers && running) { emberT -= dt; if (emberT <= 0) { emberT = 0.07; muzzle.getWorldPosition(tmpV); burst(tmpV.x + (Math.random() - 0.5) * 0.5, tmpV.y + (Math.random() - 0.3) * 0.1, tmpV.z + (Math.random() - 0.5) * 0.5, 1, [0xff6a1a, 0xff3a10, 0xffb040], 0.5, 0.7, -1.5, 0.35); } }
+    const mo = GunMotion.add(GunMotion.add(GunMotion.kick(kickG, ad, kickDir), GunMotion.idle(time, still, ad)), GunMotion.add(GunMotion.equip(equipK), GunMotion.inspect(inspKind, inspK)));
+    charge.position.z += GunMotion.bolt(kickG, 0.04);
+    const gx = lerp(gunHip.x, gunAds.x, ad) - sp * 0.1 - sl * 0.05 + Math.sin(bob) * 0.012 * bobAmt + rl.px + mo.px;
+    const gy = lerp(gunHip.y, gunAds.y, ad) - sp * 0.07 + Math.abs(Math.cos(bob)) * 0.012 * bobAmt - sl * 0.06 + rl.py + mo.py;
+    const gz = lerp(gunHip.z, gunAds.z, ad) + sp * 0.05 + rl.pz + mo.pz;
     gun.position.set(gx, gy, gz);
     gun.scale.setScalar(gs);
     gun.rotation.set(
-      kickG * 0.05 * (1 - ad * 0.4) - sp * 0.42 + sl * 0.08 + rl.rx,
-      lerp(0.05, 0, ad) + sp * 0.5 + sl * 0.12 + rl.ry,
-      sp * 0.22 + sl * 0.3 + Math.sin(bob) * 0.012 * bobAmt + rl.rz
+      -sp * 0.42 + sl * 0.08 + rl.rx + mo.rx,
+      lerp(0.05, 0, ad) + sp * 0.5 + sl * 0.12 + rl.ry + mo.ry,
+      sp * 0.22 + sl * 0.3 + Math.sin(bob) * 0.012 * bobAmt + rl.rz + mo.rz
     );
+    gunLook.update(time, flashT / 0.06);
     // muzzle flash
     flashT = Math.max(0, flashT - dt);
     flashMesh.visible = flashT > 0;
