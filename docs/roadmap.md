@@ -2,7 +2,7 @@
 
 The plan for everything the game still needs, in phases. Agreed with the owner on 2026-10-19. **Work only on the current phase.** A phase is finished when the owner plays it on his iPhone (landscape) and says so; then we move to the next one. Update the status line below and tick steps as they are done.
 
-**Current phase: 1 — Look and scale** (status: not started; the first version, with the core loop, is on `main`)
+**Current phase: 1 — Look and scale** (status: started 2026-10-19, step 1 scale chart; the first version, with the core loop, is on `main`)
 
 ## How we work through each phase
 1. Claude writes the phase's steps into a private test link (never `main` until signed off, see `docs/sign-off.md`).
@@ -12,6 +12,8 @@ The plan for everything the game still needs, in phases. Agreed with the owner o
 
 ## Decisions locked (owner, 2026-10-19)
 - **Floors:** big floors with twists and turns. Every 10 waves a door unlocks and leads to the next floor. Each floor is bigger than the last until a maximum floor size; after that every floor is still a new random layout but stays the same size.
+- **Wave count keeps going across floors** (floor 1 is waves 1-10, floor 2 is waves 11-20, and so on; one boss per floor).
+- **Compass:** on big floors a compass points to the door, and it only appears once the door is open (after the floor's boss falls).
 - **No win condition yet.** Pure survival. We come back to this once everything else is done.
 - **Look before feel.** Feel depends on floor size, monster count and effects, so we settle how everything looks and how big it is first, and tune feel after the content exists.
 - **No permanent progression.** Everything resets on death.
@@ -30,9 +32,9 @@ What the game looks like and how big everything is.
 ## Phase 2 — Floors
 - [ ] Floor generator in the referee: seeded rooms joined by winding corridors, always fully connected.
 - [ ] Floor size table: floor 1 is the smallest, each floor bigger, up to the maximum size; after that random layouts of the same size.
-- [ ] The locked door: it unlocks when the wave-10 boss falls (assumed: waves keep counting across floors, ten waves per floor; confirm with the owner), and walking through it starts the next floor.
+- [ ] The locked door: it unlocks when the wave-10 boss falls, and walking through it starts the next floor (waves keep counting across floors).
 - [ ] Monsters spawn across the whole floor and find their way around bends; pathing stays fast on the biggest floor.
-- [ ] Finding the door on a big floor: a compass arrow or small map (owner decides).
+- [ ] Compass to the door: appears only once the door is open, points to it from anywhere on the floor.
 - [ ] Floor counter on the HUD and a short floor-change moment.
 - [ ] Tests: every generated floor is connected, the door is reachable, the same seed gives the same floor, floors reach the maximum size and then stop growing.
 - **Gate:** running a floor feels good and nobody gets stuck.
