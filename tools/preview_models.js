@@ -1,7 +1,7 @@
 // Dumps a model's mesh data as JSON so tools/preview_models.py can draw it (no GPU, no THREE needed).
-// usage: node tools/preview_models.js rifle|fiend out.json
+// usage: node tools/preview_models.js rifle|fiend|hound|golem|demon out.json
 const fs = require('fs'), path = require('path');
-global.Voxel = require('../src/models/voxel.js'); global.GothicRifleSheet = require('../src/models/gothic_rifle_data.js'); global.HornedFiendSheet = require('../src/models/horned_fiend_data.js');
+global.Voxel = require('../src/models/voxel.js'); global.BestiaryKit = require('../src/models/bestiary_kit.js'); global.GothicRifleSheet = require('../src/models/gothic_rifle_data.js'); global.HornedFiendSheet = require('../src/models/horned_fiend_data.js');
 const which = process.argv[2], out = process.argv[3];
 const dump = (grid, pivot, vox, off) => {
   const r = [];
@@ -15,6 +15,9 @@ if (which === 'rifle') {
   const mp = m.anchors.magPivot;
   parts.push(dump(m.parts.mag.grid, m.parts.mag.pivot, m.vox, mp));
   parts.push(dump(m.parts.bolt.grid, m.parts.bolt.pivot, m.vox, m.anchors.boltRest));
+} else if (which === 'hound' || which === 'golem' || which === 'demon') {
+  const m = require({ hound: '../src/models/bone_hound.js', golem: '../src/models/rock_golem.js', demon: '../src/models/demon_lord.js' }[which]).build();
+  for (const p of m.pose) parts.push(dump(p.grid, p.pivot, m.vox, p.off));
 } else if (which === 'fiend') {
   const m = require('../src/models/horned_fiend.js').build();
   for (const p of m.pose) parts.push(dump(p.grid, p.pivot, m.vox, p.off));

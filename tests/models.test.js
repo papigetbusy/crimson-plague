@@ -24,4 +24,17 @@ t('One fiend stays light enough for six on screen (under 30,000 faces)', ff < 30
 console.log('     (one fiend = ' + ff + ' faces)');
 t('The fiend has glowing eyes', [...f.grids.head.glow.values()].length > 0);
 t('The fiend is cut into body, two legs, torso, head, two upper arms and two forearms', Object.keys(f.grids).length === 9 && Object.values(f.grids).every((g) => g.count() > 100));
+
+// ---- bestiary: monsters and bosses drawn after the Crusader Tactics sprites ----
+global.BestiaryKit = require('../src/models/bestiary_kit.js');
+const tallest = (m) => { let top = -1e9; for (const k in m.grids) for (const v of m.grids[k].solid.values()) top = Math.max(top, (v.y + 1) * m.vox); return top; };
+const total = (m) => Object.values(m.grids).reduce((n, g) => n + faces(g), 0);
+const hound = require('../src/models/bone_hound.js').build(), golem = require('../src/models/rock_golem.js').build(), demon = require('../src/models/demon_lord.js').build();
+t('The bone hound is a low dog: about 1.6 world units tall, with four legs, a head and a moving jaw', tallest(hound) > 1.3 && tallest(hound) < 1.9 && ['legFR', 'legFL', 'legBR', 'legBL', 'head', 'jaw'].every((n) => hound.grids[n].count() > 20));
+t('The rock golem stands about 3 world units tall and has the fiend\'s nine parts', tallest(golem) > 2.8 && tallest(golem) < 3.6 && Object.keys(golem.grids).length === 9);
+t('The demon lord boss is taller than the fiend and has two wings', tallest(demon) > 3.8 && demon.grids.wingR.count() > 300 && demon.grids.wingL.count() > 300);
+t('The golem has glowing ember cracks and the demon lord has glowing eyes', golem.grids.torso.glow.size > 10 && demon.grids.head.glow.size > 0);
+t('The hound has glowing eyes', hound.grids.head.glow.size > 0);
+t('Each new monster is under 30,000 faces so six on screen stays light', total(hound) < 30000 && total(golem) < 30000 && total(demon) < 30000);
+console.log('     (hound ' + total(hound) + ', golem ' + total(golem) + ', demon lord ' + total(demon) + ' faces)');
 process.exit(bad ? 1 : 0);
