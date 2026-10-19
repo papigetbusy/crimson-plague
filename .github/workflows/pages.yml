@@ -1,0 +1,44 @@
+# On every push to main: guard + referee tests, build the page, publish to GitHub Pages.
+# Anything red stops everything; the last good version stays live.
+name: Test, build and publish
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Architecture guard
+        run: node tools/guard.js
+      - name: Referee tests
+        run: node tests/referee.test.js
+      - name: Build the page
+        run: node tools/build.js "build-$(date -u +%Y%m%d-%H%M)-${GITHUB_SHA::7}"
+      - name: Publish previews and models
+        run: |
+          [ -d preview ] && cp -r preview site/preview || true
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
