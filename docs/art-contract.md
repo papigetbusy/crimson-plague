@@ -4,7 +4,7 @@ Grok makes the art. Claude wires it in. This file is the handoff, so nothing get
 Rule: **a model never decides a rule.** It only looks right and exposes named anchor points. The referee says when a shot, reload or hit happens; the screen plays the model.
 
 ## Pictures first (current way of working)
-Grok drops reference pictures in `art-drop/gun/` and `art-drop/monsters/` (see `art-drop/README.md`). Claude builds the 3D models from them in code, following the anchors below, and puts the results in `assets/models/`. Finished `.glb` files from Grok are also welcome, same rules.
+Grok drops reference pictures in `art-drop/gun/` and `art-drop/monsters/` (see `art-drop/README.md`). Claude builds the 3D models from them in code (voxel models in `src/models/`; the sheet-to-voxel tools are in `tools/`), following the anchors below, and puts the results in `assets/models/`. Finished `.glb` files from Grok are also welcome, same rules.
 
 ## Format (all models)
 - **glTF Binary (`.glb`)**, one file per model, textures embedded. Under 1 MB each.
@@ -17,7 +17,7 @@ Grok drops reference pictures in `art-drop/gun/` and `art-drop/monsters/` (see `
 - File names: lowercase, underscores, versioned when changed: `gun_rifle_v1.glb`. Never overwrite an approved file; add `_v2`.
 
 ## Gun: `assets/models/gun/<name>.glb`
-Origin: the centre of the receiver, where the grip meets the body. Gun length about **1.5 units** from stock to muzzle.
+Origin: the centre of the receiver, where the grip meets the body. Gun length about **1.5 units** from stock to muzzle for a `.glb`. (The signed-off voxel rifle is built from Grok's side-view picture in code and scaled in the screen; its anchors are in `src/models/gothic_rifle.js`.)
 
 Separate named nodes (empty or mesh), so Claude can move them:
 | Node name | What it is |

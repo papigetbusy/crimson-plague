@@ -14,4 +14,6 @@ Candidates that are not signed off are never pushed. If a candidate must be shar
 ## Signed off
 | Model | Version | Date | Owner's words |
 |---|---|---|---|
-| (none yet) | | | |
+| Gothic assault rifle (voxel, from Grok's side-view master and detail sheet) | candidate v6 | 2026-10-19 | "The hordes look so much better!!! ... gameplay is good, push it to the repo as the first version" |
+| Crimson Horned Fiend (voxel, from Grok's front/side/back pictures) | candidate v6 | 2026-10-19 | same message |
+| Bone Hound, Rock Golem, Demon Lord boss (voxel, drawn after the Crusader Tactics sprites) | first version | 2026-10-19 | same message |

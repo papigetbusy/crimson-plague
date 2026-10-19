@@ -21,6 +21,7 @@ const Referee = (function () {
 
   const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
   const lerp = (a, b, t) => a + (b - a) * t;
+  const D = typeof RefereeData !== 'undefined' ? RefereeData : require('./referee_data.js');   // monster kinds, skills, wave plan
 
   function makeRng(seed) {
     let a = seed >>> 0;
@@ -64,26 +65,21 @@ const Referee = (function () {
     reloadTime: 2.1,
     reloadEmptyExtra: 0.45,
     recoilKick: 0.012,
-    // monsters
-    monsterCount: 6,
+    // monsters (base = the horned fiend; every kind multiplies these, see referee_data.js)
+    monsterCount: 6,          // how many may be alive in wave 1; one more each wave, up to the cap in referee_data.js
+    startWave: 1,
     monsterHp: 70,
     monsterSpeed: 3.6,
     monsterDamage: 7,
     monsterAttackRate: 1.0,
     monsterScale: 1.0,
-    respawnDelay: 1.0,
     // player
     playerHp: 100,
     regenDelay: 3,
     regen: 14
   };
 
-  // Hit spheres on a monster at scale 1: height of centre and radius.
-  const HIT_SPHERES = [
-    { y: 0.58, r: 0.55 },
-    { y: 1.30, r: 0.62 },
-    { y: 1.95, r: 0.38, head: true }
-  ];
+  // (hit spheres now live with each monster kind, in referee_data.js)
   const MONSTER_RADIUS = 0.5;
 
   /* ---------------- map ---------------- */
@@ -135,10 +131,10 @@ const Referee = (function () {
   function create(seed) {
     const rng = makeRng(seed || 1337);
     const cfg = Object.assign({}, DEFAULT_CFG);
-    const M = buildMap();
-    const G = M._g;
-    delete M._g;
-    const GW = M.W, GH = M.H;
+    const M0 = buildMap();
+    const G = M0._g;
+    delete M0._g;
+    const GW = M0.W, GH = M0.H;
 
     const solid = (cx, cz) => {
       if (cx < 0 || cz < 0 || cx >= GW || cz >= GH) return true;
@@ -229,25 +225,102 @@ const Referee = (function () {
     }
 
     /* ---------------- state ---------------- */
+    const L = D.LOOP;
     const P = {
-      x: M.start.x, z: M.start.z, yaw: M.start.yaw, pitch: 0,
+      x: M0.start.x, z: M0.start.z, yaw: M0.start.yaw, pitch: 0,
       vx: 0, vz: 0, eye: cfg.eyeStand,
       sliding: false, slideT: 0, slideCd: 0, sdx: 0, sdz: 0,
       sprinting: false, sprintK: 0, adsT: 0, kick: 0,
       hp: cfg.playerHp, hurt: 0, sinceHit: 0, invuln: 0, fireCd: 0,
       ammo: cfg.magSize, reloading: false, reloadT: 0, reloadDur: 0, reloadEmpty: false
     };
-    let monsters = [];
+    let monsters = [], orbs = [], pickups = [], spawnQ = [];
     let nextId = 1, kills = 0, deaths = 0, time = 0, spawnTimer = 0.4, events = [];
 
+    /* ---------------- the run: waves, xp, level-ups, skills ---------------- */
+    const R = {};      // wave, phase ('intermission' | 'fight'), timer, level, xp, stacks, choices, frenzy, over
+    let M = null;      // the skill bonuses, worked out from the stacks
+    const skillOf = (id) => D.SKILLS.find((s) => s.id === id);
+    const stackOf = (id) => R.stacks[id] || 0;
+    function computeMods() {
+      const per = (id) => skillOf(id).per * stackOf(id);
+      return {
+        dmg: 1 + per('dmg'), rate: 1 + per('rate'), speed: 1 + per('speed'), multi: per('multi'), hp: per('hp'), steal: per('steal'),
+        reloadMul: Math.max(0.25, 1 - per('reload')), blast: per('blast'), magnet: 1 + per('magnet'), regen: per('regen'), mag: per('mag')
+      };
+    }
+    const maxHp = () => cfg.playerHp + M.hp;
+    const maxMag = () => cfg.magSize + M.mag;
+
+    function newRun() {
+      R.wave = cfg.startWave; R.phase = 'intermission'; R.timer = L.firstDelay; R.level = 1; R.xp = 0;
+      R.stacks = {}; R.choices = null; R.pending = 0; R.frenzy = 0; R.over = null; R.time = 0;
+      M = computeMods();
+    }
+    function placePlayer() {
+      P.x = M0.start.x; P.z = M0.start.z; P.yaw = M0.start.yaw; P.pitch = 0;
+      P.vx = P.vz = 0; P.sliding = false; P.slideT = 0; P.kick = 0;
+      P.hp = maxHp(); P.invuln = 1.5; P.hurt = 0; P.sinceHit = 0;
+      P.ammo = maxMag(); P.reloading = false; P.reloadT = 0; P.fireCd = 0;
+    }
+    function restartRun() {
+      kills = 0; monsters = []; orbs = []; pickups = []; spawnQ = []; spawnTimer = 0.4; flowCell = -1;
+      newRun(); placePlayer();
+      events.push({ type: 'restart' });
+    }
+    function startWave() {
+      spawnQ = D.waveKinds(R.wave, rng);
+      R.phase = 'fight'; spawnTimer = 0.2;
+      events.push({ type: 'waveStart', n: R.wave, boss: spawnQ.some((k) => D.KINDS[k].boss), count: spawnQ.length });
+    }
+    function endWave() {
+      events.push({ type: 'waveClear', n: R.wave });
+      const a = P.yaw, hx = P.x + Math.sin(a) * 2, hz = P.z - Math.cos(a) * 2;
+      pickups.push({ id: nextId++, kind: 'heal', x: collides(hx, hz, 0.3) ? P.x : hx, z: collides(hx, hz, 0.3) ? P.z : hz, life: L.pickupLife });
+      R.wave++; R.phase = 'intermission'; R.timer = L.intermission;
+    }
+    const aliveMax = () => Math.min(L.aliveCap, cfg.monsterCount + R.wave - 1);
+
+    function gainXp(v) {
+      R.xp += v;
+      while (R.xp >= D.xpNeed(R.level)) { R.xp -= D.xpNeed(R.level); R.level++; R.pending++; events.push({ type: 'levelUp', level: R.level }); }
+      if (!R.choices && R.pending > 0) rollChoices();
+    }
+    function rollChoices() {
+      const open = D.SKILLS.filter((s) => stackOf(s.id) < s.max);
+      R.pending--;
+      if (!open.length) { P.hp = Math.min(maxHp(), P.hp + 25); if (R.pending > 0) rollChoices(); return; }
+      for (let i = open.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); const t = open[i]; open[i] = open[j]; open[j] = t; }
+      R.choices = open.slice(0, 3).map((s) => s.id);
+    }
+    function pickSkill(i) {
+      const id = R.choices && R.choices[i];
+      if (!id) return;
+      R.stacks[id] = stackOf(id) + 1;
+      M = computeMods();
+      if (id === 'hp') P.hp = Math.min(maxHp(), P.hp + skillOf('hp').per);
+      events.push({ type: 'skill', id });
+      R.choices = null;
+      if (R.pending > 0) rollChoices();
+    }
+
+    /* ---------------- monsters: stats, spawning, loot ---------------- */
+    function statsFor(kind, wave) {
+      const k = D.KINDS[kind], w = wave - 1;
+      return {
+        hp: cfg.monsterHp * k.hpMul * (1 + L.hpPerWave * w),
+        dmg: cfg.monsterDamage * k.dmgMul * (1 + L.dmgPerWave * w),
+        spd: cfg.monsterSpeed * k.speedMul * Math.min(L.speedMax, 1 + L.speedPerWave * w)
+      };
+    }
     function angleDiff(a, b) {
       let d = a - b;
       while (d > Math.PI) d -= Math.PI * 2;
       while (d < -Math.PI) d += Math.PI * 2;
       return d;
     }
-
-    function spawnMonster() {
+    function spawnMonster(kind) {
+      const k = D.KINDS[kind];
       let best = null, bestScore = -1;
       for (let i = 0; i < 40; i++) {
         const c = floorCells[(rng() * floorCells.length) | 0];
@@ -260,36 +333,53 @@ const Referee = (function () {
         if (!seen && d > 14) break;
       }
       if (!best) return false;
-      const sv = 0.92 + rng() * 0.18;
+      const sv = k.boss ? 1 : 0.92 + rng() * 0.18, st = statsFor(kind, R.wave);
       monsters.push({
-        id: nextId++, x: best[0], z: best[1], hp: cfg.monsterHp, maxHp: cfg.monsterHp,
-        sv, spd: 0.85 + rng() * 0.3, yaw: 0, yawT: 0, phase: rng() * 6, atk: 0.4,
-        flash: 0, stun: 0, state: 'chase'
+        id: nextId++, kind, x: best[0], z: best[1], hp: st.hp, maxHp: st.hp, dmg: st.dmg, spd0: st.spd,
+        sv, scale: cfg.monsterScale * sv * k.size, spd: 0.85 + rng() * 0.3, yaw: 0, yawT: 0, phase: rng() * 6, atk: 0.4,
+        flash: 0, stun: 0, state: 'chase', chT: k.charge ? 1.5 : 0, wT: 0, cT: 0, cdx: 0, cdz: 0, summoned: false
       });
+      events.push({ type: 'spawn', kind, boss: !!k.boss });
       return true;
     }
-
-    function respawnPlayer() {
-      P.x = M.start.x; P.z = M.start.z; P.yaw = M.start.yaw; P.pitch = 0;
-      P.vx = P.vz = 0; P.sliding = false; P.slideT = 0; P.kick = 0;
-      P.hp = cfg.playerHp; P.invuln = 1.5; P.hurt = 0;
-      P.ammo = cfg.magSize; P.reloading = false; P.reloadT = 0;
-      monsters = [];
-      spawnTimer = 1.2;
-      flowCell = -1;
+    function dropLoot(m, k) {
+      orbs.push({ id: nextId++, x: m.x, z: m.z, v: k.xp, life: L.orbLife });
+      if (orbs.length > 80) { gainXp(orbs.shift().v); }
+      const r = rng();
+      if (k.boss || r < L.healChance) pickups.push({ id: nextId++, kind: 'heal', x: m.x, z: m.z, life: L.pickupLife });
+      else if (r < L.healChance + L.frenzyChance) pickups.push({ id: nextId++, kind: 'frenzy', x: m.x, z: m.z, life: L.pickupLife });
     }
+    function killMonster(m) {
+      const k = D.KINDS[m.kind];
+      kills++;
+      events.push({ type: 'kill', id: m.id, kind: m.kind, boss: !!k.boss, x: m.x, z: m.z, scale: m.scale, yaw: m.yaw });
+      dropLoot(m, k);
+      monsters = monsters.filter((o) => o !== m);
+    }
+    function damageMonster(m, dmg, crit, x, y, z, splash) {
+      if (m.hp <= 0) return;
+      m.hp -= dmg; m.flash = 0.12; if (!splash) m.stun = 0.08;
+      events.push({ type: 'hit', id: m.id, dmg: Math.round(dmg), crit, x, y, z, splash: !!splash });
+      if (M.steal > 0) P.hp = Math.min(maxHp(), P.hp + dmg * M.steal);
+      if (m.hp <= 0) killMonster(m);
+    }
+
     function hurtPlayer(d, id) {
-      if (P.invuln > 0) return;
+      if (P.invuln > 0 || R.over) return;
       P.hp -= d; P.hurt = 0.3; P.sinceHit = 0;
       events.push({ type: 'playerHit', dmg: d, id });
-      if (P.hp <= 0) { deaths++; events.push({ type: 'dead' }); respawnPlayer(); }
+      if (P.hp <= 0) {
+        P.hp = 0; deaths++;
+        R.over = { wave: R.wave, kills, level: R.level, time: R.time };
+        events.push({ type: 'dead' });
+      }
     }
 
     /* ---------------- reload ---------------- */
     function startReload() {
-      if (P.reloading || P.ammo >= cfg.magSize) return;
+      if (P.reloading || P.ammo >= maxMag()) return;
       P.reloading = true; P.reloadT = 0; P.reloadEmpty = P.ammo <= 0;
-      P.reloadDur = cfg.reloadTime + (P.reloadEmpty ? cfg.reloadEmptyExtra : 0);
+      P.reloadDur = (cfg.reloadTime + (P.reloadEmpty ? cfg.reloadEmptyExtra : 0)) * M.reloadMul;
       events.push({ type: 'reloadStart', dur: P.reloadDur, empty: P.reloadEmpty });
     }
 
@@ -314,40 +404,42 @@ const Referee = (function () {
     function shoot() {
       const pe = clamp(P.pitch + P.kick, -1.5, 1.5);
       const speed = Math.hypot(P.vx, P.vz);
-      let s = lerp(cfg.spread, cfg.spreadAds, P.adsT) * (1 + speed / cfg.walkSpeed * 0.5);
-      if (P.sliding) s *= 0.8;
+      let s0 = lerp(cfg.spread, cfg.spreadAds, P.adsT) * (1 + speed / cfg.walkSpeed * 0.5);
+      if (P.sliding) s0 *= 0.8;
       const sy = Math.sin(P.yaw), cy = Math.cos(P.yaw), sp = Math.sin(pe), cp = Math.cos(pe);
       const fx = sy * cp, fy = sp, fz = -cy * cp;
       const rx = cy, rz = sy;                              // right
       const ux = -sy * sp, uy = cp, uz = cy * sp;          // up
-      const a = rng() * Math.PI * 2, rr = Math.sqrt(rng()) * s;
-      const ox = Math.cos(a) * rr, oy = Math.sin(a) * rr;
-      let dx = fx + rx * ox + ux * oy, dy = fy + uy * oy, dz = fz + rz * ox + uz * oy;
-      const dl = Math.hypot(dx, dy, dz); dx /= dl; dy /= dl; dz /= dl;
       const ex = P.x, ey = P.eye, ez = P.z;
+      const bullets = 1 + M.multi, dmgOne = cfg.damage * M.dmg * (R.frenzy > 0 ? L.frenzyDmg : 1);
+      for (let b = 0; b < bullets; b++) {
+        const s = s0 + (b > 0 ? 0.02 : 0);
+        const a = rng() * Math.PI * 2, rr = Math.sqrt(rng()) * s;
+        const ox = Math.cos(a) * rr, oy = Math.sin(a) * rr;
+        let dx = fx + rx * ox + ux * oy, dy = fy + uy * oy, dz = fz + rz * ox + uz * oy;
+        const dl = Math.hypot(dx, dy, dz); dx /= dl; dy /= dl; dz /= dl;
 
-      const wallT = castWall(ex, ey, ez, dx, dy, dz, cfg.range);
-      let bestT = wallT, bestM = null, bestHead = false;
-      for (const m of monsters) {
-        const sc = cfg.monsterScale * m.sv;
-        for (const sph of HIT_SPHERES) {
-          const t = raySphere(ex, ey, ez, dx, dy, dz, m.x, sph.y * sc, m.z, sph.r * sc);
-          if (t >= 0 && t < bestT) { bestT = t; bestM = m; bestHead = !!sph.head; }
+        const wallT = castWall(ex, ey, ez, dx, dy, dz, cfg.range);
+        let bestT = wallT, bestM = null, bestHead = false;
+        for (const m of monsters) {
+          const k = D.KINDS[m.kind], sc = m.scale, mfx = Math.sin(m.yaw), mfz = -Math.cos(m.yaw);
+          for (const sph of k.spheres) {
+            const t = raySphere(ex, ey, ez, dx, dy, dz, m.x + mfx * sph.f * sc, sph.y * sc, m.z + mfz * sph.f * sc, sph.r * sc);
+            if (t >= 0 && t < bestT) { bestT = t; bestM = m; bestHead = !!sph.head; }
+          }
         }
-      }
-      const endx = ex + dx * bestT, endy = ey + dy * bestT, endz = ez + dz * bestT;
-      events.push({
-        type: 'shot', ox: ex, oy: ey, oz: ez, dx, dy, dz, t: bestT,
-        ex: endx, ey: endy, ez: endz, hit: bestM ? 'monster' : (bestT >= cfg.range - 0.2 ? 'none' : 'wall')
-      });
-      if (bestM) {
-        const dmg = cfg.damage * (bestHead ? cfg.headMul : 1);
-        bestM.hp -= dmg; bestM.flash = 0.12; bestM.stun = 0.08;
-        events.push({ type: 'hit', id: bestM.id, dmg: Math.round(dmg), crit: bestHead, x: endx, y: endy, z: endz });
-        if (bestM.hp <= 0) {
-          kills++;
-          events.push({ type: 'kill', id: bestM.id, x: bestM.x, z: bestM.z, scale: cfg.monsterScale * bestM.sv, yaw: bestM.yaw });
-          monsters = monsters.filter(m => m !== bestM);
+        const endx = ex + dx * bestT, endy = ey + dy * bestT, endz = ez + dz * bestT;
+        events.push({
+          type: 'shot', extra: b > 0, ox: ex, oy: ey, oz: ez, dx, dy, dz, t: bestT,
+          ex: endx, ey: endy, ez: endz, hit: bestM ? 'monster' : (bestT >= cfg.range - 0.2 ? 'none' : 'wall')
+        });
+        if (bestM) {
+          const dmg = dmgOne * (bestHead ? cfg.headMul : 1);
+          damageMonster(bestM, dmg, bestHead, endx, endy, endz, false);
+          if (M.blast > 0) {
+            events.push({ type: 'blast', x: endx, y: endy, z: endz, r: L.blastRadius });
+            for (const o of monsters.slice()) if (o !== bestM && Math.hypot(o.x - endx, o.z - endz) < L.blastRadius + 0.5 * o.scale) damageMonster(o, dmg * M.blast, false, o.x, 1.2 * o.scale, o.z, true);
+          }
         }
       }
       P.kick += cfg.recoilKick;
@@ -355,44 +447,87 @@ const Referee = (function () {
       if (P.ammo <= 0) startReload();
     }
 
-    /* ---------------- monsters ---------------- */
+    /* ---------------- monster behaviour ---------------- */
     function updateMonster(m, dt) {
+      const k = D.KINDS[m.kind], sc = m.scale;
       m.flash = Math.max(0, m.flash - dt);
       m.stun = Math.max(0, m.stun - dt);
-      const sc = cfg.monsterScale * m.sv;
       const dx = P.x - m.x, dz = P.z - m.z;
       const dist = Math.hypot(dx, dz) || 0.0001;
       const reach = 1.25 * sc + 0.45;
       let mvx = 0, mvz = 0;
       const was = m.state;
-      m.state = dist < reach ? 'attack' : 'chase';
-      if (m.state === 'attack') {
-        if (was !== 'attack') m.atk = 0.45;
-        m.atk -= dt;
-        if (m.atk <= 0) { m.atk = 1 / cfg.monsterAttackRate; hurtPlayer(cfg.monsterDamage, m.id); }
-        m.yawT = Math.atan2(dx, -dz);
+      if (k.summonAt && !m.summoned && m.hp <= m.maxHp * k.summonAt) {
+        m.summoned = true;
+        for (let i = 0; i < k.summonN; i++) spawnQ.unshift(k.summonKind);
+        spawnTimer = 0;
+        events.push({ type: 'bossSummon', x: m.x, z: m.z });
+      }
+      if (k.charge) m.chT -= dt;
+      if (m.state === 'windup') {                         // the boss rears back where it stands, then lunges
+        m.wT -= dt; m.yawT = Math.atan2(dx, -dz);
+        if (m.wT <= 0) { m.state = 'charge'; m.cT = k.charge.dur; m.cdx = dx / dist; m.cdz = dz / dist; }
+      } else if (m.state === 'charge') {
+        m.cT -= dt;
+        const sp = m.spd0 * m.spd * k.charge.mult;
+        mvx = m.cdx * sp; mvz = m.cdz * sp; m.yawT = Math.atan2(m.cdx, -m.cdz);
+        if (dist < reach) { hurtPlayer(m.dmg * k.charge.hit, m.id); m.cT = 0; }
+        if (m.cT <= 0) { m.state = 'chase'; m.chT = k.charge.every; }
+      } else if (k.charge && m.chT <= 0 && dist > 3.5 && dist < 22 && hasLOS(m.x, m.z, P.x, P.z)) {
+        m.state = 'windup'; m.wT = k.charge.windup;
       } else {
-        let dirx, dirz;
-        const los = hasWideLOS(m.x, m.z, P.x, P.z);
-        if (los) { dirx = dx / dist; dirz = dz / dist; }
-        else {
-          const d = flowDir(m.x, m.z);
-          if (d) { dirx = d[0]; dirz = d[1]; } else { dirx = dx / dist; dirz = dz / dist; }
+        m.state = dist < (was === 'attack' ? reach * 1.2 : reach) ? 'attack' : 'chase';   // a little give, so a monster pushed by its friends keeps swinging
+        if (m.state === 'attack') {
+          if (was !== 'attack') m.atk = 0.45;
+          m.atk -= dt;
+          if (m.atk <= 0) { m.atk = 1 / (cfg.monsterAttackRate * k.rate); hurtPlayer(m.dmg, m.id); }
+          m.yawT = Math.atan2(dx, -dz);
+        } else {
+          let dirx, dirz;
+          const los = hasWideLOS(m.x, m.z, P.x, P.z);
+          if (los) { dirx = dx / dist; dirz = dz / dist; }
+          else {
+            const d = flowDir(m.x, m.z);
+            if (d) { dirx = d[0]; dirz = d[1]; } else { dirx = dx / dist; dirz = dz / dist; }
+          }
+          const sp = m.spd0 * m.spd * (m.stun > 0 ? 0.25 : 1);
+          mvx = dirx * sp; mvz = dirz * sp;
+          m.yawT = los ? Math.atan2(dx, -dz) : Math.atan2(dirx, -dirz);
         }
-        const sp = cfg.monsterSpeed * m.spd * (m.stun > 0 ? 0.25 : 1);
-        mvx = dirx * sp; mvz = dirz * sp;
-        m.yawT = los ? Math.atan2(dx, -dz) : Math.atan2(dirx, -dirz);
       }
       let sx = 0, sz = 0;
       const minD = MONSTER_RADIUS * 2 * Math.max(0.8, sc);
       for (const o of monsters) {
         if (o === m) continue;
         const ox = m.x - o.x, oz = m.z - o.z, dd = Math.hypot(ox, oz);
-        if (dd > 0.001 && dd < minD) { const k = (minD - dd) * 5 / dd; sx += ox * k; sz += oz * k; }
+        if (dd > 0.001 && dd < minD) { const kk = (minD - dd) * 5 / dd; sx += ox * kk; sz += oz * kk; }
       }
-      tryMove(m, (mvx + sx) * dt, (mvz + sz) * dt, MONSTER_RADIUS * Math.min(Math.max(sc, 0.8), 1.4));
+      const mv = tryMove(m, (mvx + sx) * dt, (mvz + sz) * dt, MONSTER_RADIUS * Math.min(Math.max(sc, 0.8), 1.4));
+      if (m.state === 'charge' && (mv.bx || mv.bz)) { m.cT = 0; m.state = 'chase'; m.chT = k.charge.every; }
       m.yaw += clamp(angleDiff(m.yawT, m.yaw), -dt * 9, dt * 9);
-      m.phase += Math.hypot(mvx, mvz) * dt * 2.4;
+      m.phase += Math.hypot(mvx, mvz) * dt * 2.4 / Math.max(0.7, sc * 0.8);
+    }
+
+    /* ---------------- orbs and pickups ---------------- */
+    function updateLoot(dt) {
+      const reachMag = L.orbMagnet * M.magnet;
+      for (const o of orbs) {
+        o.life -= dt;
+        const dx = P.x - o.x, dz = P.z - o.z, d = Math.hypot(dx, dz) || 0.001;
+        if (d < reachMag) { const sp = (6 + (1 - d / reachMag) * 14) * dt; o.x += dx / d * Math.min(sp, d); o.z += dz / d * Math.min(sp, d); }
+        if (d < L.orbPickup) { o.life = -1; events.push({ type: 'orb', v: o.v }); gainXp(o.v); }
+      }
+      orbs = orbs.filter((o) => o.life > 0);
+      const reachPick = L.pickupRadius * (1 + (M.magnet - 1) * 0.5);
+      for (const p of pickups) {
+        p.life -= dt;
+        if (Math.hypot(P.x - p.x, P.z - p.z) < reachPick) {
+          p.life = -1;
+          if (p.kind === 'heal') P.hp = Math.min(maxHp(), P.hp + L.healAmount); else R.frenzy = L.frenzyTime;
+          events.push({ type: 'pickup', kind: p.kind });
+        }
+      }
+      pickups = pickups.filter((p) => p.life > 0);
     }
 
     /* ---------------- step ---------------- */
@@ -400,8 +535,14 @@ const Referee = (function () {
       dt = Math.min(Math.max(dt, 0), 0.05);
       events = [];
       inp = inp || {};
-      time += dt;
       const p = P;
+      if (R.over) { if (inp.restart) restartRun(); return { state: snapshot(), events }; }
+      if (R.choices) {                                   // the level-up pause: nothing moves until a skill is picked
+        if (Number.isInteger(inp.pick)) pickSkill(inp.pick);
+        return { state: snapshot(), events };
+      }
+      time += dt; R.time += dt;
+      R.frenzy = Math.max(0, R.frenzy - dt);
 
       // look
       const lookMul = 1 - p.adsT * (1 - cfg.adsLookMul);
@@ -416,7 +557,7 @@ const Referee = (function () {
       const wx = rx * mx + fx * mz, wz = rz * mx + fz * mz;
       const ads = !!inp.ads && !p.reloading;   // aiming drops while reloading
       p.sprinting = !!inp.sprint && mz > 0.25 && !ads && !p.sliding;
-      let top = p.sprinting ? cfg.sprintSpeed : cfg.walkSpeed;
+      let top = (p.sprinting ? cfg.sprintSpeed : cfg.walkSpeed) * M.speed;
       if (ads) top *= cfg.adsSpeedMul;
 
       p.slideCd -= dt;
@@ -453,31 +594,40 @@ const Referee = (function () {
       p.invuln = Math.max(0, p.invuln - dt);
       p.hurt = Math.max(0, p.hurt - dt);
       p.sinceHit += dt;
-      if (p.sinceHit > cfg.regenDelay && p.hp < cfg.playerHp) p.hp = Math.min(cfg.playerHp, p.hp + cfg.regen * dt);
+      if (p.sinceHit > cfg.regenDelay && p.hp < maxHp()) p.hp = Math.min(maxHp(), p.hp + (cfg.regen + M.regen) * dt);
 
       // reload, then fire
-      if (p.ammo > cfg.magSize) p.ammo = cfg.magSize;
+      if (p.ammo > maxMag()) p.ammo = maxMag();
       if (inp.reload) startReload();
       if (p.reloading) {
         p.reloadT += dt;
-        if (p.reloadT >= p.reloadDur) { p.reloading = false; p.ammo = cfg.magSize; events.push({ type: 'reloadEnd' }); }
+        if (p.reloadT >= p.reloadDur) { p.reloading = false; p.ammo = maxMag(); events.push({ type: 'reloadEnd' }); }
       }
       p.fireCd -= dt;
       if (p.fireCd < 0 && !inp.fire) p.fireCd = 0;
-      const interval = 1 / cfg.fireRate;
+      const interval = 1 / (cfg.fireRate * M.rate * (R.frenzy > 0 ? L.frenzyRate : 1));
       let shots = 0;
       if (inp.fire && !p.reloading && p.ammo <= 0) startReload();
       while (inp.fire && !p.reloading && p.ammo > 0 && p.fireCd <= 0 && shots < 3) { shoot(); p.fireCd += interval; shots++; }
 
-      // monsters
+      // monsters, waves, loot
       flowTimer -= dt;
       const pc = clamp(Math.floor(p.z / CELL), 0, GH - 1) * GW + clamp(Math.floor(p.x / CELL), 0, GW - 1);
       if (pc !== flowCell || flowTimer <= 0) { buildFlow(p.x, p.z); flowTimer = 0.4; }
-      for (const m of monsters) updateMonster(m, dt);
-      if (monsters.length < cfg.monsterCount) {
+      for (const m of monsters.slice()) if (!R.over) updateMonster(m, dt);
+      if (R.phase === 'fight') {
         spawnTimer -= dt;
-        if (spawnTimer <= 0) { if (spawnMonster()) spawnTimer = cfg.respawnDelay; else spawnTimer = 0.3; }
+        if (spawnTimer <= 0 && spawnQ.length && monsters.length < aliveMax()) {
+          const heavyN = monsters.filter((m) => D.KINDS[m.kind].heavy).length;
+          const i = spawnQ.findIndex((kd) => !D.KINDS[kd].heavy || D.KINDS[kd].boss || heavyN < L.heavyCap);
+          if (i >= 0 && spawnMonster(spawnQ[i])) { spawnQ.splice(i, 1); spawnTimer = L.spawnGap; } else spawnTimer = 0.3;
+        }
+        if (!spawnQ.length && !monsters.length) endWave();
+      } else {
+        R.timer -= dt;
+        if (R.timer <= 0) startWave();
       }
+      updateLoot(dt);
 
       return { state: snapshot(), events };
     }
@@ -485,6 +635,7 @@ const Referee = (function () {
     function snapshot() {
       const p = P;
       const ease = p.adsT * p.adsT * (3 - 2 * p.adsT);
+      const boss = monsters.find((m) => D.KINDS[m.kind].boss);
       return {
         t: time, kills, deaths,
         player: {
@@ -493,23 +644,33 @@ const Referee = (function () {
           adsT: p.adsT, sprintK: p.sprintK, sprinting: p.sprinting, sliding: p.sliding,
           slideK: p.sliding ? p.slideT / cfg.slideTime : 0,
           vx: p.vx, vz: p.vz, speed: Math.hypot(p.vx, p.vz),
-          hp: p.hp, maxHp: cfg.playerHp, hurt: p.hurt, kick: p.kick,
-          ammo: p.ammo, magSize: cfg.magSize, reloading: p.reloading,
+          hp: p.hp, maxHp: maxHp(), hurt: p.hurt, kick: p.kick,
+          ammo: p.ammo, magSize: maxMag(), reloading: p.reloading,
           reloadK: p.reloading ? clamp(p.reloadT / p.reloadDur, 0, 1) : 0,
           reloadEmpty: p.reloadEmpty, reloadDur: p.reloadDur
         },
-        monsters: monsters.map(m => ({
-          id: m.id, x: m.x, z: m.z, yaw: m.yaw, hp: m.hp, maxHp: m.maxHp,
-          flash: m.flash, state: m.state, phase: m.phase, scale: cfg.monsterScale * m.sv
-        }))
+        monsters: monsters.map((m) => ({
+          id: m.id, kind: m.kind, x: m.x, z: m.z, yaw: m.yaw, hp: m.hp, maxHp: m.maxHp,
+          flash: m.flash, state: m.state, phase: m.phase, scale: m.scale
+        })),
+        wave: { n: R.wave, phase: R.phase, timer: Math.max(0, R.timer), left: spawnQ.length + monsters.length, boss: R.phase === 'fight' ? !!boss || spawnQ.some((kd) => D.KINDS[kd].boss) : R.wave % L.bossEvery === 0 },
+        bossBar: boss ? { name: D.KINDS[boss.kind].name, hp: boss.hp, maxHp: boss.maxHp, state: boss.state } : null,
+        level: { n: R.level, xp: R.xp, need: D.xpNeed(R.level) },
+        orbs: orbs.map((o) => ({ id: o.id, x: o.x, z: o.z, v: o.v })),
+        pickups: pickups.map((q) => ({ id: q.id, kind: q.kind, x: q.x, z: q.z, life: q.life })),
+        choices: R.choices ? R.choices.map((id) => { const s = skillOf(id); return { id, name: s.name, desc: s.desc, stack: stackOf(id), max: s.max }; }) : null,
+        skills: D.SKILLS.filter((s) => stackOf(s.id) > 0).map((s) => ({ id: s.id, name: s.name, n: stackOf(s.id) })),
+        frenzy: R.frenzy,
+        over: R.over
       };
     }
 
     function setCfg(o) { Object.assign(cfg, o); }
-    function reset() { kills = 0; deaths = 0; respawnPlayer(); }
+    function reset() { deaths = 0; restartRun(); events = []; }
 
+    newRun(); placePlayer();
     // first state, so the screen can draw before the first step
-    return { map: M, cfg, setCfg, step, snapshot, reset, defaults: Object.assign({}, DEFAULT_CFG) };
+    return { map: M0, cfg, setCfg, step, snapshot, reset, kinds: D.KINDS, defaults: Object.assign({}, DEFAULT_CFG) };
   }
 
   return { create };

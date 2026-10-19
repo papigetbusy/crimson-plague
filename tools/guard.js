@@ -5,9 +5,9 @@ const fs = require('fs'), path = require('path');
 const root = path.join(__dirname, '..');
 let bad = 0;
 const fail = m => { console.log('GUARD FAIL: ' + m); bad++; };
-const ref = fs.readFileSync(path.join(root, 'src/referee.js'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+const ref = ['src/referee.js', 'src/referee_data.js'].map((f) => fs.readFileSync(path.join(root, f), 'utf8')).join('\n').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
 for (const [re, why] of [[/Math\.random/, 'unseeded random'], [/Date\.now|performance\.now|new Date/, 'clock'],
   [/\bdocument\b|\bwindow\b|\blocalStorage\b/, 'browser'], [/\bfetch\b|XMLHttpRequest|WebSocket/, 'network'], [/require\(['"]fs['"]\)/, 'files']])
-  if (re.test(ref)) fail('referee.js uses ' + why);
+  if (re.test(ref)) fail('referee code uses ' + why);
 console.log(bad ? 'guard: ' + bad + ' problem(s)' : 'guard: ok');
 process.exit(bad ? 1 : 0);

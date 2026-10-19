@@ -24,6 +24,10 @@ jobs:
         run: node tools/guard.js
       - name: Referee tests
         run: node tests/referee.test.js
+      - name: Model checks
+        run: node tests/models.test.js
+      - name: Core loop checks
+        run: node tests/loop.test.js
       - name: Build the page
         run: node tools/build.js "build-$(date -u +%Y%m%d-%H%M)-${GITHUB_SHA::7}"
       - name: Publish previews and models
