@@ -21,7 +21,7 @@ The plan for everything the game still needs, in phases. Agreed with the owner o
 
 ## Phase 1 — Look and scale
 What the game looks like and how big everything is.
-- [ ] Scale chart: one picture showing the player, gun, hands, every monster, doors, corridor width and ceiling height side by side; the owner picks what is too big or too small.
+- [ ] Scale chart (built 2026-10-19 with `python3 tools/scale_chart.py out_dir`, waiting on the owner's answers): one picture showing the player, gun, hands, every monster, doors, corridor width and ceiling height side by side; the owner picks what is too big or too small.
 - [ ] Environment look: stone, floor, ceiling, banners, torches, lighting and fog, decided on the phone.
 - [ ] Monster look pass: Bone Hound claws, Rock Golem facets, Demon Lord bulk, and the Horned Fiend's face (owner decides which head picture is the master; Grok's hands and feet sheet).
 - [ ] Effects look: muzzle flash, hit and blood bursts, orbs, pickups, level-up cards, wave banners.
