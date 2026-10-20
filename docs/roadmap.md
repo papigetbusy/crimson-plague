@@ -52,7 +52,7 @@ Starts as plain grey-box floors. The goal is the shape and size of the world.
 - **Gate:** running a floor feels good and nobody gets stuck.
 
 ## Phase 3 — Monsters and waves
-- [ ] The Crusader Tactics monster list as the base roster (ranged and special attackers, elites), each with its own behaviour, first as simple placeholder shapes, then Grok's art one monster at a time.
+- [x] Part of the Crusader Tactics roster is in: Goblin, Skeleton, Mushroom, Eyeball, Flame Spirit, with ranged attackers and elites. **The rest of the roster (Orc Brute, Shadow Assassin, Dark Knight, Golden Drake and more) and Grok's art for each monster moved to Phase 9 (owner, 2026-10-19).**
 - [ ] Waves scale with floor; variants unlock on set floors; a monster mix per floor that keeps waves interesting.
 - [x] A monster cap per floor. After the cap: more damage, more health, skills and abilities, with no upper limit. (Built: past the cap every wave adds health and damage, and elites appear with abilities Armored, Swift, Brutal, Volatile; more abilities stack on the further you go. Owner to feel it on the phone.)
 - **Check:** difficulty keeps climbing past the cap and fights stay readable on the phone.
@@ -93,6 +93,7 @@ One feature at a time, each tested on the phone.
 - **Gate:** owner signs off the stash.
 
 ## Phase 9 — Feel, polish, controller, PC and release
+- [ ] The rest of the Crusader Tactics monster roster (Orc Brute, Shadow Assassin, Dark Knight, Golden Drake and more): placeholders first, then Grok's art one monster at a time. Moved here from Phase 3.
 - [ ] Feel pass: movement, shooting, spread and recoil, monster speed and damage, wave and floor pacing, XP speed; this is where the TUNE panel numbers get locked.
 - [ ] Music, a fuller sound set, stronger hit feedback.
 - [ ] Real menu, short tutorial, settings; clean up the leftover "Crimson Hall" names.
