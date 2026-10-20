@@ -2,7 +2,7 @@
 
 The plan for everything the game still needs, in phases. Rewritten with the owner on 2026-10-19 (it replaces the first 8-phase plan and borrows the way Crusader Tactics was built). **Work only on the current phase.**
 
-**Current phase: 3 — Monsters and waves** (status: not started; Phase 1 and Phase 2 were signed off by the owner on 2026-10-19)
+**Current phase: 4 — Classes, skills and level-ups** (status: not started; Phases 1, 2 and 3 were signed off by the owner on 2026-10-19)
 
 ## How we build (every phase works this way)
 - **Every phase starts rough and ugly on purpose** (grey boxes, placeholder shapes, plain text menus) and is built out step by step. Nothing is pretty until its phase says so.
@@ -51,7 +51,7 @@ Starts as plain grey-box floors. The goal is the shape and size of the world.
 - **Check:** you can get lost on a floor but find your way with the minimap, and it runs on the phone.
 - **Gate:** running a floor feels good and nobody gets stuck.
 
-## Phase 3 — Monsters and waves
+## Phase 3 — Monsters and waves — SIGNED OFF 2026-10-19
 - [x] Part of the Crusader Tactics roster is in: Goblin, Skeleton, Mushroom, Eyeball, Flame Spirit, with ranged attackers and elites. **The rest of the roster (Orc Brute, Shadow Assassin, Dark Knight, Golden Drake and more) and Grok's art for each monster moved to Phase 9 (owner, 2026-10-19).**
 - [ ] Waves scale with floor; variants unlock on set floors; a monster mix per floor that keeps waves interesting.
 - [x] A monster cap per floor. After the cap: more damage, more health, skills and abilities, with no upper limit. (Built: past the cap every wave adds health and damage, and elites appear with abilities Armored, Swift, Brutal, Volatile; more abilities stack on the further you go. Owner to feel it on the phone.)

@@ -1,4 +1,5 @@
 # Changelog (newest first, one plain line each)
+- 2026-10-19 · Claude · Phase 3 (monsters and waves) signed off by the owner after playing to level 20 ("hard but not too hard"); Phase 4, classes, skills and level-ups, is now the current phase.
 - 2026-10-19 · Claude · Roadmap: the rest of the Crusader Tactics monster roster and Grok monster art moved from Phase 3 to Phase 9 (owner request).
 - 2026-10-19 · Claude · Phase 3 batch two (private test, not pushed): past the monster cap every wave adds health and damage with no limit, and glowing elites appear with abilities (Armored, Swift, Brutal, Volatile) that stack the deeper you go; new elite tests.
 - 2026-10-19 · Claude · Controller lock-up hardening (private test, not pushed): Back opens the big map and any pad press closes it, one bad drawing frame can no longer freeze the game (the error shows on screen), pad test and phone smoke added.
