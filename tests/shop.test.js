@@ -67,4 +67,12 @@ const run = (ref, n, inp) => { let r; for (let i = 0; i < n; i++) r = ref.step(1
   t('The safe room door leads on to the next floor', !st.safe && st.floor === 2);
   t('You keep your gold on the next floor', st.gold === 1000 - price - L.shopHeal);
 }
+{ // a level-up beats the shop
+  const ref = Referee.create(5); ref.setCfg({ startWave: 11, startSafe: true, startGold: 500, playerHp: 1e7, regen: 0, classId: 'gunslinger' }); ref.reset(); const m = ref.map.merchant; ref.place(m.x - 1.5, m.z, 0); run(ref, 3);
+  t('Standing at the merchant opens the shop', !!ref.snapshot().shop);
+  ref.giveXp(900); const s = ref.snapshot();
+  t('A level-up that arrives while the shop is open is shown instead of the shop', !s.shop && !!s.choices && !!s.classChoices);
+  run(ref, 40, { pick: 0, pickClass: 0 }); const a = ref.snapshot();
+  t('The level-up can be picked even with the merchant right there, and the shop comes back afterwards', !a.choices && !a.classChoices && !!a.shop);
+}
 console.log(bad ? bad + ' FAILED' : 'all shop checks ok'); process.exit(bad ? 1 : 0);

@@ -37,6 +37,7 @@ Keep the code neat: small focused files and functions in clear folders, never on
 - `node tests/mods.test.js` : gun mods (lines by rarity, which guns each fits, mod places by gun rarity, bag of 6, fitting and removing, drops, the Gear menu bag)
 - `node tests/stash.test.js` : stash and blueprints (safe-room stash, 3 blueprints per type, starting a run from blueprints, the menus)
 - `node tests/saves.test.js` : seeds and saves (map seed kept in a save, damage and item seeds fresh every time, what a save holds, the saves list)
+- `node tests/stuck.test.js` : never stuck (a level-up can always be picked, at the merchant, at the chest, after a save; random play never throws or stalls)
 - `node tests/gunfx.test.js` : gun status effects (fire burns, poison, ice slows and freezes, electric arcs, radiation pulse, dark drains and withers, light smites, legendaries carry two)
 - `node tests/guns.test.js` : the 20 catalog guns (5 types x 4 versions: sight clear, hands on grip and fore-end, skin exists, face budget)
 - `node tests/world.test.js` : hall look checks (banners, floors, ribs, baked light)

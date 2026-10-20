@@ -850,7 +850,8 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       inp = inp || {};
       const p = P;
       if (R.over) { if (inp.restart) { if (inp.seeds) setSeeds(inp.seeds); restartRun(); } return { state: snapshot(), events }; }
-      if (R.safe && M0.merchant) {                          // walk up to the merchant and the shop opens; step away and it can open again
+      const levelPending = !!(R.choices || R.classChoices);       // a level-up always comes first: the shop waits behind it, so a pick can never be eaten by the shop
+      if (R.safe && M0.merchant && !levelPending) {                          // walk up to the merchant and the shop opens; step away and it can open again
         const md = Math.hypot(P.x - M0.merchant.x, P.z - M0.merchant.z);
         if (R.shop) {
           if (Number.isInteger(inp.pickClass)) shopBuy(inp.pickClass);
@@ -998,7 +999,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
         traps: (M0.traps || []).map(trapState),
         gold: R.gold, coins: coins.map((c) => ({ id: c.id, x: c.x, z: c.z, v: c.v })),
         safe: R.safe, merchant: R.safe && M0.merchant ? { x: M0.merchant.x, z: M0.merchant.z } : null,
-        shop: R.shop ? {
+        shop: R.shop && !(R.choices || R.classChoices) ? {
           skills: R.stock.map((sid, i) => sid ? Object.assign(kit.card(sid, R.level), { price: skillPrice(sid), afford: R.gold >= skillPrice(sid), slot: i }) : null).filter(Boolean),
           supplies: supplyList().map((e) => e.kind === 'mend' ? { id: 'mend', name: 'Mend', desc: 'Heal to full health', price: L.shopHeal, afford: R.gold >= L.shopHeal && P.hp < maxHp() } : e.kind === 'leave' ? { id: 'leave', name: 'Leave', desc: 'Back to the room', price: 0, afford: true } : e.kind === 'gear' ? gearCard(e.item, e.slot) : gunCard(e.item, e.slot))
         } : null,

@@ -56,6 +56,8 @@ jobs:
         run: node tests/stash.test.js
       - name: Seeds and saves checks
         run: node tests/saves.test.js
+      - name: Never-stuck checks (level-ups, shop, random play)
+        run: node tests/stuck.test.js
       - name: Gun status effect checks
         run: node tests/gunfx.test.js
       - name: Hall look tests
