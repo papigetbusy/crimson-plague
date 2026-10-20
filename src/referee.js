@@ -18,7 +18,7 @@ const Referee = (function () {
   'use strict';
 
   const CELL = 2;       // world units per grid cell
-  const WALL_H = 4.8;   // wall height
+  const WALL_H = 5.5;   // wall height
 
   const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
   const lerp = (a, b, t) => a + (b - a) * t;
@@ -110,18 +110,18 @@ const Referee = (function () {
     const torches = [];
     for (const zp of [14, 18, 22, 26]) {
       const z = (zp + 0.5) * CELL;
-      torches.push({ x: 18 + 0.28, y: 2.5, z, nx: 1, nz: 0, kind: 'sconce' });
-      torches.push({ x: 24 - 0.28, y: 2.5, z, nx: -1, nz: 0, kind: 'sconce' });
+      torches.push({ x: 18 + 0.28, y: 2.85, z, nx: 1, nz: 0, kind: 'sconce' });
+      torches.push({ x: 24 - 0.28, y: 2.85, z, nx: -1, nz: 0, kind: 'sconce' });
     }
-    for (const cx of [4, 8, 12, 16]) torches.push({ x: (cx + 0.5) * CELL, y: 2.5, z: 2 + 0.28, nx: 0, nz: 1, kind: 'sconce' });
+    for (const cx of [4, 8, 12, 16]) torches.push({ x: (cx + 0.5) * CELL, y: 2.85, z: 2 + 0.28, nx: 0, nz: 1, kind: 'sconce' });
     for (const cz of [4, 8]) {
-      torches.push({ x: 2 + 0.28, y: 2.5, z: (cz + 0.5) * CELL, nx: 1, nz: 0, kind: 'sconce' });
-      torches.push({ x: 40 - 0.28, y: 2.5, z: (cz + 0.5) * CELL, nx: -1, nz: 0, kind: 'sconce' });
+      torches.push({ x: 2 + 0.28, y: 2.85, z: (cz + 0.5) * CELL, nx: 1, nz: 0, kind: 'sconce' });
+      torches.push({ x: 40 - 0.28, y: 2.85, z: (cz + 0.5) * CELL, nx: -1, nz: 0, kind: 'sconce' });
     }
     for (const [cx, cz] of [[2, 2], [18, 2], [2, 10], [18, 10]]) {
       torches.push({ x: (cx + 0.5) * CELL, y: 1.75, z: (cz + 0.5) * CELL, nx: 0, nz: 0, kind: 'brazier' });
     }
-    torches.push({ x: 21, y: 2.5, z: 60 - 0.28, nx: 0, nz: -1, kind: 'sconce' });
+    torches.push({ x: 21, y: 2.85, z: 60 - 0.28, nx: 0, nz: -1, kind: 'sconce' });
     return {
       W, H, CELL, WALL_H,
       rows: g.map(r => r.join('')),

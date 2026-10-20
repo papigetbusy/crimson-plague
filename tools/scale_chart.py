@@ -10,7 +10,7 @@ import preview_models as pm
 OUT = sys.argv[1] if len(sys.argv) > 1 else '.'
 os.makedirs(OUT, exist_ok=True)
 MODEL, GUN_SCALE = 0.72, 1.15
-EYE, WALL_H, CELL = 1.7, 4.8, 2.0
+EYE, WALL_H, CELL = 1.7, 5.5, 2.0
 PPU = 100                                   # pixels per world unit
 FONT = lambda n: ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', n)
 BG, INK, GOLD, RED = (22, 12, 14), (236, 223, 198), (207, 165, 74), (226, 58, 66)
@@ -21,7 +21,7 @@ def dump(which):
     path = os.path.join(OUT, which + '.json')
     subprocess.check_call(['node', os.path.join(HERE, 'preview_models.js'), which, path])
     return pm.load(path)
-def scaled(quads, k): return [(P * k, c, g) for P, c, g in quads]
+def scaled(quads, k): return [(q[0] * k,) + tuple(q[1:]) for q in quads]
 def bbox(quads):
     allp = np.concatenate([q[0] for q in quads]); return allp.min(0), allp.max(0)
 
@@ -42,7 +42,7 @@ d.rectangle([cx - 14, base - int(0.9 * PPU), cx - 4, base], fill=(90, 90, 100));
 d.rectangle([cx - 20, base - int(1.5 * PPU), cx + 20, base - int(0.85 * PPU)], fill=(110, 110, 122))
 d.ellipse([cx - 13, base - int(1.84 * PPU), cx + 13, base - int(1.52 * PPU)], fill=(130, 130, 142))
 items.append(('You', fig, 1.8, 0.8)); sizes['You'] = {'height': 1.8, 'width': 0.8, 'eye': EYE, 'collision radius': 0.4}
-for name, which, kind, view, w in [('Bone Hound', 'hound', 'hound', 'side', 1.7), ('Horned Fiend', 'fiend', 'fiend', 'front', 1.9), ('Rock Golem', 'golem', 'golem', 'front', 2.7), ('Demon Lord (boss)', 'demon', 'demon', 'front', 4.9)]:
+for name, which, kind, view, w in [('Bone Hound', 'hound2', 'hound', 'side', 1.7), ('Horned Fiend', 'fiend2', 'fiend', 'front', 1.9), ('Rock Golem', 'golem', 'golem', 'front', 2.7), ('Demon Lord (boss)', 'demon2', 'demon', 'front', 4.9)]:
     k = MODEL * KINDS[kind]['size']; q = scaled(dump(which), k); lo, hi = bbox(q)
     items.append((name, shot(q, view, w), float(hi[1]), w))
     sc = KINDS[kind]['size']; rad = 0.5 * min(max(sc, 0.8), 1.4)

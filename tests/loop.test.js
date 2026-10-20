@@ -127,5 +127,6 @@ const god = (ref) => { ref.setCfg({ playerHp: 1e7, regen: 0 }); ref.reset(); };
 { // determinism
   const sim = () => { const ref = Referee.create(21); god(ref); const r = run(ref, (o) => o.wave.n >= 2, 120); return [r.out.kills, r.out.level.n, r.out.monsters.length, r.out.player.x.toFixed(3)].join(); };
   t('The same seed plays out the same way every time', sim() === sim());
+  t('The hall ceiling is 5.5 high, so the Demon Lord (4.2 tall) has room and the torches sit lower than the ceiling', Referee.create(1).map.WALL_H === 5.5 && Referee.create(1).map.torches.every((x) => x.y < 5.5 - 1));
 }
 process.exit(bad ? 1 : 0);
