@@ -13,8 +13,6 @@
   if (!window.THREE) { $('fatal').hidden = false; return; }
 
   const ref = Referee.create((Date.now() & 0xffffff) | 1);
-  const map = ref.map, CELL = map.CELL, WALL_H = map.WALL_H;
-  const GW = map.W, GH = map.H, rows = map.rows, torches = map.torches;
 
   // a link can start the run on a later wave, to try the boss: ...#wave10 (or ?wave=10)
   const startWaveFromLink = (() => { const m = /wave=?(\d+)/.exec(location.hash + location.search); return m ? Math.max(1, Math.min(60, +m[1])) : 1; })();
@@ -66,20 +64,6 @@
   const dirLight = new THREE.DirectionalLight(0xffd0a0, 0.55); dirLight.position.set(-0.4, 1, 0.6); scene.add(dirLight);
   const lantern = new THREE.PointLight(0xffb070, 0.8, 20, 2); camera.add(lantern);
 
-  /* ============ world: merged quads with baked torch light ============ */
-  const world = WorldBake.bake(map), buckets = world.buckets, bakeLight = world.light;
-  const worldMats = [];
-  const TEX = { stone: texStone, cloth: texCloth, panel: texPanel, pillar: texPillar, gold: texGold, floor: texFloor, floor2: texFloor2, floor3: texFloor3, floorEdge: texFloorEdge, carpet: texCarpet, ceil: texCeil };
-  for (const key in buckets) {
-    const b = buckets[key], geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(b.pos, 3));
-    geo.setAttribute('uv', new THREE.Float32BufferAttribute(b.uv, 2));
-    geo.setAttribute('color', new THREE.Float32BufferAttribute(b.col, 3));
-    const mat = new THREE.MeshBasicMaterial({ map: TEX[key], vertexColors: true, fog: true });
-    worldMats.push(mat);
-    scene.add(new THREE.Mesh(geo, mat));
-  }
-
   // simple helper for small solid boxes
   const geoCache = {};
   function boxMesh(w, h, d, mat, x, y, z, parent) {
@@ -90,7 +74,7 @@
     return m;
   }
 
-  /* ---- torches: flame voxels plus additive glow ---- */
+  /* ============ world: the floor is baked and drawn by src/screen/world_view.js (rebuilt on every new floor), with the glow texture shared by the flames ============ */
   const glowTex = (function () {
     const c = document.createElement('canvas'); c.width = c.height = 64;
     const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
@@ -98,32 +82,9 @@
     g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
     return new THREE.CanvasTexture(c);
   })();
-  const flameOuter = new THREE.MeshBasicMaterial({ color: 0xff8a26, fog: false });
-  const flameInner = new THREE.MeshBasicMaterial({ color: 0xffdc7a, fog: false });
-  const ironMat = new THREE.MeshLambertMaterial({ map: texDark, emissive: 0x201410 });
-  const goldLit = new THREE.MeshLambertMaterial({ map: texGold, emissive: 0x3a2a0a });
-  const flames = [];
-  for (const t of torches) {
-    const grp = new THREE.Group();
-    const big = t.kind === 'brazier';
-    if (big) {
-      boxMesh(0.55, 1.2, 0.55, ironMat, t.x, 0.6, t.z, scene);
-      boxMesh(0.85, 0.16, 0.85, goldLit, t.x, 1.2, t.z, scene);
-      boxMesh(0.7, 0.3, 0.7, ironMat, t.x, 1.38, t.z, scene);
-    } else {
-      const wx = t.x - t.nx * 0.28, wz = t.z - t.nz * 0.28;
-      boxMesh(0.2 + Math.abs(t.nz) * 0.0, 0.5, 0.2, ironMat, t.x - t.nx * 0.12, t.y - 0.38, t.z - t.nz * 0.12, scene);
-      boxMesh(0.34, 0.1, 0.34, goldLit, t.x, t.y - 0.14, t.z, scene);
-      boxMesh(0.12, 0.12, 0.12, ironMat, wx + t.nx * 0.06, t.y - 0.5, wz + t.nz * 0.06, scene);
-    }
-    grp.position.set(t.x, t.y, t.z); scene.add(grp);
-    const s = big ? 1.6 : 1;
-    const outer = boxMesh(0.2 * s, 0.34 * s, 0.2 * s, flameOuter, 0, 0.1 * s, 0, grp);
-    const inner = boxMesh(0.11 * s, 0.22 * s, 0.11 * s, flameInner, 0, 0.06 * s, 0, grp);
-    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, transparent: true }));
-    sp.scale.setScalar(big ? 3.2 : 2.1); sp.position.set(0, 0.15, 0); grp.add(sp);
-    flames.push({ outer, inner, sp, base: big ? 3.2 : 2.1, ph: Math.random() * 10 });
-  }
+  const worldView = WorldView.create(THREE, scene, T, glowTex);
+  let loadedFloor = -1;
+  const goldLit = new THREE.MeshLambertMaterial({ map: texGold, emissive: 0x3a2a0a });   // the gun's gold trim (the world's own gold lives in world_view.js)
 
   /* ============ the gun: gothic AK-pattern rifle, red dot sight, gloved hands ============ */
   const stoneLit = new THREE.MeshLambertMaterial({ map: texStone, emissive: 0x181414 });
@@ -246,7 +207,7 @@
   const RIGS = MonsterRigs.create(THREE), MODEL = RIGS.MODEL;
   const mons = new Map();     // id -> entry
   const dying = [];
-  const smoothLight = (x, z) => { const l = bakeLight(x, 1.5, z, 0, 1, 0); return l; };
+  const smoothLight = (x, z) => worldView.light(x, 1.5, z, 0, 1, 0);
   const loot = LootView.create(THREE, scene, glowTex);       // XP orbs and pickups
   const fx = FxSprites.create(THREE, camera, scene);          // sprite explosions, sparks and lightning (look presets, see fx_plan.js)
   const fxOn = () => fx.art() && view.fxPreset !== 'original';
@@ -385,6 +346,7 @@
     keys[e.code] = true;
     if (e.code === 'KeyC' || e.code === 'ControlLeft') { if (running) I.slide = true; e.preventDefault(); }
     if (e.code === 'KeyR' && running) I.reload = true;
+    if (e.code === 'KeyM' && running) minimap.toggle();                                  // open or close the big map
     if (e.code === 'KeyF' && running) startInspect();   // F shows both sides, press again for the magazine
     if (running && e.code.startsWith('Digit') && +e.code.slice(5) >= 1 && +e.code.slice(5) <= 3) I.pick = +e.code.slice(5) - 1;   // level-up choice
     if (running && (e.code === 'Enter' || e.code === 'NumpadEnter')) I.restart = true;                                     // after you fall
@@ -502,6 +464,7 @@
   const elAmmo = $('ammo'), elAmmoN = $('ammoN'), elAmmoM = $('ammoM'), elRl = $('rlFill'), elKills = $('kills'), elHpFill = $('hpFill'), elHurt = $('hurt'), elCross = $('cross'), elHit = $('hitmark');
   const overlay = $('start'), playBtn = $('play'), playLabel = $('playLabel'), diedEl = $('died');
   let lastKills = -1, hitT = 0, hitKill = false, diedT = 0;
+  const minimap = Minimap.create($, () => ref.map), compass = Compass.create($);
   const hud = Hud.create($, { pick: (i) => { I.pick = i; }, restart: () => { I.restart = true; } });
 
   function setRunning(v) {
@@ -593,7 +556,7 @@
       if (tgt === 'ref') ref.setCfg({ [key]: v }); else view[key] = v;
       val.textContent = fmt(v, st);
       if (key === 'pixelH') resize();
-      if (key === 'fogFar') scene.fog.far = v;
+      if (key === 'fogFar') { scene.fog.far = v; worldView.setFogFar(v); }
       saveTune();
     });
     row.appendChild(name); row.appendChild(val); row.appendChild(inp); panelBody.appendChild(row);
@@ -608,7 +571,7 @@
     ref.setCfg(ref.defaults);
     Object.assign(view, { pixelH: 300, brightness: 1, fogFar: 34, sound: 1, fxPreset: 'common', wallSkin: 'original', gunSkin: 'crimson' }, GUN_DEFAULTS, TouchLayout.DEFAULTS); touchSet.sync(); fxSet.sync(); wallSet.sync(); skinSet.sync();
     for (const k in sliderEls) { const s = sliderEls[k]; s.inp.value = s.tgt === 'ref' ? ref.cfg[k] : view[k]; s.val.textContent = fmt(+s.inp.value, s.st); }
-    scene.fog.far = view.fogFar; resize(); saveTune();
+    scene.fog.far = view.fogFar; worldView.setFogFar(view.fogFar); resize(); saveTune();
   });
   $('newRun').addEventListener('click', () => { ref.reset(); togglePanel(); });
   $('tuneCopy').addEventListener('click', () => {
@@ -745,12 +708,7 @@
     // world brightness: flicker + muzzle flash
     const fl = 1 + 0.035 * Math.sin(time * 17) + 0.025 * Math.sin(time * 31 + 1.3), fb = flashT / 0.06;
     const br = view.brightness * fl;
-    for (const m of worldMats) m.color.setRGB(br * (1 + 0.5 * fb), br * (1 + 0.28 * fb), br * (1 + 0.1 * fb));
-    for (const f of flames) {
-      const q = 0.85 + 0.25 * Math.sin(time * 14 + f.ph) + 0.12 * Math.sin(time * 29 + f.ph * 2);
-      f.outer.scale.set(1, q, 1); f.inner.scale.set(1, q * 1.1, 1);
-      f.sp.scale.setScalar(f.base * (0.92 + 0.1 * q)); f.sp.material.opacity = 0.75 + 0.2 * Math.sin(time * 11 + f.ph);
-    }
+    worldView.update(time, camera.position, dt, br, fb, st.door.open);
 
     // particles, tracers, damage numbers
     for (const q of parts) {
@@ -786,11 +744,13 @@
     elHit.style.opacity = hitT > 0 ? Math.min(1, hitT / 0.1) : 0;
     elHit.classList.toggle('kill', hitKill);
     diedT = Math.max(0, diedT - dt); diedEl.style.opacity = clamp(diedT / 0.6, 0, 1);
-    hud.update(st, dt); loot.update(st, time);
+    hud.update(st, dt); minimap.update(st, dt); compass.update(st); loot.update(st, time);
   }
 
   /* ============ main loop ============ */
   let state = ref.snapshot();
+  function ensureFloor(st) { if (st.floorId !== loadedFloor) { worldView.load(ref.map, view.fogFar); loadedFloor = st.floorId; } }   // a new floor (or a new run) is baked and drawn here
+  ensureFloor(state);
   function frame(now) {
     requestAnimationFrame(frame);
     const dt = Math.min((now - clock.last) / 1000, 0.05); clock.last = now;
@@ -802,6 +762,7 @@
     } else {
       I.lookX = I.lookY = I.touchX = I.touchY = 0; I.slide = false; I.reload = false;
     }
+    ensureFloor(state);
     syncMonsters(state, dt);
     updateView(state, running && !panelOpen ? dt : 0, now / 1000);
     renderer.render(scene, camera);

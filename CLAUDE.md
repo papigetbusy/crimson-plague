@@ -29,6 +29,8 @@ Keep the code neat: small focused files and functions in clear folders, never on
 - `node tests/fx.test.js` : effect checks (look presets escalate common to legendary, sprite pool)
 - `node tests/gun.test.js` : gun look checks (smoothed shape, skins, motion)
 - `node tests/world.test.js` : hall look checks (banners, floors, ribs, baked light)
+- `node tests/floor.test.js` : floor checks (sizes, connected rooms, far-corner door, short carpet)
+- `python3 tools/floor_map.py out.png [floor ...]` : draws top-down pictures of generated floors
 - `python3 tools/hall_shot.py out_dir [view ...]` : draws pictures of the hall the way the game does, with no GPU (corridor, hall, torch, banner, ceiling, carpet, or x,z,yaw,pitch)
 - `python3 tools/extract_ct_assets.py` then `python3 tools/pack_fx.py` : pull the owner's free art packs out of the CT page into git-ignored `assets-private/` (full packs never go in the repo), and pack the effect sheets into `src/screen/fx_data.js` (committed, credited in `docs/credits.md`) (without it the build just shows the plain voxel effects)
 - `python3 tools/smoke_pad.py` : fake-controller run on phone and desktop sizes (connect, play, level-up, pause, unplug)

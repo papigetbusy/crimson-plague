@@ -177,6 +177,14 @@ body.touch .touchhelp { display: block; }
 #waveN { display: block; font-family: var(--display); font-weight: 400; font-size: clamp(20px, 5.4vh, 32px); line-height: 1; color: var(--ink); letter-spacing: 0.04em; }
 #waveN.boss { color: var(--crimson-hi); }
 #waveLeft { font-weight: 700; font-size: 12px; letter-spacing: 0.18em; color: var(--gold); text-transform: uppercase; }
+#floorN { display: block; font-weight: 700; font-size: 11px; letter-spacing: 0.22em; color: var(--ink); opacity: 0.8; }
+#compass { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 74px); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; text-shadow: 0 2px 0 #000; }
+#compassArrow { width: 0; height: 0; border-left: 11px solid transparent; border-right: 11px solid transparent; border-bottom: 26px solid var(--crimson-hi); filter: drop-shadow(0 0 6px rgba(226, 58, 66, 0.9)); }
+#compassDist { font-weight: 700; font-size: 12px; letter-spacing: 0.14em; color: var(--ink); }
+#miniMap { position: fixed; z-index: 8; right: max(16px, env(safe-area-inset-right, 0px)); top: calc(env(safe-area-inset-top, 0px) + 54px); width: clamp(96px, 26vh, 150px); height: clamp(96px, 26vh, 150px); border: 1px solid var(--gold-dim); border-radius: 4px; pointer-events: auto; opacity: 0.92; }
+#mapOverlay { flex-direction: column; z-index: 25; }
+#bigMap { width: min(86vh, 86vw); height: min(86vh, 86vw); border: 1px solid var(--gold-dim); }
+#mapOverlay p { margin: 8px 0 0; font-weight: 700; font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); }
 #boss { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 56px); left: 50%; transform: translateX(-50%); width: clamp(180px, 46vw, 420px); text-align: center; }
 #boss span { font-family: var(--display); font-size: 18px; color: var(--crimson-hi); text-shadow: 0 2px 0 #000; }
 #boss .bar { height: 10px; background: rgba(0, 0, 0, 0.7); border: 1px solid var(--gold); padding: 1px; }
@@ -217,6 +225,8 @@ body.pad .card3.sel { border-color: var(--gold); background: linear-gradient(#3c
 
 <canvas id="gl"></canvas>
 
+<div id="mapOverlay" class="overlay" hidden><canvas id="bigMap" width="640" height="640"></canvas><p>Tap to close</p></div>
+<canvas id="miniMap" width="170" height="170" aria-label="Map"></canvas>
 <div id="hud">
   <div class="corner">
     <div id="killbox"><div id="kills">0</div><span>Slain</span></div>
@@ -224,7 +234,8 @@ body.pad .card3.sel { border-color: var(--gold); background: linear-gradient(#3c
     <div id="lvl"><span id="lvlN">LV 1</span><div id="xpBar"><i id="xpFill"></i></div></div>
     <div id="chips"></div>
   </div>
-  <div id="waveBox"><b id="waveN">WAVE 1</b><span id="waveLeft"></span></div>
+  <div id="waveBox"><b id="waveN">WAVE 1</b><span id="waveLeft"></span><span id="floorN">FLOOR 1</span></div>
+  <div id="compass" hidden><i id="compassArrow"></i><b id="compassDist"></b></div>
   <div id="boss" hidden><span id="bossName"></span><div class="bar"><i id="bossFill"></i></div></div>
   <div id="banner"><b id="bannerT"></b><span id="bannerS"></span></div>
   <div id="frenzy" hidden></div>

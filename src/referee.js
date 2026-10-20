@@ -23,6 +23,7 @@ const Referee = (function () {
   const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
   const lerp = (a, b, t) => a + (b - a) * t;
   const D = typeof RefereeData !== 'undefined' ? RefereeData : require('./referee_data.js');   // monster kinds, skills, wave plan
+  const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js');              // the floors: rooms and winding corridors from a seed
 
   function makeRng(seed) {
     let a = seed >>> 0;
@@ -85,67 +86,28 @@ const Referee = (function () {
   // (hit spheres now live with each monster kind, in referee_data.js)
   const MONSTER_RADIUS = 0.5;
 
-  /* ---------------- map ---------------- */
-  function buildMap() {
-    const W = 21, H = 32;
-    const g = [];
-    for (let z = 0; z < H; z++) g.push(new Array(W).fill('#'));
-    const carve = (x0, z0, x1, z1, ch) => {
-      for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) g[z][x] = ch;
-    };
-    carve(1, 1, 19, 11, '.');          // open chamber
-    carve(9, 12, 11, 29, '.');         // corridor
-    for (const zs of [15, 19, 23]) {   // alcoves between the pillars
-      carve(8, zs, 8, zs + 2, '.');
-      carve(12, zs, 12, zs + 2, '.');
-    }
-    for (const zp of [14, 18, 22, 26]) { g[zp][8] = 'P'; g[zp][12] = 'P'; }
-    for (const [x, z] of [[5, 3], [15, 3], [5, 8], [15, 8]]) g[z][x] = 'P';
-    for (let z = 1; z <= 29; z++) g[z][10] = 'c';   // carpet runner
-    // wall flavours: B banner, W window panel, # plain stone
-    for (let z = 0; z < H; z++) for (let x = 0; x < W; x++) {
-      if (g[z][x] === '#') { const k = (x + z) % 3; g[z][x] = k === 0 ? 'B' : k === 1 ? 'W' : '#'; }
-    }
-    // torches (flame centre; nx,nz = direction away from the wall)
-    const torches = [];
-    for (const zp of [14, 18, 22, 26]) {
-      const z = (zp + 0.5) * CELL;
-      torches.push({ x: 18 + 0.28, y: 2.85, z, nx: 1, nz: 0, kind: 'sconce' });
-      torches.push({ x: 24 - 0.28, y: 2.85, z, nx: -1, nz: 0, kind: 'sconce' });
-    }
-    for (const cx of [4, 8, 12, 16]) torches.push({ x: (cx + 0.5) * CELL, y: 2.85, z: 2 + 0.28, nx: 0, nz: 1, kind: 'sconce' });
-    for (const cz of [4, 8]) {
-      torches.push({ x: 2 + 0.28, y: 2.85, z: (cz + 0.5) * CELL, nx: 1, nz: 0, kind: 'sconce' });
-      torches.push({ x: 40 - 0.28, y: 2.85, z: (cz + 0.5) * CELL, nx: -1, nz: 0, kind: 'sconce' });
-    }
-    for (const [cx, cz] of [[2, 2], [18, 2], [2, 10], [18, 10]]) {
-      torches.push({ x: (cx + 0.5) * CELL, y: 1.75, z: (cz + 0.5) * CELL, nx: 0, nz: 0, kind: 'brazier' });
-    }
-    torches.push({ x: 21, y: 2.85, z: 60 - 0.28, nx: 0, nz: -1, kind: 'sconce' });
-    return {
-      W, H, CELL, WALL_H,
-      rows: g.map(r => r.join('')),
-      torches,
-      start: { x: 21, z: 56.6, yaw: 0 },
-      _g: g
-    };
-  }
-
   function create(seed) {
-    const rng = makeRng(seed || 1337);
+    const seed0 = seed || 1337, rng = makeRng(seed0);
     const cfg = Object.assign({}, DEFAULT_CFG);
-    const M0 = buildMap();
-    const G = M0._g;
-    delete M0._g;
-    const GW = M0.W, GH = M0.H;
 
+    /* ---------- the floor you are on (a new one is generated when you go through the door) ---------- */
+    let M0, G, GW, GH, floorNo = 0, mapId = 0, doorOpen = false, floorCells = [], explored = null, exploredCell = -1;
+    let flow = null, queue = null, flowCell = -1, flowTimer = 0;
     const solid = (cx, cz) => {
       if (cx < 0 || cz < 0 || cx >= GW || cz >= GH) return true;
       const c = G[cz][cx];
-      return c !== '.' && c !== 'c';
+      return c !== '.' && c !== 'c' && c !== 'd';      // 'D' is the locked door, 'd' the same door once it is open
     };
-    const floorCells = [];
-    for (let z = 0; z < GH; z++) for (let x = 0; x < GW; x++) if (!solid(x, z)) floorCells.push([x, z]);
+    function loadFloor(n) {
+      floorNo = n;
+      M0 = FG.generate(n, makeRng((seed0 * 2654435761 + n * 40503) >>> 0));   // its own random stream, so a floor never depends on how the fight went
+      M0.WALL_H = WALL_H; M0.id = ++mapId;
+      G = M0.rows.map((r) => r.split('')); GW = M0.W; GH = M0.H; doorOpen = false;
+      floorCells = [];
+      for (let z = 0; z < GH; z++) for (let x = 0; x < GW; x++) if (!solid(x, z)) floorCells.push([x, z]);
+      flow = new Int16Array(GW * GH); queue = new Int16Array(GW * GH); flowCell = -1; flowTimer = 0;
+      explored = new Uint8Array(GW * GH); exploredCell = -1;
+    }
 
     function collides(x, z, r) {
       const cx0 = Math.floor((x - r) / CELL), cx1 = Math.floor((x + r) / CELL);
@@ -188,9 +150,6 @@ const Referee = (function () {
     }
 
     /* ---------- flow field toward the player ---------- */
-    const flow = new Int16Array(GW * GH);
-    const queue = new Int16Array(GW * GH);
-    let flowCell = -1, flowTimer = 0;
     const NB = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
     function buildFlow(px, pz) {
       const pcx = clamp(Math.floor(px / CELL), 0, GW - 1), pcz = clamp(Math.floor(pz / CELL), 0, GH - 1);
@@ -229,8 +188,9 @@ const Referee = (function () {
 
     /* ---------------- state ---------------- */
     const L = D.LOOP;
+    const floorOf = (w) => Math.floor((w - 1) / L.bossEvery) + 1;   // ten waves to a floor
     const P = {
-      x: M0.start.x, z: M0.start.z, yaw: M0.start.yaw, pitch: 0,
+      x: 0, z: 0, yaw: 0, pitch: 0,                       // set by placePlayer, once the floor exists
       vx: 0, vz: 0, eye: cfg.eyeStand,
       sliding: false, slideT: 0, slideCd: 0, sdx: 0, sdz: 0,
       sprinting: false, sprintK: 0, adsT: 0, kick: 0,
@@ -257,7 +217,7 @@ const Referee = (function () {
 
     function newRun() {
       R.wave = cfg.startWave; R.phase = 'intermission'; R.timer = L.firstDelay; R.level = 1; R.xp = 0;
-      R.stacks = {}; R.choices = null; R.pending = 0; R.frenzy = 0; R.over = null; R.time = 0;
+      R.stacks = {}; R.choices = null; R.pending = 0; R.frenzy = 0; R.over = null; R.time = 0; R.hold = null;
       M = computeMods();
     }
     function placePlayer() {
@@ -265,10 +225,11 @@ const Referee = (function () {
       P.vx = P.vz = 0; P.sliding = false; P.slideT = 0; P.kick = 0;
       P.hp = maxHp(); P.invuln = 1.5; P.hurt = 0; P.sinceHit = 0;
       P.ammo = maxMag(); P.reloading = false; P.reloadT = 0; P.fireCd = 0;
+      if (explored) reveal(P);
     }
     function restartRun() {
-      kills = 0; monsters = []; orbs = []; pickups = []; spawnQ = []; spawnTimer = 0.4; flowCell = -1;
-      newRun(); placePlayer();
+      kills = 0; monsters = []; orbs = []; pickups = []; spawnQ = []; spawnTimer = 0.4;
+      newRun(); loadFloor(floorOf(R.wave)); placePlayer();
       events.push({ type: 'restart' });
     }
     function startWave() {
@@ -325,22 +286,29 @@ const Referee = (function () {
     function spawnMonster(kind) {
       const k = D.KINDS[kind];
       let best = null, bestScore = -1;
-      for (let i = 0; i < 40; i++) {
-        const c = floorCells[(rng() * floorCells.length) | 0];
-        const x = (c[0] + 0.3 + rng() * 0.4) * CELL, z = (c[1] + 0.3 + rng() * 0.4) * CELL;
-        const d = Math.hypot(x - P.x, z - P.z);
-        if (d < 13) continue;
-        const seen = hasLOS(x, z, P.x, P.z);
-        const score = (seen ? 0 : 100) + Math.min(d, 40);
-        if (score > bestScore) { bestScore = score; best = [x, z]; }
-        if (!seen && d > 14) break;
+      if (k.boss) {                                         // the boss spawns at the door and guards it
+        const d = M0.door;
+        best = [d.x + d.nx * 3.2, d.z + d.nz * 3.2];
+      } else {
+        // on a big floor monsters appear a walk away from you (not across the whole map): cells whose path to you is 8 to 26 cells long, out of sight if possible
+        for (let i = 0; i < 70; i++) {
+          const c = floorCells[(rng() * floorCells.length) | 0], fd = flow[c[1] * GW + c[0]];
+          if (fd < L.spawnPathMin || fd > L.spawnPathMax) continue;
+          const x = (c[0] + 0.3 + rng() * 0.4) * CELL, z = (c[1] + 0.3 + rng() * 0.4) * CELL;
+          const d = Math.hypot(x - P.x, z - P.z);
+          if (d < 10) continue;
+          const seen = hasLOS(x, z, P.x, P.z);
+          const score = (seen ? 0 : 100) + Math.min(d, 40);
+          if (score > bestScore) { bestScore = score; best = [x, z]; }
+          if (!seen && d > 14) break;
+        }
       }
       if (!best) return false;
       const sv = k.boss ? 1 : 0.92 + rng() * 0.18, st = statsFor(kind, R.wave);
       monsters.push({
         id: nextId++, kind, x: best[0], z: best[1], hp: st.hp, maxHp: st.hp, dmg: st.dmg, spd0: st.spd,
-        sv, scale: cfg.monsterScale * sv * k.size, spd: 0.85 + rng() * 0.3, yaw: 0, yawT: 0, phase: rng() * 6, atk: 0.4,
-        flash: 0, stun: 0, state: 'chase', chT: k.charge ? 1.5 : 0, wT: 0, cT: 0, cdx: 0, cdz: 0, summoned: false
+        sv, scale: cfg.monsterScale * sv * k.size, spd: 0.85 + rng() * 0.3, yaw: k.guard ? Math.atan2(M0.door.nx, -M0.door.nz) : 0, yawT: k.guard ? Math.atan2(M0.door.nx, -M0.door.nz) : 0, phase: rng() * 6, atk: 0.4,
+        flash: 0, stun: 0, state: k.guard ? 'guard' : 'chase', chT: k.charge ? 1.5 : 0, wT: 0, cT: 0, cdx: 0, cdz: 0, summoned: false
       });
       events.push({ type: 'spawn', kind, boss: !!k.boss });
       return true;
@@ -358,6 +326,23 @@ const Referee = (function () {
       events.push({ type: 'kill', id: m.id, kind: m.kind, boss: !!k.boss, x: m.x, z: m.z, scale: m.scale, yaw: m.yaw });
       dropLoot(m, k);
       monsters = monsters.filter((o) => o !== m);
+      if (k.boss) openDoor();
+    }
+    // the boss is down: the door he guarded opens right there, and the next wave waits until you step through
+    function openDoor() {
+      for (const [x, z] of M0.door.cells) G[z][x] = 'd';
+      doorOpen = true; R.hold = 'door'; flowCell = -1;
+      events.push({ type: 'doorOpen', x: M0.door.x, z: M0.door.z });
+    }
+    // through the door: a new, bigger floor; what you carry (health, ammo, level, skills) comes with you
+    function nextFloor() {
+      for (const o of orbs) gainXp(o.v);
+      monsters = []; orbs = []; pickups = []; spawnQ = [];
+      loadFloor(floorNo + 1);
+      P.x = M0.start.x; P.z = M0.start.z; P.yaw = M0.start.yaw; P.vx = P.vz = 0; P.sliding = false; P.slideT = 0; P.invuln = 1.5;
+      R.hold = null; R.phase = 'intermission'; R.timer = L.intermission; spawnTimer = 0.4;
+      reveal(P);
+      events.push({ type: 'floorChange', floor: floorNo });
     }
     function damageMonster(m, dmg, crit, x, y, z, splash) {
       if (m.hp <= 0) return;
@@ -460,6 +445,10 @@ const Referee = (function () {
       const reach = 1.25 * sc + 0.45;
       let mvx = 0, mvz = 0;
       const was = m.state;
+      if (m.state === 'guard') {                          // asleep on his feet at the door until you come into sight or hurt him
+        if (m.hp < m.maxHp || (dist < k.guard.wake && hasLOS(m.x, m.z, P.x, P.z))) { m.state = 'chase'; events.push({ type: 'bossWake' }); }
+        else { m.yaw += clamp(angleDiff(m.yawT, m.yaw), -dt * 9, dt * 9); return; }
+      }
       if (k.summonAt && !m.summoned && m.hp <= m.maxHp * k.summonAt) {
         m.summoned = true;
         for (let i = 0; i < k.summonN; i++) spawnQ.unshift(k.summonKind);
@@ -531,6 +520,18 @@ const Referee = (function () {
         }
       }
       pickups = pickups.filter((p) => p.life > 0);
+    }
+
+    // what you have seen of this floor, for the minimap: every cell in line of sight within a few cells of you
+    function reveal(p) {
+      const pcx = clamp(Math.floor(p.x / CELL), 0, GW - 1), pcz = clamp(Math.floor(p.z / CELL), 0, GH - 1), pc = pcz * GW + pcx;
+      if (pc === exploredCell) return;
+      exploredCell = pc;
+      const r = L.exploreRadius;
+      for (let z = Math.max(0, pcz - r); z <= Math.min(GH - 1, pcz + r); z++) for (let x = Math.max(0, pcx - r); x <= Math.min(GW - 1, pcx + r); x++) {
+        if (explored[z * GW + x] || (x - pcx) * (x - pcx) + (z - pcz) * (z - pcz) > r * r) continue;
+        if (hasLOS(p.x, p.z, (x + 0.5) * CELL, (z + 0.5) * CELL)) explored[z * GW + x] = 1;
+      }
     }
 
     /* ---------------- step ---------------- */
@@ -627,11 +628,14 @@ const Referee = (function () {
           if (i >= 0 && spawnMonster(spawnQ[i])) { spawnQ.splice(i, 1); spawnTimer = L.spawnGap; } else spawnTimer = 0.3;
         }
         if (!spawnQ.length && !monsters.length) endWave();
+      } else if (R.hold === 'door') {                     // the boss is down and the door is open: the next wave waits until you step through
+        if (G[clamp(Math.floor(p.z / CELL), 0, GH - 1)][clamp(Math.floor(p.x / CELL), 0, GW - 1)] === 'd') nextFloor();
       } else {
         R.timer -= dt;
         if (R.timer <= 0) startWave();
       }
       updateLoot(dt);
+      reveal(p);
 
       return { state: snapshot(), events };
     }
@@ -657,6 +661,10 @@ const Referee = (function () {
           id: m.id, kind: m.kind, x: m.x, z: m.z, yaw: m.yaw, hp: m.hp, maxHp: m.maxHp,
           flash: m.flash, state: m.state, phase: m.phase, scale: m.scale
         })),
+        floor: floorNo, floorId: M0.id,
+        door: { x: M0.door.x, z: M0.door.z, open: doorOpen },
+        compass: boss && boss.state === 'guard' ? { x: boss.x, z: boss.z } : null,      // points at the boss from the moment he spawns until the fight with him starts
+        explored,
         wave: { n: R.wave, phase: R.phase, timer: Math.max(0, R.timer), left: spawnQ.length + monsters.length, boss: R.phase === 'fight' ? !!boss || spawnQ.some((kd) => D.KINDS[kd].boss) : R.wave % L.bossEvery === 0 },
         bossBar: boss ? { name: D.KINDS[boss.kind].name, hp: boss.hp, maxHp: boss.maxHp, state: boss.state } : null,
         level: { n: R.level, xp: R.xp, need: D.xpNeed(R.level) },
@@ -669,12 +677,14 @@ const Referee = (function () {
       };
     }
 
+    // put the player somewhere (tests and tools only: the game never teleports you)
+    function place(x, z, yaw) { P.x = x; P.z = z; if (yaw !== undefined) P.yaw = yaw; P.vx = P.vz = 0; flowCell = -1; }
     function setCfg(o) { Object.assign(cfg, o); }
     function reset() { deaths = 0; restartRun(); events = []; }
 
-    newRun(); placePlayer();
+    newRun(); loadFloor(floorOf(R.wave)); placePlayer();
     // first state, so the screen can draw before the first step
-    return { map: M0, cfg, setCfg, step, snapshot, reset, kinds: D.KINDS, defaults: Object.assign({}, DEFAULT_CFG) };
+    return { get map() { return M0; }, cfg, setCfg, place, step, snapshot, reset, kinds: D.KINDS, defaults: Object.assign({}, DEFAULT_CFG) };
   }
 
   return { create };

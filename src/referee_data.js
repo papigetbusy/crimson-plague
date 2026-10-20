@@ -11,6 +11,7 @@ const RefereeData = (function () {
     golem: { name: 'Rock Golem', size: 1.25, hpMul: 3.5, speedMul: 0.62, dmgMul: 2.5, rate: 0.7, xp: 35, heavy: true,
       spheres: [{ y: 0.62, r: 0.7, f: 0 }, { y: 1.45, r: 0.85, f: 0 }, { y: 2.05, r: 0.45, f: 0, head: true }] },
     demon: { name: 'Demon Lord', size: 1.4, hpMul: 26, speedMul: 0.85, dmgMul: 3.2, rate: 0.8, xp: 400, heavy: true, boss: true,
+      guard: { wake: 12 },                                                   // he waits at the door, and wakes when you come within this many units in sight (or hurt him)
       charge: { every: 7, windup: 0.7, dur: 0.9, mult: 3.4, hit: 1.5 },     // seconds, then speed multiplier and damage multiplier on contact
       summonAt: 0.5, summonKind: 'hound', summonN: 4,                        // calls hounds once, at half health
       spheres: [{ y: 0.8, r: 0.6, f: 0 }, { y: 1.7, r: 0.78, f: 0 }, { y: 2.45, r: 0.4, f: -0.05, head: true }] }
@@ -37,7 +38,9 @@ const RefereeData = (function () {
     hpPerWave: 0.14, dmgPerWave: 0.05, speedPerWave: 0.02, speedMax: 1.35,
     orbMagnet: 3.5, orbPickup: 0.9, orbLife: 30, pickupLife: 25, pickupRadius: 1.1,
     healAmount: 30, healChance: 0.07, frenzyChance: 0.03, frenzyTime: 8, frenzyDmg: 1.5, frenzyRate: 1.4,
-    waveClearHeal: 25, blastRadius: 2.2
+    waveClearHeal: 25, blastRadius: 2.2,
+    spawnPathMin: 8, spawnPathMax: 26,                  // monsters appear a walk of this many cells away from you (2 units a cell)
+    exploreRadius: 9                                    // how many cells around you the minimap reveals
   };
 
   const xpNeed = (level) => Math.round(20 + 14 * level + 2 * level * level);

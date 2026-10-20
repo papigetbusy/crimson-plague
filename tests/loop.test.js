@@ -81,17 +81,76 @@ const god = (ref) => { ref.setCfg({ playerHp: 1e7, regen: 0 }); ref.reset(); };
   t('Every wave has more monsters than the one before (until bosses)', mk(2, 1).length > mk(1, 1).length && mk(5, 1).length > mk(4, 1).length);
   t('Wave 10 and wave 20 each start with exactly one demon lord boss', mk(10, 1)[0] === 'demon' && mk(10, 1).filter((k) => k === 'demon').length === 1 && mk(20, 4)[0] === 'demon' && mk(9, 1).indexOf('demon') < 0);
 }
+const nearBoss = (ref, d) => { const b = ref.snapshot().monsters.find((q) => q.kind === 'demon'); ref.place(b.x + ref.map.door.nx * (d || 6), b.z + ref.map.door.nz * (d || 6)); };   // walk up to him (the floor is big: the tests do not make the bot cross it)
 { // boss wave
   const ref = Referee.create(14); ref.setCfg({ startWave: 10, playerHp: 1e7, regen: 0 }); ref.reset();
   const r = run(ref, (o) => o.bossBar, 40, { idle: true });
   t('Starting on wave 10 brings out the demon lord with a boss bar', !!r.out.bossBar && r.out.bossBar.name === 'Demon Lord' && r.out.wave.boss);
   const m = r.out.monsters.find((q) => q.kind === 'demon');
   t('The boss is much bigger and tougher than a fiend', m.scale > 1.3 && r.out.bossBar.maxHp > 20 * 70);
+  nearBoss(ref, 11);
   const states = new Set(); const r3 = run(ref, (o) => { const b = o.monsters.find((q) => q.kind === 'demon'); if (b) states.add(b.state); return states.has('charge'); }, 40, { idle: true });
   t('The boss rears back (wind-up) and then charges at you', states.has('windup') && states.has('charge'));
 }
+{ // the boss guards the door
+  const ref = Referee.create(16); ref.setCfg({ startWave: 10, playerHp: 1e7, regen: 0 }); ref.reset();
+  const door = ref.map.door;
+  const r = run(ref, (o) => o.bossBar, 40, { idle: true });
+  const b0 = r.out.monsters.find((q) => q.kind === 'demon');
+  t('The boss spawns at the door, just inside it, and is guarding', Math.hypot(b0.x - door.x, b0.z - door.z) < 4 && b0.state === 'guard' && r.out.bossBar.state === 'guard');
+  t('The compass points at the boss from the moment he spawns', !!r.out.compass && Math.abs(r.out.compass.x - b0.x) < 1e-6 && Math.abs(r.out.compass.z - b0.z) < 1e-6);
+  const far = run(ref, () => false, 6, { idle: true }), b1 = far.out.monsters.find((q) => q.kind === 'demon');
+  t('While you are far away he stays at the door and the compass stays on', Math.hypot(b1.x - b0.x, b1.z - b0.z) < 0.01 && b1.state === 'guard' && !!far.out.compass);
+  nearBoss(ref);
+  const w = run(ref, () => false, 1, { idle: true });
+  t('When you come into his sight he wakes, and the compass disappears as the fight starts', w.out.compass === null && w.out.monsters.find((q) => q.kind === 'demon').state !== 'guard');
+}
+{ // hurting him from afar also wakes him
+  const ref = Referee.create(17); ref.setCfg({ startWave: 10, playerHp: 1e7, regen: 0 }); ref.reset();
+  run(ref, (o) => o.bossBar, 40, { idle: true });
+  const b = ref.snapshot().monsters.find((q) => q.kind === 'demon');
+  ref.place(b.x + ref.map.door.nx * 15, b.z + ref.map.door.nz * 15);
+  const far = run(ref, () => false, 1, { idle: true });
+  t('At 15 units he has not noticed you yet', far.out.monsters.find((q) => q.kind === 'demon').state === 'guard');
+  t('Shoot him from there and he wakes', run(ref, (o) => o.monsters.find((q) => q.kind === 'demon').state !== 'guard', 8).out.monsters.find((q) => q.kind === 'demon').state !== 'guard');
+}
+{ // the door opens where he falls, and the next floor is bigger
+  const ref = Referee.create(18); ref.setCfg({ startWave: 10, playerHp: 1e7, regen: 0, damage: 400 }); ref.reset();
+  t('Floors are ten waves long: waves 1 to 10 are floor 1, wave 11 starts floor 2', Referee.create(1).snapshot().floor === 1);
+  run(ref, (o) => o.bossBar, 40, { idle: true }); nearBoss(ref, 9);
+  const kill = run(ref, (o, ev) => ev.some((e) => e.type === 'doorOpen'), 90);
+  const door = ref.map.door;
+  t('Killing the boss opens the door right where he stood, so there is no walk back', kill.ev.some((e) => e.type === 'doorOpen') && kill.out.door.open && door.cells.every(([x, z]) => ref.map.rows[z][x] === 'D') /* the map rows stay as generated; the live grid opens */);
+  run(ref, (o) => o.wave.phase === 'intermission', 120);               // the bot clears the boss's escorts
+  const wait = run(ref, () => false, 9, { idle: true });
+  t('After the boss the next wave waits: nothing spawns until you step through the door', wait.out.wave.phase === 'intermission' && wait.out.wave.n === 11 && wait.out.monsters.length === 0);
+  const hp0 = ref.snapshot().player.hp, floorId0 = ref.snapshot().floorId, W0 = ref.map.W;
+  ref.place(door.x + door.nx * 2.5, door.z + door.nz * 2.5);           // in front of the open door
+  let out = ref.step(1 / 60, {});
+  t('Standing just inside the open door does not take you through yet', out.state.floor === 1);
+  ref.place(door.x, door.z);                                          // in the doorway itself
+  out = ref.step(1 / 60, {});
+  t('Stepping into the doorway takes you to floor 2, a new and bigger floor, and wave 11 comes after a short pause', out.events.some((e) => e.type === 'floorChange' && e.floor === 2) && out.state.floor === 2 && out.state.floorId !== floorId0 && ref.map.W > W0 && out.state.wave.phase === 'intermission' && out.state.wave.n === 11 && out.state.monsters.length === 0);
+  const sp = ref.map.start;
+  t('You arrive in the new floor\'s spawn room with your health, and the new door is shut and far away', Math.abs(out.state.player.x - sp.x) < 0.01 && Math.abs(out.state.player.z - sp.z) < 0.01 && out.state.player.hp === hp0 && !out.state.door.open && Math.hypot(out.state.door.x - sp.x, out.state.door.z - sp.z) > ref.map.W);
+  const f2 = run(ref, (o) => o.wave.phase === 'fight', 10, { idle: true });
+  t('Wave 11 starts on floor 2 and the boss is not out until wave 20', f2.out.wave.phase === 'fight' && f2.out.wave.n === 11 && !f2.out.monsters.some((q) => q.kind === 'demon'));
+}
+{ // exploring and spawning on a big floor
+  const ref = Referee.create(19); god(ref);
+  const s0 = ref.snapshot(), p0 = s0.player;
+  const count = (e) => { let n = 0; for (const v of e) n += v; return n; };
+  const startCell = Math.floor(p0.z / 2) * ref.map.W + Math.floor(p0.x / 2);
+  t('The minimap knows the cell you stand on and not the far side of the map', s0.explored[startCell] === 1 && s0.explored[(ref.map.H - 1 - Math.floor(p0.z / 2)) * ref.map.W + ref.map.W - 1 - Math.floor(p0.x / 2)] === 0);
+  const before = count(s0.explored);
+  ref.step(1 / 60, {}); let o; for (let i = 0; i < 120; i++) o = ref.step(1 / 60, { mz: 1, sprint: true });
+  t('Walking around reveals more of the floor, and what you saw stays revealed', count(o.state.explored) >= before && o.state.explored[startCell] === 1);
+  const r = run(ref, (q) => q.monsters.length >= 4, 30, { idle: true });
+  t('Monsters appear a walk away from you, not on the far side of a huge floor', r.out.monsters.length >= 4 && r.out.monsters.every((m) => Math.hypot(m.x - r.out.player.x, m.z - r.out.player.z) < 60));
+}
 { // boss summons at half health
   const ref = Referee.create(15); ref.setCfg({ startWave: 10, playerHp: 1e7, regen: 0, damage: 120 }); ref.reset();
+  run(ref, (o) => o.bossBar, 40, { idle: true }); nearBoss(ref);
   const r = run(ref, (o, ev) => ev.some((e) => e.type === 'bossSummon'), 90);
   t('At half health the boss calls hounds to its side, once', r.ev.filter((e) => e.type === 'bossSummon').length === 1);
   const r2 = run(ref, (o, ev) => ev.some((e) => e.type === 'kill' && e.boss), 90);

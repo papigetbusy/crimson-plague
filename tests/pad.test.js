@@ -46,7 +46,7 @@ t('Resetting forgets a held sprint (a controller that drops out mid-run does not
 
 // ---- referee: the right stick turns the player ----
 const yawAfter = (inp, secs) => { const ref = Referee.create(5); let out; for (let i = 0; i < secs * 60; i++) out = ref.step(1 / 60, inp); return out.state.player.yaw; };
-t('Referee: a full right-stick push turns the player at the pad turn speed (about 3.4 radians a second)', Math.abs(yawAfter({ padX: 1 }, 1) - 3.4) < 0.1);
+t('Referee: a full right-stick push turns the player at the pad turn speed (about 3.4 radians a second)', Math.abs(yawAfter({ padX: 1 }, 1) - yawAfter({}, 1) - 3.4) < 0.1);
 t('Referee: aiming slows the stick turn', Math.abs(yawAfter({ padX: 1, ads: true }, 1)) < Math.abs(yawAfter({ padX: 1 }, 1)) * 0.8);
 t('Referee: pushing the stick left turns the other way and a stick past full tilt is clamped', yawAfter({ padX: -1 }, 1) < -3 && Math.abs(yawAfter({ padX: 5 }, 1) - yawAfter({ padX: 1 }, 1)) < 1e-9);
 t('Referee: pushing the right stick up looks up, and the look is clamped', (() => { const ref = Referee.create(5); let out; for (let i = 0; i < 300; i++) out = ref.step(1 / 60, { padY: -1 }); return out.state.player.pitch > 1.4 && out.state.player.pitch <= 1.45 + 1e-9; })());

@@ -2,7 +2,7 @@
 
 The plan for everything the game still needs, in phases. Rewritten with the owner on 2026-10-19 (it replaces the first 8-phase plan and borrows the way Crusader Tactics was built). **Work only on the current phase.**
 
-**Current phase: 2 — Floors and minimap** (status: not started; Phase 1, the art lock, was signed off by the owner on 2026-10-19)
+**Current phase: 2 — Floors and minimap** (status: built, waiting for the owner to test it on the phone; Phase 1, the art lock, was signed off by the owner on 2026-10-19)
 
 ## How we build (every phase works this way)
 - **Every phase starts rough and ugly on purpose** (grey boxes, placeholder shapes, plain text menus) and is built out step by step. Nothing is pretty until its phase says so.
@@ -40,14 +40,14 @@ Locked first, before anything else is added. The world stays as it is.
 
 ## Phase 2 — Floors and minimap
 Starts as plain grey-box floors. The goal is the shape and size of the world.
-- [ ] Floor generator in the referee: seeded rooms joined by winding corridors, always fully connected.
-- [ ] Floor size table: floor 1 smallest, each floor bigger, up to the maximum size, then random layouts of the same size.
-- [ ] The locked door: unlocks every 10 waves (when the floor's boss falls); walking through starts the next floor and waves keep counting.
-- [ ] Monsters spawn across the whole floor and find their way around bends; pathing stays fast on the biggest floor.
-- [ ] Compass to the door, only once the door is open.
-- [ ] Minimap: player arrow and floor layout, filling in as you explore; door marker once open.
-- [ ] Floor counter on the HUD and a short floor-change moment.
-- [ ] Tests: every floor is connected, the door is reachable, the same seed gives the same floor, floors reach the maximum size and then stop growing.
+- [x] Floor generator in the referee: seeded rooms joined by winding corridors, always fully connected.
+- [x] Floor size table: floor 1 smallest, each floor bigger, up to the maximum size, then random layouts of the same size.
+- [x] The locked door: unlocks every 10 waves (when the floor's boss falls); walking through starts the next floor and waves keep counting.
+- [x] Monsters spawn across the whole floor and find their way around bends; pathing stays fast on the biggest floor.
+- [x] Compass: points at the boss guarding the door from when he appears until the fight starts (owner change).
+- [x] Minimap: player arrow and floor layout, filling in as you explore; door marker once open.
+- [x] Floor counter on the HUD and a short floor-change moment.
+- [x] Tests: every floor is connected, the door is reachable, the same seed gives the same floor, floors reach the maximum size and then stop growing.
 - **Check:** you can get lost on a floor but find your way with the minimap, and it runs on the phone.
 - **Gate:** running a floor feels good and nobody gets stuck.
 

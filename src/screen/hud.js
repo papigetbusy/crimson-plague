@@ -3,7 +3,7 @@
 const Hud = (function () {
   function create($, cb) {
     const el = {
-      waveN: $('waveN'), waveLeft: $('waveLeft'), lvlN: $('lvlN'), xpFill: $('xpFill'), boss: $('boss'), bossName: $('bossName'), bossFill: $('bossFill'),
+      waveN: $('waveN'), floorN: $('floorN'), waveLeft: $('waveLeft'), lvlN: $('lvlN'), xpFill: $('xpFill'), boss: $('boss'), bossName: $('bossName'), bossFill: $('bossFill'),
       banner: $('banner'), bannerT: $('bannerT'), bannerS: $('bannerS'), chips: $('chips'), frenzy: $('frenzy'),
       levelup: $('levelup'), cards: $('cards'), over: $('gameover'), overStats: $('overStats'), restart: $('restart')
     };
@@ -19,6 +19,9 @@ const Hud = (function () {
       else if (e.type === 'waveClear') banner('WAVE ' + e.n + ' CLEARED', 'Gather the souls');
       else if (e.type === 'pickup') banner(e.kind === 'heal' ? '+HEALTH' : 'BLOODLUST', e.kind === 'heal' ? '' : 'More damage, faster fire');
       else if (e.type === 'bossSummon') banner('HOUNDS CALLED', '');
+      else if (e.type === 'bossWake') banner('THE DEMON LORD WAKES', 'Fight for the door');
+      else if (e.type === 'doorOpen') banner('THE DOOR OPENS', 'Step through to the next floor');
+      else if (e.type === 'floorChange') banner('FLOOR ' + e.floor, 'The Plague runs deeper');
     }
     const applySel = () => Array.from(el.cards.children).forEach((b, i) => b.classList.toggle('sel', i === sel));
     function moveSel(d) { if (cardN) { sel = (sel + d + cardN) % cardN; applySel(); } }
@@ -45,6 +48,7 @@ const Hud = (function () {
     function update(st, dt) {
       setText('wn', el.waveN, st.wave.phase === 'intermission' && st.wave.timer > 0 ? 'WAVE ' + st.wave.n + ' IN ' + Math.ceil(st.wave.timer) : 'WAVE ' + st.wave.n);
       setText('wl', el.waveLeft, st.wave.phase === 'fight' ? st.wave.left + ' left' : 'rest a moment');
+      setText('fl', el.floorN, 'FLOOR ' + st.floor);
       el.waveN.classList.toggle('boss', !!st.wave.boss);
       setText('lv', el.lvlN, 'LV ' + st.level.n);
       el.xpFill.style.width = (Math.min(1, st.level.xp / st.level.need) * 100).toFixed(1) + '%';
