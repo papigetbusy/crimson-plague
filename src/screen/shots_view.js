@@ -4,7 +4,8 @@ const ShotsView = (function () {
   const LOOK = {
     spit: { core: 0x9cff4a, glow: 0x4fd02a, size: 1.0, glow2: 4.5 },
     bolt: { core: 0xeaffff, glow: 0x6fd8ff, size: 0.8, glow2: 5.5 },
-    fire: { core: 0xffe070, glow: 0xff5a14, size: 1.0, glow2: 5.0 }
+    fire: { core: 0xffe070, glow: 0xff5a14, size: 1.0, glow2: 5.0 },
+    soul: { core: 0xf0dcff, glow: 0xa050ff, size: 0.9, glow2: 5.5 }
   };
   function create(THREE, scene, glowTex) {
     const geo = new THREE.IcosahedronGeometry(1, 1);

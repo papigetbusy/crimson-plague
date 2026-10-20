@@ -26,7 +26,7 @@ if (which.startsWith('gun:')) {      // any gun in the catalog, with the two glo
 } else if (which === 'hound' || which === 'hound2' || which === 'demon2' || which === 'golem' || which === 'demon') {
   const m = require({ hound: '../src/models/bone_hound.js', hound2: '../src/models/bone_hound_v2.js', demon2: '../src/models/demon_lord_v2.js', golem: '../src/models/rock_golem.js', demon: '../src/models/demon_lord.js' }[which]).build();
   for (const p of m.pose) parts.push(dump(p.grid, p.pivot, p.vox || m.vox, p.off));
-} else if (['goblin', 'skeleton', 'mushroom', 'eyeball', 'flame_spirit'].includes(which)) {
+} else if (['goblin', 'skeleton', 'mushroom', 'eyeball', 'flame_spirit', 'bat_lord', 'lich_king', 'elder_dragon'].includes(which)) {
   const m = require('../src/models/' + which + '.js').build();
   for (const p of m.pose) parts.push(dump(p.grid, p.pivot, p.vox || m.vox, p.off, m.smooth ? { relax: 0.6, passes: 5, soft: 0.9 } : undefined));
 } else if (which === 'fiend' || which === 'fiend2') {

@@ -13,7 +13,7 @@
   if (!window.THREE) { $('fatal').hidden = false; return; }
 
   const ref = Referee.create((Date.now() & 0xffffff) | 1);
-  const GAME_CFG = { startGun: 'pistol_service', gunDrops: true, gearDrops: true, modDrops: true, stashOpen: true, manualGuns: true };      // the game's rules: you start with the silver pistol and monsters drop guns, armor and charms (the referee's plain defaults keep the tests steady)
+  const GAME_CFG = { startGun: 'pistol_service', gunDrops: true, gearDrops: true, modDrops: true, stashOpen: true, manualGuns: true, bossRandom: true };      // the game's rules: you start with the silver pistol and monsters drop guns, armor and charms (the referee's plain defaults keep the tests steady)
   ref.setCfg(GAME_CFG);
 
   // a link can start the run on a later wave, to try the boss: ...#wave10 (or ?wave=10)
@@ -232,11 +232,12 @@
   /* ============ monsters: four voxel kinds, built and posed by src/screen/monster_rigs.js ============ */
   const RIGS = MonsterRigs.create(THREE), MODEL = RIGS.MODEL;
   const shotsView = ShotsView.create(THREE, scene, glowTex);   // spit, bolts and fireballs the monsters throw
-  { const q = ['goblin', 'skeleton', 'mushroom', 'eyeball', 'flame'], warm = () => { if (!q.length) return; if (!RIGS.warmStep(q[0])) q.shift(); setTimeout(warm, 120); }; setTimeout(warm, 3000); }   // cut and smooth the newer kinds a slice at a time in the background, so the first one to appear does not stall a frame
+  { const q = ['goblin', 'skeleton', 'mushroom', 'eyeball', 'flame', 'bat', 'lich', 'dragon'], warm = () => { if (!q.length) return; if (!RIGS.warmStep(q[0])) q.shift(); setTimeout(warm, 120); }; setTimeout(warm, 3000); }   // cut and smooth the newer kinds a slice at a time in the background, so the first one to appear does not stall a frame
   const mons = new Map();     // id -> entry
   const dying = [];
   const smoothLight = (x, z) => worldView.light(x, 1.5, z, 0, 1, 0);
   const loot = LootView.create(THREE, scene, glowTex);       // XP orbs and pickups
+  const bossFx = BossFx.create(THREE, scene);               // floor warnings for the boss attacks
   const trapView = TrapView.create(THREE, scene, glowTex);   // spike patches, flame vents, rising spikes
   const fx = FxSprites.create(THREE, camera, scene);          // sprite explosions, sparks and lightning (look presets, see fx_plan.js)
   // the look of shots, hits and kills: it follows the gun in your hands (rarity picks the tier, each status colour adds its element). Only the private cheat build can force another look.
@@ -373,11 +374,26 @@
   const locked = () => document.pointerLockElement === canvas;
   function tryLock() {
     if (isTouch || noLock) return;
-    try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => { noLock = true; }); } catch (e) { noLock = true; }
+    try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => { if (!everLocked) noLock = true; }); } catch (e) { if (!everLocked) noLock = true; }
   }
-  document.addEventListener('pointerlockerror', () => { noLock = true; });
+  // a level-up or the shop needs the mouse pointer: let go of the mouse when one opens (so you can click a card) and take it back when it closes
+  let menuUnlocked = false, relocking = 0;
+  const wantsPointer = () => !!(state.choices || state.classChoices || state.shop);
+  function menuPointer() {
+    if (isTouch || !running || noLock) return;
+    if (wantsPointer()) { if (locked()) { menuUnlocked = true; mouse.fire = mouse.ads = false; document.exitPointerLock(); } }
+    else if (menuUnlocked) {
+      menuUnlocked = false;
+      if (!locked() && !panelOpen) { relocking = performance.now(); try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) { /* the next click takes the mouse back */ } }
+    }
+  }
+  // The browser sometimes refuses the mouse for a moment (right after you tab back in, or a few instants after Esc). That must never switch mouse capture off for good:
+  // only a browser that has never once given us the mouse (a sandboxed frame) is treated as having none. Otherwise your next click simply asks again.
+  let everLocked = false;
+  document.addEventListener('pointerlockerror', () => { if (!everLocked && performance.now() - relocking > 1500) noLock = true; });
   document.addEventListener('pointerlockchange', () => {
-    if (!locked() && running && !noLock && !panelOpen && !isTouch) setRunning(false);
+    if (locked()) everLocked = true;
+    if (!locked() && running && !noLock && !panelOpen && !isTouch && !menuUnlocked) setRunning(false);
   });
   document.addEventListener('keydown', (e) => {
     keys[e.code] = true;
@@ -388,8 +404,9 @@
     if (e.code === 'KeyQ' && running) I.swap = true;                                     // swap to the gun in your other hand
     if (e.code === 'KeyM' && running) minimap.toggle();                                  // open or close the big map
     if (e.code === 'KeyF' && running) startInspect();   // F shows both sides, press again for the magazine
-    if (running && e.code.startsWith('Digit') && +e.code.slice(5) >= 1 && +e.code.slice(5) <= 3) I.pick = +e.code.slice(5) - 1;   // level-up gift
-    if (running && e.code.startsWith('Digit') && +e.code.slice(5) >= 4 && +e.code.slice(5) <= 6) I.pickClass = +e.code.slice(5) - 4;   // level-up class skill
+    const dg = /^(?:Digit|Numpad)([0-9])$/.exec(e.code), dn = dg ? +dg[1] : 0;        // number row or number pad
+    if (running && dn >= 1 && dn <= 3) I.pick = dn - 1;                                // level-up gift
+    if (running && dn >= 4 && dn <= 6) I.pickClass = dn - 4;                            // level-up class skill
     if (running && (e.code === 'Enter' || e.code === 'NumpadEnter')) I.restart = true;                                     // after you fall
     if (e.code === 'Tab') { e.preventDefault(); if (started) togglePanel(); }
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
@@ -411,6 +428,21 @@
     if (e.button === 0) mouse.fire = false;
     if (e.button === 2) mouse.ads = false;
   });
+  // both mouse buttons at once (aim with right, shoot with left): the browser sends a pointerdown only for the FIRST button held, so the second one would be missed.
+  // The older mousedown / mouseup events fire for every button and say which are held (e.buttons), so we read the held buttons from those.
+  function syncButtons(e) {
+    if (!running || panelOpen) return;
+    const fire = !!(e.buttons & 1), ads = !!(e.buttons & 2);
+    if (!fire) mouse.fire = false;
+    if (!ads) mouse.ads = false;
+    if (e.target.closest && e.target.closest('#panel,#gear,.overlay')) return;
+    if (state.over) return;
+    if (fire && !mouse.fire) mouse.fire = true;
+    if (ads) mouse.ads = true;
+    if ((fire || ads) && !locked()) tryLock();                       // any click asks for the mouse back if the browser took it away
+  }
+  document.addEventListener('mousedown', syncButtons);
+  document.addEventListener('mouseup', syncButtons);
   document.addEventListener('contextmenu', (e) => e.preventDefault());
   window.addEventListener('blur', () => { mouse.fire = mouse.ads = false; for (const k in keys) keys[k] = false; });
 
@@ -798,6 +830,10 @@
       else if (e.type === 'levelUp') { sfx('levelup'); }
       else if (e.type === 'waveStart') { sfx(e.boss ? 'boss' : 'wave'); }
       else if (e.type === 'bossSummon') { sfx('boss'); }
+      else if (e.type === 'bossBlink') { burst(e.x, 1.5, e.z, 14, [0xa050ff, 0xf0dcff], 5, 0.5, 4, 0.9); burst(e.x2, 1.5, e.z2, 14, [0xa050ff, 0xf0dcff], 5, 0.5, 4, 0.9); sfx('blast'); }
+      else if (e.type === 'bossNova' || e.type === 'bossSlam') { burst(e.x, 0.6, e.z, 18, e.type === 'bossNova' ? [0xa050ff, 0xf0dcff] : [0xff8a2a, 0xffe070], 7, 0.5, 4, 0.9); sfx('blast'); }
+      else if (e.type === 'bossBreath') { sfx('fireball'); }
+      else if (e.type === 'bossDive' || e.type === 'bossDrain') { sfx(e.type === 'bossDive' ? 'boss' : 'pickup'); }
       else if (e.type === 'dead') { diedT = 1.4; sfx('dead'); rlPrev = 0; }
       else if (e.type === 'restart') { diedT = 0; rlPrev = 0; equipK = 0; inspK = 0; fx.clear(); }
       else if (e.type === 'reloadStart') { rlPrev = 0; }
@@ -1052,7 +1088,7 @@
     elHit.classList.toggle('kill', hitKill);
     diedT = Math.max(0, diedT - dt); diedEl.style.opacity = clamp(diedT / 0.6, 0, 1);
     shotsView.update(st.shots, st.t);
-    hud.update(st, dt); minimap.update(st, dt); compass.update(st); loot.update(st, time); trapView.update(st, ref.map, time);
+    hud.update(st, dt); minimap.update(st, dt); compass.update(st); loot.update(st, time); trapView.update(st, ref.map, time); bossFx.update(st, time);
   }
 
   /* ============ main loop ============ */
@@ -1071,6 +1107,7 @@
     } else {
       I.lookX = I.lookY = I.touchX = I.touchY = 0; I.slide = false; I.reload = false;
     }
+    stage('menuPointer', menuPointer);
     stage('blueprints', drawOverBp);
     stage('stashHint', () => { const near = running && !panelOpen && state.player.stash.near; stashHint.hidden = !near; });
     stage('floor', () => ensureFloor(state));
@@ -1080,5 +1117,5 @@
   }
   requestAnimationFrame((t) => { clock.last = t; frame(t); });
   setRunning(false);
-  window.__game = { ref, view, THREE, fx };   // handy for poking at numbers from the console
+  window.__game = { ref, view, THREE, fx, mouse };   // handy for poking at numbers from the console
 })();

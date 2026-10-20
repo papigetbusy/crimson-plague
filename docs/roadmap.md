@@ -99,7 +99,7 @@ One feature at a time, each tested on the phone. The safe room and the shop floo
 - **Gate:** each gun feels different and the owner likes using it.
 
 ## Phase 7 — Bosses and lore
-- [ ] A different boss each floor with its own patterns and unique abilities; bosses drop the best loot.
+- [~] A different boss each floor with its own patterns and unique abilities; bosses drop the best loot. (First four built early at the owner's word, 2026-10-20: Demon Lord, Bat Lord, Lich King, Elder Dragon, random per floor, placeholder voxel models until Grok's art; owner to judge the fights.)
 - [ ] The Hundred Gates story (catacombs under a holy city), smarter enemies.
 - [ ] The ending stays held until the owner says.
 - **Gate:** each boss plays differently.

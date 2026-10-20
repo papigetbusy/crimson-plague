@@ -8,7 +8,7 @@ const RefereeShots = (function () {
     // a projectile from (x, y, z) towards a target point, at speed units a second; it drops or climbs so that it reaches the target's height
     function fire(o) {
       const dx = o.tx - o.x, dz = o.tz - o.z, d = Math.hypot(dx, dz) || 0.001, t = d / o.speed;
-      list.push({ id: env.nextId(), proj: o.proj, owner: o.owner, x: o.x, y: o.y, z: o.z, vx: dx / d * o.speed, vz: dz / d * o.speed, vy: (o.ty - o.y) / t, r: o.r, dmg: o.dmg, life: 5 });
+      list.push({ id: env.nextId(), proj: o.proj, owner: o.owner, x: o.x, y: o.y, z: o.z, vx: dx / d * o.speed, vz: dz / d * o.speed, vy: (o.ty - o.y) / t, r: o.r, dmg: o.dmg, life: o.life || 5 });
     }
     function update(dt) {
       const P = env.player();

@@ -47,6 +47,7 @@ t('Saving the same floor of the same map again replaces the old save instead of 
 t('A different map or floor is its own save, newest first', (() => { SV.add(sd(3)); SV.add(sd(2, 99)); return SV.all().length === 3 && SV.all()[0].data.mapSeed === 99; })());
 t('Only the newest eight saves are kept', (() => { for (let i = 0; i < 12; i++) SV.add(sd(i + 10, 500 + i)); return SV.all().length === SV.MAX && SV.all()[0].data.mapSeed === 511; })());
 t('A save can be deleted', (() => { const id = SV.all()[0].id; SV.remove(id); return !SV.find(id) && SV.all().length === SV.MAX - 1; })());
+t('Saves made in the same instant still get different ids, so deleting one never deletes another', (() => { const a = SV.add(sd(40, 900)), b = SV.add(sd(41, 901)); return a.id !== b.id; })());
 t('The list survives the page reloading (it is kept in the browser)', (() => { const n = SV.all().length; return JSON.parse(localStorage.getItem('cp_saves_v1')).length === n; })());
 
 console.log(bad ? bad + ' FAILED' : 'all save checks passed'); process.exit(bad ? 1 : 0);

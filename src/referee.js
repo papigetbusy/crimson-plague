@@ -24,6 +24,8 @@ const Referee = (function () {
   const lerp = (a, b, t) => a + (b - a) * t;
   const D = typeof RefereeData !== 'undefined' ? RefereeData : require('./referee_data.js');   // monster kinds, skills, wave plan
   const CL = typeof RefereeClass !== 'undefined' ? RefereeClass : require('./referee_class.js');   // the Gunslinger, Assassin and Witch rules
+  const TR = typeof RefereeTrail !== 'undefined' ? RefereeTrail : require('./referee_trail.js');         // the gold trail to the boss
+  const RB = typeof RefereeBosses !== 'undefined' ? RefereeBosses : require('./referee_bosses.js');       // the Bat Lord, Lich King and Elder Dragon moves
   const ST = typeof RefereeStash !== 'undefined' ? RefereeStash : require('./referee_stash.js');         // the run stash and blueprints
   const WP = typeof RefereeWeapons !== 'undefined' ? RefereeWeapons : require('./referee_weapons.js');   // the 20 guns, rarities and drops
   const GR = typeof RefereeGear !== 'undefined' ? RefereeGear : require('./referee_gear.js');             // armor pieces and charms
@@ -81,6 +83,8 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     manualGuns: false,        // true = guns and gear on the floor are only taken when you press pick up (the game does this so a good gun is never swapped away by accident); tests keep the old walk-over
     gunReach: 2.6,            // how close you must be to take a gun or piece of gear with pick up
     stashReach: 3,            // how close you stand to the stash chest to use it
+    bossRandom: false,        // a random boss on each boss floor (the game screen turns it on; tests keep the Demon Lord unless they ask)
+    bossKind: '',             // force one boss: demon, bat, lich or dragon
     stashOpen: false,         // can you put things in the safe-room stash? off here so tests stay steady; the game screen turns it on (later: only after the wave 100 boss when playing alone)
     modDrops: false,          // do monsters drop gun mods? off here so tests stay steady; the game screen turns it on
     gearDrops: false,         // do monsters drop armor and charms? off here so tests stay steady; the game screen turns it on
@@ -191,6 +195,12 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       }
       flowCell = pcz * GW + pcx;
     }
+    let trailKey = '', trailPts = [];
+    function trailTo(b) {                                       // cached: only worked out again when you or the boss change cell
+      const key = M0.id + ':' + flowCell + ':' + Math.floor(b.x / CELL) + ':' + Math.floor(b.z / CELL);
+      if (key !== trailKey) { trailKey = key; trailPts = TR.walk(flow, GW, GH, CELL, solid, b.x, b.z); }
+      return trailPts;
+    }
     function flowDir(x, z) {
       const cx = Math.floor(x / CELL), cz = Math.floor(z / CELL);
       let best = flow[cz * GW + cx], bx = -1, bz = -1;
@@ -286,9 +296,9 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       events.push({ type: 'restart' });
     }
     function startWave() {
-      spawnQ = D.waveKinds(R.wave, rng);
+      spawnQ = D.waveKinds(R.wave, rng, bossKindFor(R.wave));
       R.phase = 'fight'; spawnTimer = 0.2; R.fogOn = D.fogWave(R.wave, seed0);
-      events.push({ type: 'waveStart', n: R.wave, boss: spawnQ.some((k) => D.KINDS[k].boss), count: spawnQ.length, fog: R.fogOn });
+      events.push({ type: 'waveStart', n: R.wave, boss: spawnQ.some((k) => D.KINDS[k].boss), bossName: (spawnQ.map((k) => D.KINDS[k]).find((k) => k.boss) || {}).name, count: spawnQ.length, fog: R.fogOn });
     }
     function endWave() {
       events.push({ type: 'waveClear', n: R.wave });
@@ -332,11 +342,12 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     }
 
     /* ---------------- monsters: stats, spawning, loot ---------------- */
+    const bossKindFor = (wave) => cfg.bossRandom || cfg.bossKind ? RB.pick(floorOf(wave), seed0, cfg.bossKind) : 'demon';
     function statsFor(kind, wave) {
-      const k = D.KINDS[kind], w = wave - 1;
+      const k = D.KINDS[kind], w = wave - 1, bf = k.boss ? floorOf(wave) - 1 : 0;      // a boss gets tougher and hits harder on every floor after the first, on top of the wave growth
       return {
-        hp: cfg.monsterHp * k.hpMul * (1 + L.hpPerWave * w) * (1 + L.capHp * overCap()),
-        dmg: cfg.monsterDamage * k.dmgMul * (1 + L.dmgPerWave * w) * (1 + L.capDmg * overCap()),
+        hp: cfg.monsterHp * k.hpMul * (1 + L.hpPerWave * w) * (1 + L.capHp * overCap()) * (1 + L.bossHpFloor * bf),
+        dmg: cfg.monsterDamage * k.dmgMul * (1 + L.dmgPerWave * w) * (1 + L.capDmg * overCap()) * (1 + L.bossDmgFloor * bf),
         spd: cfg.monsterSpeed * k.speedMul * Math.min(L.speedMax, 1 + L.speedPerWave * w)
       };
     }
@@ -503,6 +514,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
         R.over = { wave: R.wave, kills, level: R.level, time: R.time };
         events.push({ type: 'dead' });
       }
+      return true;                                       // the blow landed (a slide, an invulnerable moment or a finished run returns nothing)
     }
 
     const mshots = SH.create({
@@ -510,6 +522,21 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       player: () => ({ x: P.x, z: P.z, eye: P.eye, sliding: P.sliding }), hurt: (d, id) => hurtPlayer(d, id), event: (e) => events.push(e)
     });
 
+    // the boss moves (bat, lich, dragon); see referee_bosses.js
+    const BO = RB.create({
+      player: () => P, rng: () => rng(), los: (ax, az, bx, bz) => hasLOS(ax, az, bx, bz), hurt: (d, id) => hurtPlayer(d, id), fire: (s) => mshots.fire(s), event: (e) => events.push(e),
+      speed: (m) => m.spd0 * m.spd * gfx.slowOf(m),
+      spot: (ax, az, bx, bz, min, max) => {                                    // a floor spot a walk away from you, in sight of you if it can be found
+        let any = null;
+        for (let i = 0; i < 60; i++) {
+          const c = floorCells[(rng() * floorCells.length) | 0], x = (c[0] + 0.5) * CELL, z = (c[1] + 0.5) * CELL, d = Math.hypot(x - bx, z - bz);
+          if (d < min || d > max) continue;
+          if (hasLOS(x, z, bx, bz)) return [x, z];
+          if (!any) any = [x, z];
+        }
+        return any;
+      }
+    });
     const kit = CL.create({
       rng: () => rng(), P, monsters: () => monsters, damage: (m, d, c, x, y, z, sp, q) => damageMonster(m, d, c, x, y, z, sp, q),
       heal: (v) => { P.hp = Math.min(maxHp(), P.hp + v); }, maxHp: () => maxHp(), baseDmg: () => gunStats().dmg * M.dmg, isBoss: (m) => !!D.KINDS[m.kind].boss,
@@ -715,18 +742,20 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       let mvx = 0, mvz = 0;
       const was = m.state;
       if (m.state === 'guard') {                          // asleep on his feet at the door until you come into sight or hurt him
-        if (m.hp < m.maxHp || (dist < k.guard.wake && hasLOS(m.x, m.z, P.x, P.z))) { m.state = 'chase'; m.shT = 0.4; events.push({ type: 'bossWake' }); }   // he opens the fight with a fireball
+        if (m.hp < m.maxHp || (dist < k.guard.wake && hasLOS(m.x, m.z, P.x, P.z))) { m.state = 'chase'; m.shT = 0.4; events.push({ type: 'bossWake', name: k.name }); }   // he opens the fight with a fireball
         else { m.yaw += clamp(angleDiff(m.yawT, m.yaw), -dt * 9, dt * 9); return; }
       }
       if (k.summonAt && !m.summoned && m.hp <= m.maxHp * k.summonAt) {
         m.summoned = true;
         for (let i = 0; i < k.summonN; i++) spawnQ.unshift(k.summonKind);
         spawnTimer = 0;
-        events.push({ type: 'bossSummon', x: m.x, z: m.z });
+        events.push({ type: 'bossSummon', x: m.x, z: m.z, text: k.summonText || 'HOUNDS CALLED' });
       }
-      if (k.enrage && !m.enraged && m.hp <= m.maxHp * k.enrage.below) { m.enraged = true; m.spd0 *= k.enrage.speed; events.push({ type: 'bossEnrage', x: m.x, z: m.z }); }
+      if (k.enrage && !m.enraged && m.hp <= m.maxHp * k.enrage.below) { m.enraged = true; m.spd0 *= k.enrage.speed; events.push({ type: 'bossEnrage', x: m.x, z: m.z, name: k.name }); }
       if (k.charge) m.chT -= dt * (m.enraged ? 1 / k.enrage.pace : 1);
-      if (m.state === 'windup') {                         // the boss rears back where it stands, then lunges
+      if (k.moves && BO.step(m, k, dt, dist, dx, dz, reach)) {      // the Bat Lord, Lich King and Elder Dragon play their own moves
+        mvx = m.bmx; mvz = m.bmz;
+      } else if (m.state === 'windup') {                         // the boss rears back where it stands, then lunges
         m.wT -= dt; m.yawT = Math.atan2(dx, -dz);
         if (m.wT <= 0) { m.state = 'charge'; m.cT = k.charge.dur; m.cdx = dx / dist; m.cdz = dz / dist; }
       } else if (m.state === 'charge') {
@@ -770,6 +799,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
         if (dd > 0.001 && dd < minD) { const kk = (minD - dd) * 5 / dd; sx += ox * kk; sz += oz * kk; }
       }
       const mv = tryMove(m, (mvx + sx) * dt, (mvz + sz) * dt, MONSTER_RADIUS * Math.min(Math.max(sc, 0.8), 1.4));
+      if (m.state === 'dash' && (mv.bx || mv.bz)) m.bm.t = 0;                             // a dive ends against a wall
       if (m.state === 'charge' && (mv.bx || mv.bz)) { m.cT = 0; m.state = 'chase'; m.chT = k.charge.every; }
       m.yaw += clamp(angleDiff(m.yawT, m.yaw), -dt * 9, dt * 9);
       m.phase += Math.hypot(mvx, mvz) * dt * 2.4 / Math.max(0.7, sc * 0.8);
@@ -933,7 +963,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
         p.reloadT += dt;
         if (p.reloadT >= p.reloadDur) { p.reloading = false; p.ammo = maxMag(); events.push({ type: 'reloadEnd' }); }
       }
-      p.fireCd -= dt;
+      p.fireCd = Math.max(p.fireCd - dt, -dt);                  // the leftover of a frame carries over (so the rate stays exact), but never more than one frame: a long reload must not store up a burst
       if (p.fireCd < 0 && !inp.fire) p.fireCd = 0;
       const interval = 1 / (gunStats().rate * M.rate * CM.rate * (R.frenzy > 0 ? L.frenzyRate : 1));
       let shots = 0;
@@ -992,7 +1022,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
           flash: m.flash, state: m.state, phase: m.phase, scale: m.scale, elite: m.elite,
           enraged: !!m.enraged, poisoned: !!(m.fx && m.fx.poison), bleeding: !!(m.fx && m.fx.bleed), cursed: !!(m.fx && m.fx.hexT > 0), gx: gfx.view(m),
           atkK: m.state === 'attack' ? clamp(1 - m.atk / D.KINDS[m.kind].wind, 0, 1) : 0,              // 0 to 1 as a melee blow winds up; resets when it lands (the screen raises the weapon with it)
-          castK: m.state === 'cast' ? clamp(1 - m.shW / D.KINDS[m.kind].shoot.wind, 0, 1) : 0           // the same for a ranged monster rearing back to throw
+          castK: D.KINDS[m.kind].moves ? BO.view(m, D.KINDS[m.kind]).k : m.state === 'cast' ? clamp(1 - m.shW / D.KINDS[m.kind].shoot.wind, 0, 1) : 0           // the same for a ranged monster rearing back to throw
         })),
         floor: floorNo, floorId: M0.id,
         door: { x: M0.door.x, z: M0.door.z, open: doorOpen },
@@ -1003,6 +1033,8 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
           skills: R.stock.map((sid, i) => sid ? Object.assign(kit.card(sid, R.level), { price: skillPrice(sid), afford: R.gold >= skillPrice(sid), slot: i }) : null).filter(Boolean),
           supplies: supplyList().map((e) => e.kind === 'mend' ? { id: 'mend', name: 'Mend', desc: 'Heal to full health', price: L.shopHeal, afford: R.gold >= L.shopHeal && P.hp < maxHp() } : e.kind === 'leave' ? { id: 'leave', name: 'Leave', desc: 'Back to the room', price: 0, afford: true } : e.kind === 'gear' ? gearCard(e.item, e.slot) : gunCard(e.item, e.slot))
         } : null,
+        bossFx: boss && D.KINDS[boss.kind].moves ? BO.view(boss, D.KINDS[boss.kind]).warn : [],      // floor warnings the screen draws (rings, lanes) so each attack can be dodged
+        trail: boss && boss.state === 'guard' ? trailTo(boss) : null,      // the walking route from you to him, for the gold line on the map
         compass: boss && boss.state === 'guard' ? { x: boss.x, z: boss.z } : null,      // points at the boss from the moment he spawns until the fight with him starts
         explored,
         fog: { k: R.fogK, mul: 1 + (L.fogMul - 1) * R.fogK },      // how thick the fog is, and the fraction of the normal view distance you can see

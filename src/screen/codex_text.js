@@ -10,7 +10,10 @@ const CodexText = (function () {
     mushroom: 'Stays back and spits slow globs of spore at you. Dodge the glob, then shoot it.',
     eyeball: 'Floats above the ground and fires fast bolts from long range. Hard to hit while you run; stop and aim.',
     flame: 'A floating fire spirit that hurls slow fireballs and hits harder than most. Keep moving sideways.',
-    demon: 'The Demon Lord, the boss at the end of every floor. He sleeps at the door until you come close or hurt him, then charges, throws fireballs, calls hounds at half health and goes into a rage under about a third of his health. He always drops a gun and a piece of gear, a rarity band better than normal.'
+    bat: 'The Bat Lord, one of the four bosses at the end of a floor (picked at random). A fast flyer that circles you, rears up, then dives through the spot where you stood: a lane glows on the floor first, so step aside or slide through. A dive that lands drains your health into his. Calls bats at half health and enrages under a third.',
+    lich: 'The Lich King, one of the four bosses. He keeps his distance, fires a fan of soul bolts and a ring of bolts with gaps (find a gap, or slide), blinks away when you get close and raises the dead at 60% health.',
+    dragon: 'The Elder Dragon, one of the four bosses. He stands his ground: a sweeping cone of fire (lanes show where it will go; step out of it) and a tail slam that shocks everything close (a ring shows its reach). Slow, huge and very tough.',
+    demon: 'The Demon Lord, one of the four bosses at the end of a floor (picked at random). He sleeps at the door until you come close or hurt him, then charges, throws fireballs, calls hounds at half health and goes into a rage under about a third of his health. He always drops a gun and a piece of gear, a rarity band better than normal.'
   };
   const STATUS = {
     fire: ['Fire', 'red', 'Burns the monster: a share of the hit lands again over a few seconds.'],

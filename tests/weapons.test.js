@@ -59,6 +59,18 @@ t('Only legendary guns carry two status effects, and they are two different ones
   t('The cheat build can put any gun in your hands at any rarity, with a full magazine', g.gun.id === 'hmg_minigun' && g.gun.rarity === 3 && g.ammo === g.magSize && g.magSize > 12);
 }
 
+// ---- fire rate holds after a reload
+{
+  const rate = (r) => r.snapshot().player.gun.card.rate;
+  const r = mk({ magSize: 30, spread: 0, spreadAds: 0 }, 5); r.place(r.map.start.x, r.map.start.z, 0); go(r, 1.7);
+  const per = rate(r);
+  go(r, 0.2, { fire: true }); go(r, 0.05, { reload: true, fire: true });         // hold fire, press reload and keep holding
+  let guard = 0; while (r.snapshot().player.reloading && guard++ < 600) go(r, 1 / 60, { fire: true });
+  go(r, 1, { fire: true });
+  const used = r.snapshot().player.magSize - r.snapshot().player.ammo;
+  t('Holding fire through a reload does not store up a burst: the first second after it shoots at the gun\'s own rate', used <= per * 1 + 3);
+}
+
 // ---- drops
 const quiet = (cfg) => { const r = mk(Object.assign({ magSize: 1000, spread: 0, spreadAds: 0 }, cfg || {}), 5); r.place(r.map.start.x, r.map.start.z, 0); go(r, 1.7); return r; };
 const killOne = (r, kind) => { r.spawnAt(kind || 'fiend', r.map.start.x, r.map.start.z - 5); return go(r, 0.4, { fire: true }).ev.filter((e) => e.type === 'kill').length; };

@@ -25,16 +25,26 @@ const LootView = (function () {
     box(0.16, 0.2, 0.08, 0xffd45a, 0, 0.55, 0.4, chest);
     const chestGlow = sprite(0x8cf0ff, 1.8); chestGlow.position.set(0, 1.0, 0); chest.add(chestGlow);
     const boxP = (w, h, d, mat, x, y, z, parent) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); parent.add(m); return m; };
+    // a gun on the floor takes the plain default model of its type (see floor_gun_shapes.js), rebuilt only when the slot starts showing a different type
+    const partGeo = {};
+    function setShape(p, type) {
+      if (p.shape === type) return; p.shape = type;
+      while (p.gun.children.length) p.gun.remove(p.gun.children[0]);
+      for (const [l, h, w, x, y, z, dark] of (FloorGunShapes.SHAPES[type] || FloorGunShapes.SHAPES.rifle)) {
+        const k = l + ',' + h + ',' + w, geo = partGeo[k] || (partGeo[k] = new THREE.BoxGeometry(l, h, w));
+        const m = new THREE.Mesh(geo, dark ? p.dm : p.gm); m.position.set(x, y, z); p.gun.add(m);
+      }
+    }
     const orbs = [], picks = [];
     for (let i = 0; i < ORB_N; i++) { const g = new THREE.Group(), m = new THREE.Mesh(orbGeo, orbMat); g.add(m, sprite(0xffb030, 0.7)); g.visible = false; scene.add(g); orbs.push({ g, m }); }
     for (let i = 0; i < PICK_N; i++) {
       const g = new THREE.Group(), a = new THREE.Mesh(crossGeo, healMat), b = new THREE.Mesh(crossGeo2, healMat), f = new THREE.Mesh(orbGeo, frenzyMat);
       const gl = sprite(0xff3a3a, 1.3);
       const gm = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }), gun = new THREE.Group(), bm = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false });
-      boxP(0.62, 0.14, 0.16, gm, 0, 0, 0, gun); boxP(0.16, 0.26, 0.14, gm, -0.22, -0.18, 0, gun); boxP(0.28, 0.1, 0.12, gm, 0.1, 0.1, 0, gun);   // a little gun-shaped silhouette
+      const dm = new THREE.MeshBasicMaterial({ color: 0x888888, fog: false });          // the deeper shade for a gun's secondary parts
       const beam = new THREE.Mesh(new THREE.BoxGeometry(0.1, 3.2, 0.1), bm); beam.position.y = 1.6;
       const gear = boxP(0.34, 0.34, 0.34, gm, 0, 0, 0, g);          // a piece of gear: a chunky block in its rarity colour
-      g.add(a, b, f, gl, gun, beam); g.visible = false; scene.add(g); picks.push({ g, a, b, f, gl, gun, gm, bm, beam, gear });
+      g.add(a, b, f, gl, gun, beam); g.visible = false; scene.add(g); picks.push({ g, a, b, f, gl, gun, gm, dm, bm, beam, gear, shape: '' });
     }
     function update(st, t) {
       for (let i = 0; i < COIN_N; i++) {
@@ -59,7 +69,8 @@ const LootView = (function () {
         if (!d) { p.g.visible = false; continue; }
         const heal = d.kind === 'heal', isGun = d.kind === 'gun', isGear = d.kind === 'gear' || d.kind === 'mod';
         p.g.visible = true; p.a.visible = p.b.visible = heal; p.f.visible = !heal && !isGun && !isGear; p.gun.visible = isGun; p.gear.visible = isGear; p.beam.visible = isGun || isGear;
-        if (isGun || isGear) { const c = RefereeWeapons.RARITIES[(d.gun || d.gear || d.mod).rarity].color; p.gm.color.setHex(c); p.bm.color.setHex(c); p.gl.material.color.setHex(c); }
+        if (isGun || isGear) { const c = RefereeWeapons.RARITIES[(d.gun || d.gear || d.mod).rarity].color; p.gm.color.setHex(c); p.dm.color.setHex(FloorGunShapes.darker(c)); p.bm.color.setHex(c);
+          if (isGun) setShape(p, d.gun.type); p.gl.material.color.setHex(c); }
         else p.gl.material.color.setHex(heal ? 0xff3a3a : 0xff9a2a);
         p.g.position.set(d.x, 0.75 + Math.sin(t * 2.4 + d.id) * 0.12, d.z); p.g.rotation.y = t * 1.6;
         p.g.scale.setScalar(d.life < 4 ? (Math.sin(t * 16) > 0 ? 1 : 0.5) : 1);       // blinks before it vanishes

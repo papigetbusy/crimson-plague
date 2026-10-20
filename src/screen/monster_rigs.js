@@ -5,7 +5,7 @@ const MonsterRigs = (function () {
   const MODEL = 0.72;
   function create(THREE) {
     const glowMat = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
-    const SOURCES = { fiend: HornedFiendV2, golem: RockGolem, demon: DemonLordV2, hound: BoneHoundV2, goblin: Goblin, skeleton: Skeleton, mushroom: Mushroom, eyeball: Eyeball, flame: FlameSpirit };   // the signed-off versions (the demon lord v2 is a candidate until the owner signs it off); horned_fiend.js, bone_hound.js and demon_lord.js stay as the fallback
+    const SOURCES = { fiend: HornedFiendV2, golem: RockGolem, demon: DemonLordV2, hound: BoneHoundV2, goblin: Goblin, skeleton: Skeleton, mushroom: Mushroom, eyeball: Eyeball, flame: FlameSpirit, bat: BatLord, lich: LichKing, dragon: ElderDragon };   // the signed-off versions (the demon lord v2 is a candidate until the owner signs it off); horned_fiend.js, bone_hound.js and demon_lord.js stay as the fallback
     const SMOOTH = { relax: 0.6, passes: 5, soft: 0.9 };
     const cache = {};       // kind -> { model, geo: { part: { solid, glow } } }  (built once, shared by every monster of that kind)
     // a kind's geometry is cut part by part, so a kind can be prepared a slice at a time in the background (warmStep) or all at once when its first monster appears
@@ -103,7 +103,7 @@ const MonsterRigs = (function () {
         en.wings[0].rotation.z = flap; en.wings[1].rotation.z = -flap;
       }
     }
-    const LIGHT = { goblin: 'biped1', skeleton: 'biped1', mushroom: 'shroom', eyeball: 'floater', flame: 'floater' };
+    const LIGHT = { goblin: 'biped1', skeleton: 'biped1', mushroom: 'shroom', eyeball: 'floater', flame: 'floater', bat: 'floater', lich: 'floater', dragon: 'floater' };
     // the placeholder roster. atkK / castK (0 to 1) come from the referee: how far a blow or a throw has wound up, so the pose is the warning
     function animateLight(en, m, t, rig) {
       const sw = Math.sin(m.phase), a = m.atkK || 0, c = m.castK || 0, id = m.id;
@@ -121,7 +121,8 @@ const MonsterRigs = (function () {
         const fly = Math.sin(t * 2.4 + id * 1.7);
         en.body.position.y = fly * 0.09; en.body.rotation.x = -c * 0.35; en.body.rotation.z = Math.sin(t * 1.5 + id) * 0.06;
         const grow = 1 + c * 0.22; en.body.scale.set(grow, grow, grow);
-        if (en.wingR) { const f = Math.sin(t * 9 + id) * 0.55 + 0.2; en.wingR.rotation.z = f; en.wingL.rotation.z = -f; }
+        if (en.wingR) { const f = Math.sin(t * (en.kind === 'dragon' ? 3 : en.kind === 'bat' ? 6 : 9) + id) * (en.kind === 'dragon' ? 0.35 : 0.55) + 0.2; en.wingR.rotation.z = f; en.wingL.rotation.z = -f; }
+        if (m.state === 'dash') { en.body.rotation.x = 0.9; if (en.wingR) { en.wingR.rotation.z = 0.9; en.wingL.rotation.z = -0.9; } if (en.armR) { en.armR.rotation.x = en.armL.rotation.x = 1.6; } }       // the Bat Lord dives nose first, wings swept back, talons out
         if (en.tendrils) { en.tendrils.rotation.x = Math.sin(t * 2 + id) * 0.2; en.tendrils.rotation.z = Math.cos(t * 1.7 + id) * 0.2; }
         if (en.armR) { const r = 0.5 + c * 1.5 + Math.sin(t * 3 + id) * 0.1; en.armR.rotation.x = r; en.armL.rotation.x = r; en.armR.rotation.z = -c * 0.5; en.armL.rotation.z = c * 0.5; }
       }

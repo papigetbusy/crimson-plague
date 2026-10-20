@@ -31,7 +31,25 @@ const RefereeData = (function () {
       shoot: { range: 22, min: 6, wind: 0.9, cd: 3.4, speed: 9, dmg: 1.1, r: 0.7, proj: 'fire', y: 2.4 },   // a slow, wide fireball he throws from range after rearing back
       enrage: { below: 0.35, speed: 1.25, pace: 0.65 },                       // under this much health he speeds up and throws and charges more often
       summonAt: 0.5, summonKind: 'hound', summonN: 4,                        // calls hounds once, at half health
-      spheres: [{ y: 0.8, r: 0.6, f: 0 }, { y: 1.7, r: 0.78, f: 0 }, { y: 2.45, r: 0.4, f: -0.05, head: true }] }
+      spheres: [{ y: 0.8, r: 0.6, f: 0 }, { y: 1.7, r: 0.78, f: 0 }, { y: 2.45, r: 0.4, f: -0.05, head: true }] },
+    // the three bosses taken from Crusader Tactics. Every one has its own moves (see referee_bosses.js, which plays them); the numbers sit here.
+    bat: { name: 'Bat Lord', size: 1.3, hpMul: 62, speedMul: 1.1, dmgMul: 3.0, rate: 1.0, xp: 420, heavy: true, boss: true, wind: 0.4, hover: 1.5,
+      guard: { wake: 14 }, enrage: { below: 0.35, speed: 1.2, pace: 0.6 },
+      summonAt: 0.5, summonKind: 'eyeball', summonN: 4, summonText: 'BATS CALLED',
+      moves: { dive: { cd: 4.2, min: 5, max: 26, wind: 0.9, speed: 4.6, maxT: 1.1, dmg: 1.7, drain: 0.6, rest: 0.9 }, orbit: { dist: 11, speed: 0.9 } },   // dive: rear up, then swoop through the spot where you stood; a hit heals him by `drain` of its damage
+      spheres: [{ y: 1.7, r: 0.8, f: 0 }, { y: 2.2, r: 0.45, f: 0.1, head: true }] },
+    lich: { name: 'Lich King', size: 1.4, hpMul: 55, speedMul: 0.7, dmgMul: 3.4, rate: 1.0, xp: 440, heavy: true, boss: true, wind: 0.4, hover: 0.8,
+      guard: { wake: 16 }, enrage: { below: 0.35, speed: 1.15, pace: 0.65 },
+      summonAt: 0.6, summonKind: 'skeleton', summonN: 4, summonText: 'THE DEAD RISE',
+      moves: { volley: { cd: 2.6, wind: 0.8, n: 3, spread: 0.26, speed: 11, dmg: 0.9, r: 0.4, min: 3, max: 26 },
+        nova: { cd: 9, wind: 1.5, n: 18, speed: 7, dmg: 0.75, r: 0.4, min: 2, max: 22 },
+        blink: { cd: 6, near: 6.5, min: 12, max: 19, rest: 0.5 }, keep: 11 },     // volley: a fan of soul bolts; nova: a ring of bolts with gaps; blink: he vanishes when you get close
+      spheres: [{ y: 1.0, r: 0.7, f: 0 }, { y: 1.9, r: 0.7, f: 0 }, { y: 2.6, r: 0.42, f: 0, head: true }] },
+    dragon: { name: 'Elder Dragon', size: 1.9, hpMul: 110, speedMul: 0.7, dmgMul: 3.6, rate: 0.8, xp: 480, heavy: true, boss: true, wind: 0.6,
+      guard: { wake: 13 }, enrage: { below: 0.35, speed: 1.2, pace: 0.7 },
+      moves: { breath: { cd: 7, min: 3, max: 18, wind: 1.0, dur: 1.9, arc: 1.3, every: 0.08, speed: 13, dmg: 0.32, r: 0.5, life: 1.3 },
+        slam: { cd: 5.5, near: 6, wind: 1.0, radius: 7, dmg: 1.8, rest: 0.8 } },    // breath: a fire cone sweeps across (step out of it or slide through); slam: a tail shockwave all round him
+      spheres: [{ y: 0.9, r: 0.95, f: 0.1 }, { y: 1.7, r: 0.8, f: 0.3 }, { y: 2.5, r: 0.5, f: 0.7, head: true }] }
   };
 
   // what a level-up can offer. per = the number each stack adds (the referee applies them).
@@ -50,7 +68,8 @@ const RefereeData = (function () {
   ];
 
   const LOOP = {
-    startWave: 1, kitPerWave: 0.8, intermission: 4, firstDelay: 2.5, bossEvery: 10,
+    startWave: 1, kitPerWave: 0.8, intermission: 4, firstDelay: 2.5, bossEvery: 10, bossHpFloor: 0.45, bossDmgFloor: 0.18,   // each boss floor after the first: a boss has this much more health and hits this much harder
+   
     aliveCap: 16, heavyCap: 6, spawnGap: 0.55,
     hpPerWave: 0.14, dmgPerWave: 0.05, speedPerWave: 0.02, speedMax: 1.35,
     orbMagnet: 3.5, orbPickup: 0.9, orbLife: 30, pickupLife: 25, pickupRadius: 1.1,
@@ -94,7 +113,7 @@ const RefereeData = (function () {
     { kind: 'flame',    from: 21, share: (w) => Math.min(0.14, 0.05 + 0.01 * (w - 21)) }
   ];
   // the monsters of wave w, in spawn order (a boss wave starts with its boss)
-  function waveKinds(w, rng) {
+  function waveKinds(w, rng, bossKind) {
     const n = 6 + 2 * w + Math.floor(w / 3);
     const boss = w % LOOP.bossEvery === 0;
     const adds = boss ? Math.round(n * 0.5) : n;
@@ -106,7 +125,7 @@ const RefereeData = (function () {
       list.push(pick);
     }
     for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); const t = list[i]; list[i] = list[j]; list[j] = t; }
-    if (boss) list.unshift('demon');
+    if (boss) list.unshift(bossKind || 'demon');
     return list;
   }
   // does wave w roll in fog? A pure scramble of the run's seed and the wave number (no random draws, so it never shifts what else happens). Bosses and the first waves are clear.

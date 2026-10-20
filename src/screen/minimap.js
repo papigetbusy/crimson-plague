@@ -3,6 +3,7 @@
    Look-only numbers (colours, sizes) live here. */
 const Minimap = (function () {
   const COL = { wall: [30, 22, 26], floor: [96, 78, 70], carpet: [150, 40, 48], door: [226, 176, 60], unseen: [0, 0, 0] };
+  const BOSS = { demon: 1, bat: 1, lich: 1, dragon: 1 };
   const CORNER_CELLS = 34;                                              // how many cells wide the corner map looks
 
   function create($, getMap) {
@@ -38,6 +39,13 @@ const Minimap = (function () {
       ctx.lineTo(x - fx * r - fz * r, y - fz * r + fx * r);
       ctx.closePath(); ctx.fill(); ctx.stroke();
     }
+    function trail(ctx, pts, px, pz, s) {                               // the gold road to the Demon Lord: a dark edge under a bright line, with a dot at the far end
+      if (!pts || pts.length < 2) return;
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      const path = () => { ctx.beginPath(); pts.forEach((p, i) => { const x = px(p[0]), z = pz(p[1]); if (i) ctx.lineTo(x, z); else ctx.moveTo(x, z); }); };
+      path(); ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.lineWidth = Math.max(4, s * 0.9 + 2); ctx.stroke();
+      path(); ctx.strokeStyle = '#ffcf4a'; ctx.lineWidth = Math.max(2, s * 0.9); ctx.stroke();
+    }
     function marker(ctx, x, y, r, colour) {
       ctx.fillStyle = colour; ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
@@ -56,15 +64,16 @@ const Minimap = (function () {
         ctx.fillStyle = t.kind === 'vent' ? 'rgba(255,140,30,0.9)' : 'rgba(210,50,60,0.85)';
         ctx.fillRect((t.x - cx0) * s, (t.z - cz0) * s, Math.max(2, t.w * s), Math.max(2, t.h * s));
       }
+      trail(ctx, st.trail, px, pz, s);
       if (st.door) marker(ctx, px(st.door.x), pz(st.door.z), Math.max(3, s * 1.2), st.door.open ? '#6fe08a' : '#e2b03c');
       if (st.compass) marker(ctx, px(st.compass.x), pz(st.compass.z), Math.max(3, s * 1.4), '#e23a42');   // the Demon Lord, from the moment he appears until he wakes
       // every monster alive, so you can find the last one or see where to run; with only a few left, ones off the edge of the small map are pinned to its rim
       const few = st.monsters.length <= 6;
       for (const m of st.monsters) {
-        let mx = px(m.x), mz = pz(m.z), r = Math.max(2, s * (m.kind === 'demon' ? 1.6 : 0.8));
+        let mx = px(m.x), mz = pz(m.z), r = Math.max(2, s * (BOSS[m.kind] ? 1.6 : 0.8));
         const out = mx < 3 || mz < 3 || mx > cv.width - 3 || mz > cv.height - 3;
         if (out) { if (!few || cv === big) continue; mx = Math.max(4, Math.min(cv.width - 4, mx)); mz = Math.max(4, Math.min(cv.height - 4, mz)); r = 3; }
-        marker(ctx, mx, mz, r, m.kind === 'demon' ? '#ff2a2a' : m.elite && m.elite.length ? '#ff9a2a' : '#c8202a');
+        marker(ctx, mx, mz, r, BOSS[m.kind] ? '#ff2a2a' : m.elite && m.elite.length ? '#ff9a2a' : '#c8202a');
       }
       arrow(ctx, px(st.player.x), pz(st.player.z), st.player.yaw, Math.max(3, s * 1.1));
     }

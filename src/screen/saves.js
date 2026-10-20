@@ -5,12 +5,12 @@ const Saves = (function () {
   const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
   const read = () => { try { const a = JSON.parse(localStorage.getItem(KEY)); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
   const write = (list) => { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch (e) { /* private window: saves last until the page closes */ } };
-  let mem = null;                                     // the list as the page sees it (also kept when storage is blocked)
+  let mem = null, seq = 0;                           // ids are time plus a counter, so two saves can never share one                                     // the list as the page sees it (also kept when storage is blocked)
   const all = () => (mem || (mem = read()));
   // add a save (newest first). Saving the same floor of the same map again replaces the older one, so a safe room never fills the list with copies.
   function add(data, when) {
     const list = all().filter((s) => !(s.data.mapSeed === data.mapSeed && s.data.floor === data.floor && s.data.classId === data.classId));
-    list.unshift({ id: String(Date.now()) + Math.floor(Math.random() * 1000), when: when || '', data });
+    list.unshift({ id: Date.now().toString(36) + '-' + (++seq), when: when || '', data });
     mem = list.slice(0, MAX); write(mem); return mem[0];
   }
   const remove = (id) => { mem = all().filter((s) => s.id !== id); write(mem); };

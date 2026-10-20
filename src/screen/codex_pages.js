@@ -28,7 +28,7 @@ const CodexPages = (function () {
         p('Class skills are passive (no new buttons). Each has ' + C.MAX_LEVEL + ' levels and levels up from use as well as from picking it again. Gear and gun affixes marked with a star only drop while you play ' + esc(c.name) + '.'));
     }).concat([sec('Ordinary level-up cards', table(['Card', 'Does', 'Most you can take'], D.SKILLS.map((s) => [esc(s.name), esc(s.desc), s.max])))]) });
 
-    const unlock = (kind) => { const m = D.MIX.find((x) => x.kind === kind); return kind === 'demon' ? 'every 10th wave (boss)' : kind === 'fiend' ? 'wave 1 (fills every wave)' : 'wave ' + m.from; };
+    const unlock = (kind) => { const m = D.MIX.find((x) => x.kind === kind); return D.KINDS[kind].boss ? 'every 10th wave (boss, one of four at random)' : kind === 'fiend' ? 'wave 1 (fills every wave)' : 'wave ' + m.from; };
     out.push({ id: 'monsters', title: 'Monsters', sections: Object.keys(D.KINDS).map((k) => {
       const m = D.KINDS[k], sh = m.shoot, style = (m.boss ? 'Boss. ' : '') + (sh ? 'Ranged: throws a ' + esc(sh.proj) + ' from up to ' + sh.range + ' away. ' : 'Melee. ') + (m.hover ? 'Floats above the ground. ' : '') + (m.charge ? 'Charges at you every ' + m.charge.every + 's. ' : '');
       return sec(m.name, p(esc(T.MONSTER[k] || '')) + table(['Health', 'Speed', 'Damage', 'Attack rate', 'XP', 'Appears'], [['x' + m.hpMul, 'x' + m.speedMul, 'x' + m.dmgMul, 'x' + m.rate, m.xp, unlock(k)]]) + p(style + 'All numbers are multiples of the base monster, and grow every wave (+' + pct(L.hpPerWave) + ' health, +' + pct(L.dmgPerWave) + ' damage per wave).'));

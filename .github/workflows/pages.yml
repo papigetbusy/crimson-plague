@@ -58,6 +58,12 @@ jobs:
         run: node tests/saves.test.js
       - name: Never-stuck checks (level-ups, shop, random play)
         run: node tests/stuck.test.js
+      - name: Floor gun model checks
+        run: node tests/floorguns.test.js
+      - name: Gold trail checks
+        run: node tests/trail.test.js
+      - name: Boss checks
+        run: node tests/bosses.test.js
       - name: Gun status effect checks
         run: node tests/gunfx.test.js
       - name: Hall look tests

@@ -15,12 +15,12 @@ const Hud = (function () {
       el.banner.classList.remove('show'); void el.banner.offsetWidth; el.banner.classList.add('show'); bannerT = 2.6;
     }
     function event(e) {
-      if (e.type === 'waveStart') banner('WAVE ' + e.n, e.boss ? 'A Demon Lord comes' : (e.fog ? 'Fog rolls in · ' : '') + e.count + ' monsters');
+      if (e.type === 'waveStart') banner('WAVE ' + e.n, e.boss ? 'The ' + (e.bossName || 'Demon Lord') + ' comes' : (e.fog ? 'Fog rolls in · ' : '') + e.count + ' monsters');
       else if (e.type === 'waveClear') banner('WAVE ' + e.n + ' CLEARED', 'Gather the souls');
       else if (e.type === 'pickup') banner(e.kind === 'heal' ? '+HEALTH' : 'BLOODLUST', e.kind === 'heal' ? '' : 'More damage, faster fire');
-      else if (e.type === 'bossSummon') banner('HOUNDS CALLED', '');
-      else if (e.type === 'bossWake') banner('THE DEMON LORD WAKES', 'Fight for the door');
-      else if (e.type === 'bossEnrage') banner('THE DEMON LORD ENRAGES', 'He is faster now');
+      else if (e.type === 'bossSummon') banner(e.text || 'HOUNDS CALLED', '');
+      else if (e.type === 'bossWake') banner('THE ' + (e.name || 'Demon Lord').toUpperCase() + ' WAKES', 'Fight for the door');
+      else if (e.type === 'bossEnrage') banner('THE ' + (e.name || 'Demon Lord').toUpperCase() + ' ENRAGES', 'He is faster now');
       else if (e.type === 'doorOpen') banner('THE DOOR OPENS', 'Step through to the next floor');
       else if (e.type === 'ultStart') banner(e.name.toUpperCase(), 'Unleashed');
       else if (e.type === 'skillNew') banner(e.name.toUpperCase(), 'New class skill');
