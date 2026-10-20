@@ -2,7 +2,7 @@
 
 The plan for everything the game still needs, in phases. Rewritten with the owner on 2026-10-19 (it replaces the first 8-phase plan and borrows the way Crusader Tactics was built). **Work only on the current phase.**
 
-**Current phase: 1 — Art lock (look and scale)** (status: not started; the first version with the core loop is on `main`)
+**Current phase: 2 — Floors and minimap** (status: not started; Phase 1, the art lock, was signed off by the owner on 2026-10-19)
 
 ## How we build (every phase works this way)
 - **Every phase starts rough and ugly on purpose** (grey boxes, placeholder shapes, plain text menus) and is built out step by step. Nothing is pretty until its phase says so.
@@ -27,15 +27,15 @@ The plan for everything the game still needs, in phases. Rewritten with the owne
 - **Look before feel.** Settle how everything looks and how big it is first; tune feel after the content exists.
 - Replaces the old "no permanent progression" rule: saves, the stash and loadouts are now planned.
 
-## Phase 1 — Art lock (look and scale)
+## Phase 1 — Art lock (look and scale) — SIGNED OFF 2026-10-19
 Locked first, before anything else is added. The world stays as it is.
-- [ ] Scale chart (`python3 tools/scale_chart.py out_dir`): player, gun, hands, every monster, doors, corridor width and ceiling height side by side; the owner picks what is too big or small.
-- [ ] Better 3D modelling for the monsters (and how the gun looks in game: lighting, view-model): build from front, side and top views, silhouette first, one voxel size, palette limited to the gothic colours, a turntable sheet next to Grok's pictures before anything goes in the game.
-- [ ] Monster look pass: Bone Hound claws, Rock Golem facets, Demon Lord bulk, Horned Fiend face (owner picks the master head picture; Grok's hands and feet sheet).
-- [ ] Environment look from the reference picture: stone, floor, ceiling, banners with gold trim, torches, red carpet, lighting and fog, decided on the phone.
-- [ ] Effects look: muzzle flash, hit and blood bursts, orbs, pickups, level-up cards, wave banners.
-- [ ] HUD look on the phone, landscape.
-- [ ] Performance budget measured on the owner's real iPhone (frame rate with a full wave) and a face budget per monster if it stutters.
+- [x] Scale chart (`python3 tools/scale_chart.py out_dir`): player, gun, hands, every monster, doors, corridor width and ceiling height side by side; the owner picks what is too big or small.
+- [x] Better 3D modelling for the monsters (and how the gun looks in game: lighting, view-model): build from front, side and top views, silhouette first, one voxel size, palette limited to the gothic colours, a turntable sheet next to Grok's pictures before anything goes in the game.
+- [x] Monster look pass: Bone Hound claws, Rock Golem facets, Demon Lord bulk, Horned Fiend face (owner picks the master head picture; Grok's hands and feet sheet).
+- [x] Environment look from the reference picture: stone, floor, ceiling, banners with gold trim, torches, red carpet, lighting and fog, decided on the phone.
+- [x] Effects look: muzzle flash, hit and blood bursts, orbs, pickups, level-up cards, wave banners.
+- [x] HUD look on the phone, landscape.
+- [x] Performance budget measured on the owner's real iPhone (frame rate with a full wave) and a face budget per monster if it stutters.
 - **Gate:** the owner signs off the look on his phone. Nothing new is built until then.
 
 ## Phase 2 — Floors and minimap
