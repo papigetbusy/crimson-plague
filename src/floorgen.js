@@ -10,15 +10,16 @@ const FloorGen = (function () {
   const SIZES = { first: 80, grow: 10, max: 140 };
   const sizeFor = (floor) => Math.min(SIZES.max, SIZES.first + SIZES.grow * (floor - 1));
 
-  function generate(floor, rng) {
+  // tier is how advanced the traps are (the floor number unless a test asks for more)
+  function generate(floor, rng, tier) {
     for (let attempt = 0; attempt < 20; attempt++) {
-      const f = tryGenerate(floor, rng);
+      const f = tryGenerate(floor, rng, tier || floor);
       if (f) return f;
     }
     throw new Error('floor generator could not connect a floor');
   }
 
-  function tryGenerate(floor, rng) {
+  function tryGenerate(floor, rng, tier) {
     const W = sizeFor(floor), H = W;
     const g = []; for (let z = 0; z < H; z++) g.push(new Array(W).fill('#'));
     const ri = (a, b) => a + Math.floor(rng() * (b - a + 1));
@@ -114,12 +115,60 @@ const FloorGen = (function () {
     for (const [x, z] of doorCells) g[z][x] = 'D';
 
     const torches = placeTorches(g, W, H, rooms, doorCells, dn, rng);
+    const traps = placeTraps(g, rooms, tier, rng);          // last, so the hall itself is the same as before traps existed
     const yaw = Math.atan2(dc[0] - sc[0], -(dc[1] - sc[1]));
     return {
-      W, H, CELL, floor, rows: g.map((r) => r.join('')), torches, rooms,
+      W, H, CELL, floor, rows: g.map((r) => r.join('')), torches, rooms, traps,
       start: { x: (sc[0] + 0.5) * CELL, z: (sc[1] + 0.5) * CELL, yaw },
       door: { cells: doorCells, nx: dn.nx, nz: dn.nz, x: (doorCells[0][0] + doorCells[1][0] + 1) / 2 * CELL, z: (doorCells[0][1] + doorCells[1][1] + 1) / 2 * CELL },
       carpetLength: carpet.size, doorRunner: toDoor
+    };
+  }
+
+
+  // traps, from the seed, in the ordinary rooms only (never your spawn room or the door room).
+  // 'spike' is always up and is the only kind on the first floors; 'vent' (a jet of flame on a beat) comes in at tier 3; 'pulse' (spikes that rise and sink) at tier 5.
+  // More rooms get one and the spike patches get bigger as the tier climbs. x, z, w, h are in cells; phase offsets the beat.
+  function placeTraps(g, rooms, tier, rng) {
+    const traps = [], chance = Math.min(0.65, 0.2 + 0.05 * tier);
+    const taken = (x, z, w, h) => traps.some((t) => x < t.x + t.w + 1 && t.x < x + w + 1 && z < t.z + t.h + 1 && t.z < z + h + 1);
+    for (const r of rooms) {
+      if (r.kind !== 'room' || r.w < 6 || r.h < 6 || rng() > chance) continue;
+      const roll = rng();
+      const kind = tier >= 5 ? (roll < 0.3 ? 'spike' : roll < 0.65 ? 'vent' : 'pulse') : tier >= 3 ? (roll < 0.6 ? 'spike' : 'vent') : 'spike';
+      const size = kind === 'vent' ? [1, 1] : tier >= 5 ? [3, 3] : tier >= 3 ? [2, 3] : [2, 2];
+      const count = kind === 'vent' ? 1 + (rng() < 0.5 ? 1 : 0) : 1;
+      for (let n = 0; n < count; n++) for (let tries = 0; tries < 12; tries++) {
+        const w = size[0], h = size[1];
+        const x = r.x + 1 + Math.floor(rng() * (r.w - 2 - w + 1)), z = r.z + 1 + Math.floor(rng() * (r.h - 2 - h + 1));
+        let ok = !taken(x, z, w, h);
+        for (let dz = 0; dz < h && ok; dz++) for (let dx = 0; dx < w; dx++) if (g[z + dz][x + dx] !== '.') ok = false;
+        if (!ok) continue;
+        traps.push({ id: traps.length, kind, x, z, w, h, phase: Math.round(rng() * 30) / 10 });
+        break;
+      }
+    }
+    return traps;
+  }
+
+  // the safe room after a boss: one calm hall with a merchant, carpet up to the door, and no monsters. Same shape as a floor so the rest of the game treats it as one.
+  function safeRoom(floor) {
+    const W = 26, H = 26, g = [];
+    for (let z = 0; z < H; z++) g.push(new Array(W).fill('#'));
+    const room = { x: 6, z: 6, w: 14, h: 14, kind: 'start' };
+    for (let z = room.z; z < room.z + room.h; z++) for (let x = room.x; x < room.x + room.w; x++) g[z][x] = '.';
+    for (let z = room.z; z < room.z + room.h; z++) { g[z][12] = 'c'; g[z][13] = 'c'; }       // carpet from where you arrive up to the door
+    const doorCells = [[12, 5], [13, 5]];
+    for (let z = 0; z < H; z++) for (let x = 0; x < W; x++) if (g[z][x] === '#') { const k = (x + z) % 3; g[z][x] = k === 0 ? 'B' : k === 1 ? 'W' : '#'; }
+    for (const [x, z] of doorCells) g[z][x] = 'D';
+    const torches = [];
+    for (const [cx, cz] of [[7, 7], [18, 7], [7, 18], [18, 18], [10, 7], [15, 7]]) torches.push({ x: (cx + 0.5) * CELL, y: 1.75, z: (cz + 0.5) * CELL, nx: 0, nz: 0, kind: 'brazier' });
+    return {
+      W, H, CELL, floor, safe: true, rows: g.map((r) => r.join('')), torches, rooms: [room], traps: [],
+      start: { x: 13 * CELL, z: 18 * CELL, yaw: 0 },
+      door: { cells: doorCells, nx: 0, nz: -1, x: 13 * CELL, z: 11 },
+      merchant: { x: 17.5 * CELL, z: 9.5 * CELL },
+      carpetLength: room.h * 2, doorRunner: []
     };
   }
 
@@ -153,6 +202,6 @@ const FloorGen = (function () {
     return torches;
   }
 
-  return { generate, sizeFor, SIZES, CELL };
+  return { generate, safeRoom, sizeFor, SIZES, CELL };
 })();
 if (typeof module !== 'undefined') module.exports = FloorGen;

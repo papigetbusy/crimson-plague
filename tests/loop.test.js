@@ -138,6 +138,10 @@ const nearBoss = (ref, d) => { const b = ref.snapshot().monsters.find((q) => q.k
   t('Standing just inside the open door does not take you through yet', out.state.floor === 1);
   ref.place(door.x, door.z);                                          // in the doorway itself
   out = ref.step(1 / 60, {});
+  t('Stepping into the boss door leads into the safe room first', out.events.some((e) => e.type === 'safeRoom') && out.state.safe && out.state.floor === 1 && out.state.monsters.length === 0);
+  for (let i = 0; i < 40 && (ref.snapshot().choices || ref.snapshot().classChoices); i++) ref.step(1 / 60, { pick: 0, pickClass: 0 });   // the boss's soul gives levels
+  const sdoor = ref.snapshot().door; ref.place(sdoor.x, sdoor.z);                       // the safe room's own door
+  out = ref.step(1 / 60, {});
   t('Stepping into the doorway takes you to floor 2, a new and bigger floor, and wave 11 comes after a short pause', out.events.some((e) => e.type === 'floorChange' && e.floor === 2) && out.state.floor === 2 && out.state.floorId !== floorId0 && ref.map.W > W0 && out.state.wave.phase === 'intermission' && out.state.wave.n === 11 && out.state.monsters.length === 0);
   const sp = ref.map.start;
   t('You arrive in the new floor\'s spawn room with your health, and the new door is shut and far away', Math.abs(out.state.player.x - sp.x) < 0.01 && Math.abs(out.state.player.z - sp.z) < 0.01 && out.state.player.hp === hp0 && !out.state.door.open && Math.hypot(out.state.door.x - sp.x, out.state.door.z - sp.z) > ref.map.W);

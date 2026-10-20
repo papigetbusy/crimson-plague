@@ -25,10 +25,11 @@ const RefereeData = (function () {
     flame: { name: 'Flame Spirit', size: 1.0, hpMul: 0.7, speedMul: 0.85, dmgMul: 1.3, rate: 1.0, xp: 16, heavy: false, wind: 0.3, hover: 1.45,
       shoot: { range: 18, keep: 8, wind: 0.8, cd: 3.0, speed: 8.5, dmg: 1.3, r: 0.45, proj: 'fire', y: 1.5 },
       spheres: [{ y: 1.5, r: 0.5, f: 0 }, { y: 1.95, r: 0.32, f: 0, head: true }, { y: 1.0, r: 0.35, f: 0 }] },
-    demon: { name: 'Demon Lord', size: 1.4, hpMul: 26, speedMul: 0.85, dmgMul: 3.2, rate: 0.8, xp: 400, heavy: true, boss: true, wind: 0.45,
+    demon: { name: 'Demon Lord', size: 1.4, hpMul: 78, speedMul: 0.85, dmgMul: 4.2, rate: 0.8, xp: 400, heavy: true, boss: true, wind: 0.45,
       guard: { wake: 12 },                                                   // he waits at the door, and wakes when you come within this many units in sight (or hurt him)
-      charge: { every: 7, windup: 0.7, dur: 0.9, mult: 3.4, hit: 1.5 },     // seconds, then speed multiplier and damage multiplier on contact
-      shoot: { range: 22, min: 6, wind: 0.9, cd: 4.5, speed: 9, dmg: 1.1, r: 0.7, proj: 'fire', y: 2.4 },   // a slow, wide fireball he throws from range after rearing back
+      charge: { every: 5.5, windup: 0.7, dur: 0.9, mult: 3.4, hit: 1.5 },     // seconds, then speed multiplier and damage multiplier on contact
+      shoot: { range: 22, min: 6, wind: 0.9, cd: 3.4, speed: 9, dmg: 1.1, r: 0.7, proj: 'fire', y: 2.4 },   // a slow, wide fireball he throws from range after rearing back
+      enrage: { below: 0.35, speed: 1.25, pace: 0.65 },                       // under this much health he speeds up and throws and charges more often
       summonAt: 0.5, summonKind: 'hound', summonN: 4,                        // calls hounds once, at half health
       spheres: [{ y: 0.8, r: 0.6, f: 0 }, { y: 1.7, r: 0.78, f: 0 }, { y: 2.45, r: 0.4, f: -0.05, head: true }] }
   };
@@ -64,7 +65,12 @@ const RefereeData = (function () {
     eliteBase: 0.06, elitePer: 0.03, eliteMax: 0.6,     // chance a spawn is an elite: base plus a bit per wave past the cap
     eliteHp: 1.5, eliteXp: 3, eliteScale: 1.15,
     eliteAffixEvery: 8, eliteAffixMax: 4,               // an elite carries one ability, plus one more for every 8 waves past the cap
-    volatileRadius: 3.6, volatileDmg: 1.0               // an exploding elite hurts you within this far, for this times its damage
+    volatileRadius: 3.6, volatileDmg: 1.0,              // an exploding elite hurts you within this far, for this times its damage
+    goldPerXp: 0.4, goldWave: 0.06, goldElite: 3, coinMagnet: 4, coinPickup: 0.9, coinLife: 40,   // gold: a kill drops this much per point of its xp, a bit more every wave, triple from elites
+    shopRadius: 3.2, shopHeal: 100, shopSkill: 150, shopSkillPer: 75, shopOffers: 3,   // the merchant: a full heal, and up to three class skill levels that cost more the higher the skill already is
+    trapPct: 0.12, trapScale: 0.12, trapMax: 0.35, trapTick: 0.7,           // traps: a hit takes this share of your health, a bit more on deeper floors (up to the max), and again every so often while you stand in it
+    trapMonsterPct: 0.08, trapBoss: 0.25, ventEvery: 3.2, ventWarn: 0.6, ventFire: 0.8, pulseEvery: 2.8, pulseUp: 1.4,   // monsters lose this share of their health per tick (a boss a quarter of that); a vent glows then fires on its beat; pulse spikes are up for half of theirs
+    fogFrom: 3, fogChance: 0.3, fogMul: 0.3, fogRamp: 3 // fog: from this wave on, this share of ordinary waves roll in fog that cuts the view to this fraction; it takes this many seconds to thicken or lift
   };
   // elite abilities, unlocked in this order as the waves past the cap pile up (from = waves past the cap needed)
   const AFFIXES = [
@@ -103,6 +109,13 @@ const RefereeData = (function () {
     if (boss) list.unshift('demon');
     return list;
   }
-  return { KINDS, SKILLS, LOOP, AFFIXES, xpNeed, waveKinds };
+  // does wave w roll in fog? A pure scramble of the run's seed and the wave number (no random draws, so it never shifts what else happens). Bosses and the first waves are clear.
+  function fogWave(w, seed) {
+    if (w < LOOP.fogFrom || w % LOOP.bossEvery === 0) return false;
+    let h = (Math.imul(seed | 0, 0x9e3779b1) ^ Math.imul(w, 0x85ebca6b)) >>> 0;
+    h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d) >>> 0; h = Math.imul(h ^ (h >>> 12), 0x297a2d39) >>> 0; h = (h ^ (h >>> 15)) >>> 0;
+    return h / 4294967296 < LOOP.fogChance;
+  }
+  return { KINDS, SKILLS, LOOP, AFFIXES, xpNeed, waveKinds, fogWave };
 })();
 if (typeof module !== 'undefined') module.exports = RefereeData;

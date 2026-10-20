@@ -187,6 +187,7 @@ body.touch .touchhelp { display: block; }
 #cloakVeil.on { opacity: 1; }
 /* core loop HUD: wave, level, boss bar, banner, level-up cards, game over */
 #lvl { margin-top: 5px; display: flex; align-items: center; gap: 8px; }
+#goldN { margin-left: 10px; font-weight: 700; font-size: 13px; letter-spacing: 0.1em; color: #f0c850; text-shadow: 0 1px 0 #000; white-space: nowrap; } .card3.poor { opacity: 0.45; }
 #lvlN { font-weight: 700; font-size: 13px; letter-spacing: 0.14em; color: var(--gold); text-shadow: 0 1px 0 #000; min-width: 3.2em; }
 #xpBar { width: clamp(80px, 17vw, 140px); height: 6px; background: rgba(0, 0, 0, 0.65); border: 1px solid var(--gold-dim); padding: 1px; }
 #xpFill { display: block; height: 100%; width: 0; background: linear-gradient(#f0c860, #b8862a); }
@@ -250,7 +251,7 @@ body.pad .card3.sel { border-color: var(--gold); background: linear-gradient(#3c
   <div class="corner">
     <div id="killbox"><div id="kills">0</div><span>Slain</span></div>
     <div id="hpBar"><div id="hpFill"></div></div>
-    <div id="lvl"><span id="lvlN">LV 1</span><div id="xpBar"><i id="xpFill"></i></div></div>
+    <div id="lvl"><span id="lvlN">LV 1</span><span id="goldN">0 G</span><div id="xpBar"><i id="xpFill"></i></div></div>
     <div id="clsName"></div>
     <div id="ultBox" hidden><span id="ultName"></span><div class="bar"><i id="ultFill"></i></div></div>
     <div id="chips"></div>
@@ -311,7 +312,7 @@ body.pad .card3.sel { border-color: var(--gold); background: linear-gradient(#3c
     <button id="play" type="button"><span id="playLabel">ENTER THE HALL</span></button>
   </div>
 </div>
-<div class="overlay" id="levelup" hidden><div class="card"><h1>LEVEL UP</h1><p>Take one of each row <span class="kbd">(keys 4 5 6 for the class skill, 1 2 3 for the gift)</span><span class="padk">(D-pad to choose, up and down to change row, A to take it)</span></p><h3 id="clsHead" hidden>CLASS SKILL</h3><div id="classCards" hidden></div><h3 id="cardHead" hidden>GIFT</h3><div id="cards" hidden></div></div></div>
+<div class="overlay" id="levelup" hidden><div class="card"><h1 id="luTitle">LEVEL UP</h1><p id="luHint">Take one of each row <span class="kbd">(keys 4 5 6 for the class skill, 1 2 3 for the gift)</span><span class="padk">(D-pad to choose, up and down to change row, A to take it)</span></p><h3 id="clsHead" hidden>CLASS SKILL</h3><div id="classCards" hidden></div><h3 id="cardHead" hidden>GIFT</h3><div id="cards" hidden></div></div></div>
 <div class="overlay" id="gameover" hidden><div class="card"><h1>YOU FELL</h1><p id="overStats"></p><button id="restart" type="button">RISE AGAIN</button><p class="kbd">or press Enter</p><p class="padk">or press A</p></div></div>
 <div class="overlay" id="rotate"><div class="card"><div class="phone"></div><h1 style="font-size:clamp(34px,9vw,60px)">Turn your phone sideways</h1><p>The hall plays in landscape.</p></div></div>
 <div class="overlay" id="fatal" hidden><div class="card"><h1 style="font-size:48px">No 3D here</h1><p>This browser could not start WebGL. Try Safari or Chrome directly.</p></div></div>

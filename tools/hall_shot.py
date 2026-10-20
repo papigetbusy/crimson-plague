@@ -11,7 +11,7 @@ PRESETS = {                     # x, z, yaw (deg, 0 = facing the hall), pitch (d
     'banner': (21, 30, -90, 0), 'ceiling': (21, 36, 0, 40), 'carpet': (21, 14, 180, -10),
 }
 views = sys.argv[2:] or list(PRESETS)
-dump = os.path.join(OUT, 'hall.json'); subprocess.check_call(['node', os.path.join(HERE, 'hall_shot.js'), dump])
+dump = os.path.join(OUT, 'hall.json'); subprocess.check_call(['node', os.path.join(HERE, 'hall_shot.js'), dump] + (['safe'] if os.environ.get('SAFE') else []))
 read = lambda p: open(os.path.join(ROOT, 'src', p)).read()
 PAGE = """<canvas id=c width=650 height=300 style='width:1300px;height:600px;image-rendering:pixelated'></canvas><script>
 const THREE = { CanvasTexture: function (c) { this.image = c; }, NearestFilter: 1, RepeatWrapping: 2 };
@@ -36,6 +36,13 @@ const props = [], flames = [];
 for (const t of D.torches) {
   if (t.kind === 'brazier') { props.push([t.x - .275, 0, t.z - .275, t.x + .275, 1.2, t.z + .275, [.18, .1, .1]], [t.x - .42, 1.2, t.z - .42, t.x + .42, 1.36, t.z + .42, [.8, .62, .25]], [t.x - .35, 1.36, t.z - .35, t.x + .35, 1.66, t.z + .35, [.18, .1, .1]]); flames.push([t.x, t.y + .1, t.z, 1.6]); }
   else { const wx = t.x - t.nx * .28, wz = t.z - t.nz * .28; props.push([t.x - t.nx * .12 - .1, t.y - .63, t.z - t.nz * .12 - .1, t.x - t.nx * .12 + .1, t.y - .13, t.z - t.nz * .12 + .1, [.18, .1, .1]], [t.x - .17, t.y - .19, t.z - .17, t.x + .17, t.y - .09, t.z + .17, [.8, .62, .25]]); flames.push([t.x, t.y + .1, t.z, 1]); }
+}
+// traps as plain boxes: spike patches are a plate with thin steel spikes, vents a grate with a flame column
+for (const t of (D.traps || [])) {
+  const x0 = t.x * 2, z0 = t.z * 2, w = t.w * 2, h = t.h * 2;
+  if (t.kind === 'vent') { props.push([x0 + .2, 0, z0 + .2, x0 + w - .2, .06, z0 + h - .2, [.08, .06, .06]]); flames.push([x0 + w / 2, .06, z0 + h / 2, 5], [x0 + w / 2, .5, z0 + h / 2, 4]); continue; }
+  props.push([x0 + .05, 0, z0 + .05, x0 + w - .05, .05, z0 + h - .05, [.14, .06, .07]]);
+  for (let ix = 0; ix < t.w * 2; ix++) for (let iz = 0; iz < t.h * 2; iz++) { const cx = x0 + (ix + .5) * 1, cz = z0 + (iz + .5) * 1, hh = t.kind === 'pulse' ? .3 : .62; props.push([cx - .07, .05, cz - .07, cx + .07, .05 + hh, cz + .07, (ix + iz) % 3 === 0 ? [.7, .12, .16] : [.66, .66, .72]]); }
 }
 const fl = []; for (const [x, y, z, s] of flames) { fl.push([x - .1 * s, y, z - .1 * s, x + .1 * s, y + .34 * s, z + .1 * s, [1, .54, .15]], [x - .055 * s, y + .02 * s, z - .055 * s, x + .055 * s, y + .24 * s, z + .055 * s, [1, .86, .48]]); }
 const propsDraw = boxes(props), flameDraw = boxes(fl);

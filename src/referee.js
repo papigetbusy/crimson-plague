@@ -39,6 +39,8 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
 
   // Every tunable number lives here.
   const DEFAULT_CFG = {
+    trapTier: 0,                                       // 0 = traps get more advanced with the floor; a number forces that tier (test links)
+    startSafe: false, startGold: 600,                  // test links: start in the safe room (#safe) with this much gold
     // body
     eyeStand: 1.7,
     eyeSlide: 0.85,
@@ -103,7 +105,10 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     };
     function loadFloor(n) {
       floorNo = n;
-      M0 = FG.generate(n, makeRng((seed0 * 2654435761 + n * 40503) >>> 0));   // its own random stream, so a floor never depends on how the fight went
+      setMap(FG.generate(n, makeRng((seed0 * 2654435761 + n * 40503) >>> 0), cfg.trapTier || n));   // its own random stream, so a floor never depends on how the fight went
+    }
+    function setMap(map) {
+      M0 = map;
       M0.WALL_H = WALL_H; M0.id = ++mapId;
       G = M0.rows.map((r) => r.split('')); GW = M0.W; GH = M0.H; doorOpen = false;
       floorCells = [];
@@ -200,7 +205,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       hp: cfg.playerHp, hurt: 0, sinceHit: 0, invuln: 0, fireCd: 0,
       ammo: cfg.magSize, reloading: false, reloadT: 0, reloadDur: 0, reloadEmpty: false
     };
-    let monsters = [], orbs = [], pickups = [], spawnQ = [];
+    let monsters = [], orbs = [], pickups = [], coins = [], spawnQ = [];
     let nextId = 1, kills = 0, deaths = 0, time = 0, spawnTimer = 0.4, events = [];
 
     /* ---------------- the run: waves, xp, level-ups, skills ---------------- */
@@ -220,7 +225,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
 
     function newRun() {
       R.wave = cfg.startWave; R.phase = 'intermission'; R.timer = L.firstDelay; R.level = 1; R.xp = 0;
-      R.stacks = {}; R.choices = null; R.classChoices = null; R.pending = 0; R.frenzy = 0; R.over = null; R.time = 0; R.hold = null;
+      R.stacks = {}; R.choices = null; R.classChoices = null; R.pending = 0; R.fogOn = false; R.fogK = 0; R.frenzy = 0; R.over = null; R.time = 0; R.hold = null; R.gold = 0; R.safe = false; R.shop = null; R.shopShut = false;
       kit.reset(cfg.classId);
       grantStartKit();
       M = computeMods();
@@ -242,15 +247,19 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       P.ammo = maxMag(); P.reloading = false; P.reloadT = 0; P.fireCd = 0;
       if (explored) reveal(P);
     }
+    // a normal run starts on the floor its wave belongs to; a test link (#safe) starts in the safe room before that floor, with some gold in hand
+    function startFloor() {
+      if (cfg.startSafe && R.wave > 1) { loadFloor(floorOf(R.wave - 1)); enterSafe(); R.gold = cfg.startGold; } else loadFloor(floorOf(R.wave));
+    }
     function restartRun() {
-      kills = 0; monsters = []; orbs = []; pickups = []; spawnQ = []; spawnTimer = 0.4; mshots.clear();
-      newRun(); loadFloor(floorOf(R.wave)); placePlayer();
+      kills = 0; monsters = []; orbs = []; pickups = []; coins = []; spawnQ = []; spawnTimer = 0.4; mshots.clear();
+      newRun(); startFloor(); placePlayer();
       events.push({ type: 'restart' });
     }
     function startWave() {
       spawnQ = D.waveKinds(R.wave, rng);
-      R.phase = 'fight'; spawnTimer = 0.2;
-      events.push({ type: 'waveStart', n: R.wave, boss: spawnQ.some((k) => D.KINDS[k].boss), count: spawnQ.length });
+      R.phase = 'fight'; spawnTimer = 0.2; R.fogOn = D.fogWave(R.wave, seed0);
+      events.push({ type: 'waveStart', n: R.wave, boss: spawnQ.some((k) => D.KINDS[k].boss), count: spawnQ.length, fog: R.fogOn });
     }
     function endWave() {
       events.push({ type: 'waveClear', n: R.wave });
@@ -354,6 +363,8 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     function dropLoot(m, k) {
       orbs.push({ id: nextId++, x: m.x, z: m.z, v: k.xp, life: L.orbLife });
       if (orbs.length > 80) { gainXp(orbs.shift().v); }
+      const gv = Math.max(1, Math.round(k.xp * L.goldPerXp * (1 + L.goldWave * (R.wave - 1)) * (m.elite.length ? L.goldElite : 1)));
+      coins.push({ id: nextId++, x: m.x, z: m.z, v: gv, life: L.coinLife });
       const r = rng();
       if (k.boss || r < L.healChance) pickups.push({ id: nextId++, kind: 'heal', x: m.x, z: m.z, life: L.pickupLife });
       else if (r < L.healChance + L.frenzyChance) pickups.push({ id: nextId++, kind: 'frenzy', x: m.x, z: m.z, life: L.pickupLife });
@@ -380,9 +391,34 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       events.push({ type: 'doorOpen', x: M0.door.x, z: M0.door.z });
     }
     // through the door: a new, bigger floor; what you carry (health, ammo, level, skills) comes with you
+    // the boss's door leads first into the safe room (a calm hall with a merchant); its own door leads on to the next floor
+    function enterSafe() {
+      for (const o of orbs) gainXp(o.v);
+      for (const c of coins) R.gold += c.v;
+      monsters = []; orbs = []; pickups = []; coins = []; spawnQ = []; mshots.clear();
+      setMap(FG.safeRoom(floorNo));
+      for (const [x, z] of M0.door.cells) G[z][x] = 'd';
+      doorOpen = true; R.safe = true; R.hold = 'door'; R.phase = 'intermission'; R.shop = null; R.shopShut = false; R.fogOn = false;
+      R.stock = kit.choices(R.level) || [];
+      P.x = M0.start.x; P.z = M0.start.z; P.yaw = M0.start.yaw; P.vx = P.vz = 0; P.sliding = false; P.slideT = 0; P.invuln = 1.5;
+      reveal(P);
+      events.push({ type: 'safeRoom', floor: floorNo });
+    }
+    const skillPrice = (sid) => L.shopSkill + L.shopSkillPer * kit.lvl(sid);
+    function shopBuy(i) {
+      const slot = R.stock.map((x, k) => (x ? k : -1)).filter((k) => k >= 0)[i], sid = R.stock[slot];   // i counts the cards still on show
+      if (!sid || R.gold < skillPrice(sid)) return;
+      R.gold -= skillPrice(sid); kit.pick(sid); R.stock[slot] = null;
+      events.push({ type: 'bought', what: sid });
+    }
+    function shopSupply(i) {
+      if (i === 1) { R.shop = null; R.shopShut = true; return; }                 // Leave
+      if (i === 0 && R.gold >= L.shopHeal && P.hp < maxHp()) { R.gold -= L.shopHeal; P.hp = maxHp(); events.push({ type: 'bought', what: 'mend' }); }
+    }
     function nextFloor() {
       for (const o of orbs) gainXp(o.v);
-      monsters = []; orbs = []; pickups = []; spawnQ = []; mshots.clear();
+      monsters = []; orbs = []; pickups = []; coins = []; spawnQ = []; mshots.clear();
+      R.safe = false; R.shop = null; R.stock = null;
       loadFloor(floorNo + 1);
       P.x = M0.start.x; P.z = M0.start.z; P.yaw = M0.start.yaw; P.vx = P.vz = 0; P.sliding = false; P.slideT = 0; P.invuln = 1.5;
       R.hold = null; R.phase = 'intermission'; R.timer = L.intermission; spawnTimer = 0.4;
@@ -507,7 +543,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
           const sc = m.scale, ux = dx / (dist || 1), uz = dz / (dist || 1);
           mshots.fire({ proj: S.proj, owner: m.id, x: m.x + ux * 0.6 * sc, y: S.y * sc, z: m.z + uz * 0.6 * sc, tx: P.x, tz: P.z, ty: P.eye - 0.35, speed: S.speed, r: S.r * Math.max(1, sc * 0.8), dmg: m.dmg * S.dmg });
           events.push({ type: 'shoot', proj: S.proj, id: m.id, x: m.x, z: m.z });
-          m.state = 'chase'; m.shT = S.cd * (0.8 + rng() * 0.4);
+          m.state = 'chase'; m.shT = S.cd * (0.8 + rng() * 0.4) * (m.enraged ? k.enrage.pace : 1);
         }
         return true;
       }
@@ -541,7 +577,8 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
         spawnTimer = 0;
         events.push({ type: 'bossSummon', x: m.x, z: m.z });
       }
-      if (k.charge) m.chT -= dt;
+      if (k.enrage && !m.enraged && m.hp <= m.maxHp * k.enrage.below) { m.enraged = true; m.spd0 *= k.enrage.speed; events.push({ type: 'bossEnrage', x: m.x, z: m.z }); }
+      if (k.charge) m.chT -= dt * (m.enraged ? 1 / k.enrage.pace : 1);
       if (m.state === 'windup') {                         // the boss rears back where it stands, then lunges
         m.wT -= dt; m.yawT = Math.atan2(dx, -dz);
         if (m.wT <= 0) { m.state = 'charge'; m.cT = k.charge.dur; m.cdx = dx / dist; m.cdz = dz / dist; }
@@ -592,6 +629,30 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     }
 
     /* ---------------- orbs and pickups ---------------- */
+    // traps: 0 = harmless right now, 1 = warning, 2 = dangerous. Spikes are always up; a vent glows then fires; pulse spikes rise and sink.
+    function trapState(t) {
+      if (t.kind === 'spike') return 2;
+      if (t.kind === 'pulse') { const u = (time + t.phase) % L.pulseEvery; return u < L.pulseUp - 0.25 ? 2 : u < L.pulseUp ? 1 : u > L.pulseEvery - 0.25 ? 1 : 0; }
+      const u = (time + t.phase) % L.ventEvery;
+      return u >= L.ventEvery - L.ventFire ? 2 : u >= L.ventEvery - L.ventFire - L.ventWarn ? 1 : 0;
+    }
+    const onTrap = (t, x, z) => x >= t.x * CELL - 0.2 && x <= (t.x + t.w) * CELL + 0.2 && z >= t.z * CELL - 0.2 && z <= (t.z + t.h) * CELL + 0.2;
+    function updateTraps(dt) {
+      const traps = M0.traps || [];
+      if (!traps.length) return;
+      P.trapCd = Math.max(0, (P.trapCd || 0) - dt);
+      for (const m of monsters) if (m.trapCd > 0) m.trapCd = Math.max(0, m.trapCd - dt);
+      const tier = cfg.trapTier || floorNo, pct = Math.min(L.trapMax, L.trapPct * (1 + L.trapScale * (tier - 1)));
+      for (const t of traps) {
+        if (trapState(t) !== 2) continue;
+        if (!P.trapCd && !P.sliding && onTrap(t, P.x, P.z)) { P.trapCd = L.trapTick; hurtPlayer(Math.max(1, Math.round(maxHp() * pct)), 'trap'); }
+        for (const m of monsters.slice()) {
+          if (m.trapCd || m.hp <= 0 || D.KINDS[m.kind].hover || !onTrap(t, m.x, m.z)) continue;
+          m.trapCd = L.trapTick;
+          damageMonster(m, Math.max(5, m.maxHp * L.trapMonsterPct * (D.KINDS[m.kind].boss ? L.trapBoss : 1)), false, m.x, 1, m.z, false, false);
+        }
+      }
+    }
     function updateLoot(dt) {
       const reachMag = L.orbMagnet * M.magnet;
       for (const o of orbs) {
@@ -601,6 +662,13 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
         if (d < L.orbPickup) { o.life = -1; events.push({ type: 'orb', v: o.v }); gainXp(o.v); }
       }
       orbs = orbs.filter((o) => o.life > 0);
+      for (const c of coins) {
+        c.life -= dt;
+        const dx = P.x - c.x, dz = P.z - c.z, d = Math.hypot(dx, dz) || 0.001;
+        if (d < L.coinMagnet * M.magnet) { const sp = (6 + (1 - d / (L.coinMagnet * M.magnet)) * 14) * dt; c.x += dx / d * Math.min(sp, d); c.z += dz / d * Math.min(sp, d); }
+        if (d < L.coinPickup) { c.life = -1; R.gold += c.v; events.push({ type: 'coin', v: c.v }); }
+      }
+      coins = coins.filter((c) => c.life > 0);
       const reachPick = L.pickupRadius * (1 + (M.magnet - 1) * 0.5);
       for (const p of pickups) {
         p.life -= dt;
@@ -632,12 +700,23 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       inp = inp || {};
       const p = P;
       if (R.over) { if (inp.restart) restartRun(); return { state: snapshot(), events }; }
+      if (R.safe && M0.merchant) {                          // walk up to the merchant and the shop opens; step away and it can open again
+        const md = Math.hypot(P.x - M0.merchant.x, P.z - M0.merchant.z);
+        if (R.shop) {
+          if (Number.isInteger(inp.pickClass)) shopBuy(inp.pickClass);
+          if (Number.isInteger(inp.pick)) shopSupply(inp.pick);
+          if (inp.shopClose) { R.shop = null; R.shopShut = true; }
+          if (R.shop) return { state: snapshot(), events };
+        } else if (md > L.shopRadius + 1.5) R.shopShut = false;
+        else if (md < L.shopRadius && !R.shopShut) { R.shop = true; return { state: snapshot(), events }; }
+      }
       if (R.choices || R.classChoices) {                 // the level-up pause: nothing moves until a skill (and a class skill) is picked
         if (Number.isInteger(inp.pick)) pickSkill(inp.pick);
         if (Number.isInteger(inp.pickClass)) pickClass(inp.pickClass);
         return { state: snapshot(), events };
       }
       time += dt; R.time += dt;
+      R.fogK = clamp(R.fogK + (R.phase === 'fight' && R.fogOn ? dt : -dt) / L.fogRamp, 0, 1);   // fog thickens while a fog wave is on and lifts when it is cleared
       R.frenzy = Math.max(0, R.frenzy - dt);
 
       // look
@@ -724,11 +803,12 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
         }
         if (!spawnQ.length && !monsters.length) endWave();
       } else if (R.hold === 'door') {                     // the boss is down and the door is open: the next wave waits until you step through
-        if (G[clamp(Math.floor(p.z / CELL), 0, GH - 1)][clamp(Math.floor(p.x / CELL), 0, GW - 1)] === 'd') nextFloor();
+        if (G[clamp(Math.floor(p.z / CELL), 0, GH - 1)][clamp(Math.floor(p.x / CELL), 0, GW - 1)] === 'd') { if (R.safe) nextFloor(); else enterSafe(); }
       } else {
         R.timer -= dt;
         if (R.timer <= 0) startWave();
       }
+      updateTraps(dt);
       updateLoot(dt);
       reveal(p);
 
@@ -755,14 +835,22 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
         monsters: monsters.map((m) => ({
           id: m.id, kind: m.kind, x: m.x, z: m.z, yaw: m.yaw, hp: m.hp, maxHp: m.maxHp,
           flash: m.flash, state: m.state, phase: m.phase, scale: m.scale, elite: m.elite,
-          poisoned: !!(m.fx && m.fx.poison), bleeding: !!(m.fx && m.fx.bleed), cursed: !!(m.fx && m.fx.hexT > 0),
+          enraged: !!m.enraged, poisoned: !!(m.fx && m.fx.poison), bleeding: !!(m.fx && m.fx.bleed), cursed: !!(m.fx && m.fx.hexT > 0),
           atkK: m.state === 'attack' ? clamp(1 - m.atk / D.KINDS[m.kind].wind, 0, 1) : 0,              // 0 to 1 as a melee blow winds up; resets when it lands (the screen raises the weapon with it)
           castK: m.state === 'cast' ? clamp(1 - m.shW / D.KINDS[m.kind].shoot.wind, 0, 1) : 0           // the same for a ranged monster rearing back to throw
         })),
         floor: floorNo, floorId: M0.id,
         door: { x: M0.door.x, z: M0.door.z, open: doorOpen },
+        traps: (M0.traps || []).map(trapState),
+        gold: R.gold, coins: coins.map((c) => ({ id: c.id, x: c.x, z: c.z, v: c.v })),
+        safe: R.safe, merchant: R.safe && M0.merchant ? { x: M0.merchant.x, z: M0.merchant.z } : null,
+        shop: R.shop ? {
+          skills: R.stock.map((sid, i) => sid ? Object.assign(kit.card(sid, R.level), { price: skillPrice(sid), afford: R.gold >= skillPrice(sid), slot: i }) : null).filter(Boolean),
+          supplies: [{ id: 'mend', name: 'Mend', desc: 'Heal to full health', price: L.shopHeal, afford: R.gold >= L.shopHeal && P.hp < maxHp() }, { id: 'leave', name: 'Leave', desc: 'Back to the room', price: 0, afford: true }]
+        } : null,
         compass: boss && boss.state === 'guard' ? { x: boss.x, z: boss.z } : null,      // points at the boss from the moment he spawns until the fight with him starts
         explored,
+        fog: { k: R.fogK, mul: 1 + (L.fogMul - 1) * R.fogK },      // how thick the fog is, and the fraction of the normal view distance you can see
         shots: mshots.view(),
         wave: { n: R.wave, phase: R.phase, timer: Math.max(0, R.timer), left: spawnQ.length + monsters.length, boss: R.phase === 'fight' ? !!boss || spawnQ.some((kd) => D.KINDS[kd].boss) : R.wave % L.bossEvery === 0 },
         bossBar: boss ? { name: D.KINDS[boss.kind].name, hp: boss.hp, maxHp: boss.maxHp, state: boss.state } : null,
@@ -784,15 +872,17 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     function spawnAt(kind, x, z) { addMonster(kind, x, z); }
     function spawnElite(kind, x, z) { forceElite = true; addMonster(kind, x, z); forceElite = false; }   // for tests: an elite right here
     function setCfg(o) { Object.assign(cfg, o); }
+    function clearWave() { spawnQ = []; for (const m of monsters.slice()) killMonster(m); }   // tests: the wave is over right now
+    function giveGold(v) { R.gold += v; }                                               // tests: some gold right now
     function giveXp(v) { gainXp(v); }                                                  // tests: some experience right now
     function setHp(v) { P.hp = v; }                                                    // tests: set the player's health
     function giveSkill(id) { kit.pick(id); }                                           // tests: hand the player a class skill
     function monsterFx(i) { return monsters[i] && monsters[i].fx; }                     // tests: statuses on a monster
     function reset() { deaths = 0; restartRun(); events = []; }
 
-    newRun(); loadFloor(floorOf(R.wave)); placePlayer();
+    newRun(); startFloor(); placePlayer();
     // first state, so the screen can draw before the first step
-    return { get map() { return M0; }, cfg, setCfg, place, spawnAt, spawnElite, giveSkill, giveXp, setHp, monsterFx, step, snapshot, reset, kinds: D.KINDS, defaults: Object.assign({}, DEFAULT_CFG) };
+    return { get map() { return M0; }, cfg, setCfg, place, spawnAt, spawnElite, clearWave, giveSkill, giveGold, giveXp, setHp, monsterFx, step, snapshot, reset, kinds: D.KINDS, defaults: Object.assign({}, DEFAULT_CFG) };
   }
 
   return { create };

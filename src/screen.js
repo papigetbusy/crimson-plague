@@ -16,7 +16,8 @@
 
   // a link can start the run on a later wave, to try the boss: ...#wave10 (or ?wave=10)
   const startWaveFromLink = (() => { const m = /wave=?(\d+)/.exec(location.hash + location.search); return m ? Math.max(1, Math.min(60, +m[1])) : 1; })();
-  if (startWaveFromLink > 1) { ref.setCfg({ startWave: startWaveFromLink }); ref.reset(); }
+  const safeFromLink = /safe/.test(location.hash + location.search);                        // ...#wave=11&safe starts in the safe room with gold, to try the shop
+  if (startWaveFromLink > 1) { ref.setCfg({ startWave: startWaveFromLink, startSafe: safeFromLink }); ref.reset(); }
 
   // presentation-only numbers (the tuning panel edits these too)
   const GUN_DEFAULTS = { gunX: 0.29, gunY: -0.36, gunZ: -0.5, gunScale: 1.15 };
@@ -150,6 +151,7 @@
   boxMesh(0.26, 0.04, 0.04, flashMat, 0, 0, -0.08, flashMesh);
   flashMesh.visible = false;
   const muzzleLight = new THREE.PointLight(0xff9a40, 0, 14, 2); muzzle.add(muzzleLight);
+  const fogGlow = new THREE.PointLight(0xffa860, 0, 16, 2); gun.add(fogGlow); fogGlow.position.set(0, 0.1, -0.3);   // the glow of your gun, only lit in fog
 
   // reload choreography: hand keyframes (k = 0..1 through the reload)
   const RL_NORMAL = { hand: [[0, HOLD], [0.16, MAGH], [0.24, MAGH], [0.38, BELT], [0.46, BELT], [0.64, MAGH], [0.72, MAGH], [0.9, HOLD], [1, HOLD]], grab: 0.24, pullEnd: 0.38, newStart: 0.46, seat: 0.64, tilt: [0.14, 0.8, 1.0], snd: { magout: 0.3, magin: 0.66 }, bolt: null };
@@ -211,6 +213,7 @@
   const dying = [];
   const smoothLight = (x, z) => worldView.light(x, 1.5, z, 0, 1, 0);
   const loot = LootView.create(THREE, scene, glowTex);       // XP orbs and pickups
+  const trapView = TrapView.create(THREE, scene, glowTex);   // spike patches, flame vents, rising spikes
   const fx = FxSprites.create(THREE, camera, scene);          // sprite explosions, sparks and lightning (look presets, see fx_plan.js)
   const fxOn = () => fx.art() && view.fxPreset !== 'original';
   let shakeAmp = 0, shakeT = 0;
@@ -461,9 +464,9 @@
     const out = {
       mx, mz, lookX: I.lookX, lookY: I.lookY, touchX: I.touchX, touchY: I.touchY, padX: pr ? pr.padX : 0, padY: pr ? pr.padY : 0,
       fire: mouse.fire || tch.fire || !!(pr && pr.fire), ads: mouse.ads || tch.ads || !!(pr && pr.ads),
-      sprint: !!(keys.ShiftLeft || keys.ShiftRight) || tch.sprint || !!(pr && pr.sprint), slide: I.slide || !!(pr && pr.slide), reload: I.reload || !!(pr && pr.reload), pick: I.pick, pickClass: I.pickClass, restart: I.restart
+      sprint: !!(keys.ShiftLeft || keys.ShiftRight) || tch.sprint || !!(pr && pr.sprint), slide: I.slide || !!(pr && pr.slide), reload: I.reload || !!(pr && pr.reload), pick: I.pick, pickClass: I.pickClass, shopClose: I.shopClose, restart: I.restart
     };
-    I.lookX = I.lookY = I.touchX = I.touchY = 0; I.slide = false; I.reload = false; I.pick = undefined; I.pickClass = undefined; I.restart = false;
+    I.lookX = I.lookY = I.touchX = I.touchY = 0; I.slide = false; I.reload = false; I.pick = undefined; I.pickClass = undefined; I.shopClose = false; I.restart = false;
     return out;
   }
 
@@ -500,8 +503,9 @@
     if (r.start) { if (running) setRunning(false); else begin(true); return; }
     if (!running) { if (r.nav && !started) chooseClass(classSel + r.nav); if (r.confirm) begin(true); return; }
     if (minimap.isOpen) { if (r.map || r.confirm) minimap.setOpen(false); return; }               // the big map covers the screen: any pad press that is not a move closes it, so it can never trap a controller
+    if (state.shop && r.map) { I.shopClose = true; return; }                                         // Back leaves the shop
     if (r.map) { minimap.toggle(); return; }
-    if (state.choices || state.classChoices) {
+    if (state.choices || state.classChoices || state.shop) {
       if (r.nav) hud.moveSel(r.nav);
       if (r.navY) hud.moveRow(r.navY);
       const sel = hud.selected();
@@ -729,7 +733,26 @@
       b.position.set(m.x + rx * off, top, m.z + rz * off); b.scale.setScalar(sz * (1 + 0.08 * Math.sin(st.t * 6 + i)));
     }
   }
-  function dropBadges(en) { if (!en.badges) return; for (const k in en.badges) scene.remove(en.badges[k]); en.badges = null; }
+  // fog waves: monsters show two glowing red eyes (drawn through the fog) so you can tell where they are before you can see them
+  const eyeMat = new THREE.SpriteMaterial({ map: glowTex, color: 0xff3a2a, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, transparent: true });
+  function monsterEyes(en, m, st) {
+    const k = st.fog.k;
+    if (k < 0.02 && !en.eyes) return;
+    if (!en.eyes) { en.eyes = [new THREE.Sprite(eyeMat), new THREE.Sprite(eyeMat)]; for (const e of en.eyes) scene.add(e); }
+    const dist = Math.hypot(m.x - st.player.x, m.z - st.player.z), on = k >= 0.02 && dist < 46;
+    const fx = Math.sin(m.yaw), fz = -Math.cos(m.yaw), rx = Math.cos(m.yaw), rz = Math.sin(m.yaw), y = badgeHeight(m.kind) * 0.8 * m.scale, sz = Math.max(0.28, 0.24 * m.scale);
+    en.eyes.forEach((e, i) => {
+      e.visible = on; if (!on) return;
+      const side = i ? 1 : -1;
+      e.position.set(m.x + fx * 0.3 * m.scale + rx * side * 0.13 * m.scale, y, m.z + fz * 0.3 * m.scale + rz * side * 0.13 * m.scale);
+      e.scale.setScalar(sz * (0.85 + 0.15 * Math.sin(st.t * 5 + m.id)));
+    });
+    if (on) eyeMat.opacity = Math.min(1, k * 1.3);
+  }
+  function dropBadges(en) {
+    if (en.badges) { for (const k in en.badges) scene.remove(en.badges[k]); en.badges = null; }
+    if (en.eyes) { for (const e of en.eyes) scene.remove(e); en.eyes = null; }
+  }
   const thrallMons = new Map();
   function syncThralls(st) {
     const seen = new Set();
@@ -752,11 +775,11 @@
       if (!en) { en = RIGS.build(m.kind); mons.set(m.id, en); scene.add(en.root); }
       en.root.position.set(m.x, (ref.kinds[m.kind].hover || 0) * m.scale, m.z); en.root.rotation.y = -m.yaw; en.root.scale.setScalar(m.scale * MODEL);
       RIGS.animate(en, m, st.t);
-      const lt = smoothLight(m.x, m.z), f = clamp(m.flash / 0.12, 0, 1), warn = m.state === 'windup' ? 0.35 + 0.25 * Math.sin(st.t * 30) : (m.castK > 0 ? 0.12 + 0.3 * m.castK : m.atkK > 0.4 ? 0.2 * m.atkK : 0);
+      const lt = smoothLight(m.x, m.z), f = clamp(m.flash / 0.12, 0, 1), warn = m.state === 'windup' ? 0.35 + 0.25 * Math.sin(st.t * 30) : (m.castK > 0 ? 0.12 + 0.3 * m.castK : m.atkK > 0.4 ? 0.2 * m.atkK : 0) + (m.enraged ? 0.14 + 0.08 * Math.sin(st.t * 9) : 0);   // an enraged boss glows red
       const ge = eliteGlow(m.elite, st.t);                                    // elites glow the colour of their abilities
       const sf = statusGlow(m, st.t);                                          // poison glows purple, bleed red, hex gold; a fresh hit pulses
       en.skin.emissive.setRGB(Math.max(0, (lt[0] - 0.14)) * 0.22 + f * 0.7 + warn + ge[0] + sf[0], Math.max(0, (lt[1] - 0.1)) * 0.12 + f * 0.35 + ge[1] + sf[1], f * 0.3 + ge[2] + sf[2]);
-      statusBadges(en, m, st);
+      statusBadges(en, m, st); monsterEyes(en, m, st);
     }
     for (const [id, en] of mons) if (!seen.has(id)) { scene.remove(en.root); dropBadges(en); mons.delete(id); }
     for (const [id, p] of statusPulse) { p.t -= dt; if (p.t <= 0) statusPulse.delete(id); }
@@ -833,6 +856,7 @@
     const fl = 1 + 0.035 * Math.sin(time * 17) + 0.025 * Math.sin(time * 31 + 1.3), fb = flashT / 0.06;
     const br = view.brightness * fl;
     worldView.update(time, camera.position, dt, br, fb, st.door.open);
+    scene.fog.far = view.fogFar * st.fog.mul; fogGlow.intensity = 1.7 * st.fog.k;   // a fog wave shrinks the view, and your gun lights a small circle around you
 
     // particles, tracers, damage numbers
     for (const q of parts) {
@@ -869,7 +893,7 @@
     elHit.classList.toggle('kill', hitKill);
     diedT = Math.max(0, diedT - dt); diedEl.style.opacity = clamp(diedT / 0.6, 0, 1);
     shotsView.update(st.shots, st.t);
-    hud.update(st, dt); minimap.update(st, dt); compass.update(st); loot.update(st, time);
+    hud.update(st, dt); minimap.update(st, dt); compass.update(st); loot.update(st, time); trapView.update(st, ref.map, time);
   }
 
   /* ============ main loop ============ */

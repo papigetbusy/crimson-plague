@@ -50,8 +50,22 @@ const Minimap = (function () {
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(tile, cx0, cz0, cw, cw, 0, 0, cv.width, cv.height);
       const px = (wx) => (wx / CELL - cx0) * s, pz = (wz) => (wz / CELL - cz0) * s;
+      // traps you have seen: a small mark on each cell of the patch (vents orange, spikes red)
+      if (map.traps && st.explored) for (const t of map.traps) {
+        if (!st.explored[(t.z + (t.h >> 1)) * map.W + t.x + (t.w >> 1)]) continue;
+        ctx.fillStyle = t.kind === 'vent' ? 'rgba(255,140,30,0.9)' : 'rgba(210,50,60,0.85)';
+        ctx.fillRect((t.x - cx0) * s, (t.z - cz0) * s, Math.max(2, t.w * s), Math.max(2, t.h * s));
+      }
       if (st.door) marker(ctx, px(st.door.x), pz(st.door.z), Math.max(3, s * 1.2), st.door.open ? '#6fe08a' : '#e2b03c');
       if (st.compass) marker(ctx, px(st.compass.x), pz(st.compass.z), Math.max(3, s * 1.4), '#e23a42');   // the Demon Lord, from the moment he appears until he wakes
+      // every monster alive, so you can find the last one or see where to run; with only a few left, ones off the edge of the small map are pinned to its rim
+      const few = st.monsters.length <= 6;
+      for (const m of st.monsters) {
+        let mx = px(m.x), mz = pz(m.z), r = Math.max(2, s * (m.kind === 'demon' ? 1.6 : 0.8));
+        const out = mx < 3 || mz < 3 || mx > cv.width - 3 || mz > cv.height - 3;
+        if (out) { if (!few || cv === big) continue; mx = Math.max(4, Math.min(cv.width - 4, mx)); mz = Math.max(4, Math.min(cv.height - 4, mz)); r = 3; }
+        marker(ctx, mx, mz, r, m.kind === 'demon' ? '#ff2a2a' : m.elite && m.elite.length ? '#ff9a2a' : '#c8202a');
+      }
       arrow(ctx, px(st.player.x), pz(st.player.z), st.player.yaw, Math.max(3, s * 1.1));
     }
     function setOpen(v) { open = v; bigBox.hidden = !v; timer = 0; }

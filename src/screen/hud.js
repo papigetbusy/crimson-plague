@@ -5,7 +5,7 @@ const Hud = (function () {
     const el = {
       waveN: $('waveN'), floorN: $('floorN'), waveLeft: $('waveLeft'), lvlN: $('lvlN'), xpFill: $('xpFill'), boss: $('boss'), bossName: $('bossName'), bossFill: $('bossFill'),
       banner: $('banner'), bannerT: $('bannerT'), bannerS: $('bannerS'), chips: $('chips'), frenzy: $('frenzy'), clsName: $('clsName'), ultBox: $('ultBox'), ultName: $('ultName'), ultFill: $('ultFill'),
-      levelup: $('levelup'), cards: $('cards'), classCards: $('classCards'), classHead: $('clsHead'), cardHead: $('cardHead'), over: $('gameover'), overStats: $('overStats'), restart: $('restart')
+      levelup: $('levelup'), gold: $('goldN'), luTitle: $('luTitle'), luHint: $('luHint'), cards: $('cards'), classCards: $('classCards'), classHead: $('clsHead'), cardHead: $('cardHead'), over: $('gameover'), overStats: $('overStats'), restart: $('restart')
     };
     let last = {}, chipKey = '', bannerT = 0;
     const setText = (k, node, v) => { if (last[k] !== v) { node.textContent = v; last[k] = v; } };
@@ -15,15 +15,18 @@ const Hud = (function () {
       el.banner.classList.remove('show'); void el.banner.offsetWidth; el.banner.classList.add('show'); bannerT = 2.6;
     }
     function event(e) {
-      if (e.type === 'waveStart') banner('WAVE ' + e.n, e.boss ? 'A Demon Lord comes' : e.count + ' monsters');
+      if (e.type === 'waveStart') banner('WAVE ' + e.n, e.boss ? 'A Demon Lord comes' : (e.fog ? 'Fog rolls in · ' : '') + e.count + ' monsters');
       else if (e.type === 'waveClear') banner('WAVE ' + e.n + ' CLEARED', 'Gather the souls');
       else if (e.type === 'pickup') banner(e.kind === 'heal' ? '+HEALTH' : 'BLOODLUST', e.kind === 'heal' ? '' : 'More damage, faster fire');
       else if (e.type === 'bossSummon') banner('HOUNDS CALLED', '');
       else if (e.type === 'bossWake') banner('THE DEMON LORD WAKES', 'Fight for the door');
+      else if (e.type === 'bossEnrage') banner('THE DEMON LORD ENRAGES', 'He is faster now');
       else if (e.type === 'doorOpen') banner('THE DOOR OPENS', 'Step through to the next floor');
       else if (e.type === 'ultStart') banner(e.name.toUpperCase(), 'Unleashed');
       else if (e.type === 'skillNew') banner(e.name.toUpperCase(), 'New class skill');
       else if (e.type === 'skillLevel') banner(e.name.toUpperCase(), 'Level ' + e.lvl + ': ' + e.stat);
+      else if (e.type === 'safeRoom') banner('THE SAFE ROOM', 'Spend your gold, then take the far door');
+      else if (e.type === 'bought') banner(e.what === 'mend' ? 'MENDED' : 'TRAINED', e.what === 'mend' ? 'Full health' : 'A class skill grew');
       else if (e.type === 'floorChange') banner('FLOOR ' + e.floor, 'The Plague runs deeper');
     }
     // two rows of cards on a level-up: the class skills (top) and the regular gifts (below). A controller highlights one card at a time.
@@ -38,7 +41,7 @@ const Hud = (function () {
     function moveRow(d) { const o = cur + d; if (o >= 0 && o < rows.length && rows[o].n) { cur = o; applySel(); } }
     function selected() { const r = rows[cur]; return r.n ? { row: r.name, index: r.sel } : null; }
     function showRow(r, list, label) {
-      const key = list ? list.map((c) => c.id + (c.stack || c.lvl || 0)).join() : '';
+      const key = list ? list.map((c) => c.id + (c.stack || c.lvl || 0) + (c.price === undefined ? '' : ':' + c.price + (c.afford ? 'y' : 'n'))).join() : '';
       if (key === r.key) return;
       r.key = key; r.box.hidden = !list; r.head.hidden = !list;
       r.box.textContent = '';
@@ -52,11 +55,18 @@ const Hud = (function () {
         const lv = document.createElement('em');
         if (r.name === 'class') lv.textContent = c.lvl ? 'Level ' + (c.lvl + 1) + ' of ' + c.max : (c.ult ? 'Ultimate' : 'New skill');
         else lv.textContent = c.stack ? 'Level ' + (c.stack + 1) + ' of ' + c.max : 'New';
+        if (c.price !== undefined) { lv.textContent = (c.price ? c.price + ' gold' : '') + (c.lvl !== undefined && r.name === 'class' ? (c.price ? '  ·  ' : '') + (c.lvl ? 'Level ' + (c.lvl + 1) : 'New') : ''); b.classList.toggle('poor', !c.afford); }
         b.append(hint, nm, ds, lv);
         b.addEventListener('pointerdown', (ev) => { ev.preventDefault(); r.send(i); });
         r.box.appendChild(b);
       });
       fixCur(); applySel();
+    }
+    // the merchant: class skill levels for gold (top row) and supplies (below); the same two rows as a level-up
+    function showShop(shop) {
+      el.luTitle.textContent = shop ? 'THE MERCHANT' : 'LEVEL UP';
+      el.luHint.firstChild.textContent = shop ? 'Spend your gold ' : 'Take one of each row ';
+      el.classHead.textContent = shop ? 'CLASS TRAINING' : 'CLASS SKILL'; el.cardHead.textContent = shop ? 'SUPPLIES' : 'GIFT';
     }
     function showCards(choices, classChoices) {
       showRow(rows[0], classChoices);
@@ -85,7 +95,9 @@ const Hud = (function () {
       if (cl && cl.ult) { setText('un', el.ultName, cl.ult.name + (cl.ult.active ? ' ACTIVE' : '')); el.ultFill.style.width = (Math.min(1, cl.ult.k) * 100).toFixed(1) + '%'; el.ultBox.classList.toggle('on', cl.ult.active); }
       el.frenzy.hidden = !(st.frenzy > 0);
       if (st.frenzy > 0) setText('fz', el.frenzy, 'BLOODLUST ' + Math.ceil(st.frenzy));
-      showCards(st.choices, st.classChoices);
+      setText('gd', el.gold, st.gold + ' G');
+      showShop(st.shop);
+      showCards(st.shop ? st.shop.supplies : st.choices, st.shop ? (st.shop.skills.length ? st.shop.skills : null) : st.classChoices);
       el.over.hidden = !st.over;
       if (st.over) { const m = Math.floor(st.over.time / 60), s = Math.floor(st.over.time % 60); setText('os', el.overStats, 'You reached wave ' + st.over.wave + '  |  level ' + st.over.level + '  |  ' + st.kills + ' slain  |  ' + m + ':' + (s < 10 ? '0' : '') + s); }
       bannerT -= dt; if (bannerT <= 0) el.banner.classList.remove('show');

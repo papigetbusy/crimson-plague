@@ -58,7 +58,7 @@ Starts as plain grey-box floors. The goal is the shape and size of the world.
 - **Check:** difficulty keeps climbing past the cap and fights stay readable on the phone.
 - **Gate:** floors 3, 4 and 5 still feel fresh.
 
-## Phase 4 — Classes, skills and level-ups
+## Phase 4 — Classes, skills and level-ups — SIGNED OFF 2026-10-20 (first batch; unbuilt pieces move to Phase 9)
 The most important choices in the game.
 - [ ] A class system like Crusader Tactics; classes and skills are chosen in tandem. (First batch built: Gunslinger, Assassin, Witch, picked before a run; every level-up gives one class skill and one regular card.)
 - [ ] 4 skills plus 1 ultimate per run (first batch: all passive, the ultimate charges from kills and fires by itself), a replace-skill menu, skills that level with use, perk picks at set levels.
@@ -67,10 +67,14 @@ The most important choices in the game.
 - **Check:** different class and skill picks make runs feel different.
 - **Gate:** no two runs feel the same.
 
-## Phase 5 — Floor features and shop floors
-One feature at a time, each tested on the phone.
-- [ ] Key-gated doors, traps, darkness and fog, weather, a safe room between floors.
-- [ ] Shop floors that let you buy better gear.
+## Phase 5 — Floor features and shop floors — SIGNED OFF 2026-10-20 (weather and key-gated doors move to Phase 9)
+One feature at a time, each tested on the phone. The safe room and the shop floor are the same place (owner, 2026-10-20).
+- [x] Fog waves: some ordinary waves from wave 3 roll in fog that cuts the view to about 30%; your gun lights a small circle and monsters show glowing eyes. (Built; owner to judge the look.)
+- [x] Gold: monsters drop coins, a gold counter on the HUD, gold carries across floors. (Built.)
+- [x] Safe room after each boss: a calm hall with a merchant; the boss door leads in, its own far door leads on to the next floor. The merchant sells class skill levels and a full heal for gold. (Built, placeholder look.)
+- [x] Traps: spike patches (always up), flame vents (on a beat) and rising spikes; they hurt monsters too, and get more advanced and harder-hitting the deeper the floor. Monsters show as dots on the minimap. (Built; owner to judge.)
+- Weather (falling embers or ash in the halls, light on the phone) moved to Phase 9 with the key-gated doors (owner, 2026-10-20).
+- [ ] Merchant sells real gear once guns exist (Phase 6).
 - **Check:** each feature adds tension without hurting phone performance.
 - **Gate:** per feature.
 
@@ -95,10 +99,13 @@ One feature at a time, each tested on the phone.
 ## Phase 9 — Feel, polish, controller, PC and release
 - [ ] The rest of the Crusader Tactics monster roster (Orc Brute, Shadow Assassin, Dark Knight, Golden Drake and more): placeholders first, then Grok's art one monster at a time. Moved here from Phase 3.
 - [ ] Feel pass: movement, shooting, spread and recoil, monster speed and damage, wave and floor pacing, XP speed; this is where the TUNE panel numbers get locked.
+- [ ] Key-gated doors, moved here from Phase 5 (owner, 2026-10-20). Plan: a few rooms per floor (one on floors 1 to 3, two from floor 4) are shut by a heavy door; one glowing key-carrying monster on the floor drops the key; walking into the door with the key opens it and uses the key up; locked doors show as gold bars on the minimap and the key carrier as a gold dot. Until Phase 6 gives real loot, a locked room holds a pile of gold and a full heal; after it, the real chests and guns.
+- [ ] Weather: falling embers or ash in the halls, light on the phone. Moved here from Phase 5.
 - [ ] Music, a fuller sound set, stronger hit feedback.
 - [ ] Real menu, short tutorial, settings; clean up the leftover "Crimson Hall" names.
 - [ ] Controller support, then PC.
 - [ ] Performance pass on real devices; home-screen app like Crusader Tactics; saved best floor and wave (leaderboards only if the owner wants them).
+- [ ] **Reminder for the owner (asked 2026-10-20): when the game is done, try Meshy (the 3D model plugin) on Grok's two best gun pictures, `art-drop/gun/gun_side_master.jpg` and `gun_three_quarter_rear.jpg`. Claude's workspace cannot reach Meshy, so the owner runs Image to 3D on meshy.ai (PBR off, low or medium polygons), downloads a `.glb` and sends it; Claude then compares it with the voxel gun.**
 - **Gate:** friends can play it without help.
 
 ## Parked (not forgotten)

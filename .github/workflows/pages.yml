@@ -48,6 +48,12 @@ jobs:
         run: node tests/elites.test.js
       - name: Class tests
         run: node tests/classes.test.js
+      - name: Fog tests
+        run: node tests/fog.test.js
+      - name: Shop tests
+        run: node tests/shop.test.js
+      - name: Trap tests
+        run: node tests/traps.test.js
       - name: Build the page
         run: node tools/build.js "build-$(date -u +%Y%m%d-%H%M)-${GITHUB_SHA::7}"
       - name: Publish previews and models
