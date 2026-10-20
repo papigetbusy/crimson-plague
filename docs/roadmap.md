@@ -2,7 +2,7 @@
 
 The plan for everything the game still needs, in phases. Rewritten with the owner on 2026-10-19 (it replaces the first 8-phase plan and borrows the way Crusader Tactics was built). **Work only on the current phase.**
 
-**Current phase: 2 — Floors and minimap** (status: built, waiting for the owner to test it on the phone; Phase 1, the art lock, was signed off by the owner on 2026-10-19)
+**Current phase: 3 — Monsters and waves** (status: not started; Phase 1 and Phase 2 were signed off by the owner on 2026-10-19)
 
 ## How we build (every phase works this way)
 - **Every phase starts rough and ugly on purpose** (grey boxes, placeholder shapes, plain text menus) and is built out step by step. Nothing is pretty until its phase says so.
@@ -38,7 +38,7 @@ Locked first, before anything else is added. The world stays as it is.
 - [x] Performance budget measured on the owner's real iPhone (frame rate with a full wave) and a face budget per monster if it stutters.
 - **Gate:** the owner signs off the look on his phone. Nothing new is built until then.
 
-## Phase 2 — Floors and minimap
+## Phase 2 — Floors and minimap — SIGNED OFF 2026-10-19
 Starts as plain grey-box floors. The goal is the shape and size of the world.
 - [x] Floor generator in the referee: seeded rooms joined by winding corridors, always fully connected.
 - [x] Floor size table: floor 1 smallest, each floor bigger, up to the maximum size, then random layouts of the same size.
