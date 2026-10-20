@@ -166,6 +166,25 @@ body.touch .touchhelp { display: block; }
 #fatal { z-index: 50; }
 @media (prefers-reduced-motion: reduce) { #rotate .phone, #kills.pop { animation: none; } }
 
+/* classes: picker on the start card, class name and ultimate bar in the HUD, two-row level-up, cloak veil */
+#classPick { display: flex; gap: clamp(6px, 1.6vw, 14px); justify-content: center; margin: 4px 0 8px; }
+#classPick button { flex: 1; max-width: 200px; display: flex; flex-direction: column; gap: 3px; align-items: center; padding: 8px 6px; font-family: var(--body); color: var(--ink); background: linear-gradient(#2a0c10, #12060a); border: 2px solid var(--gold-dim); cursor: pointer; touch-action: manipulation; }
+#classPick button.sel { border-color: var(--gold); background: linear-gradient(#3c1016, #1a080c); box-shadow: 0 0 14px rgba(207, 165, 74, 0.4); }
+#classPick b { font-family: var(--display); font-weight: 400; font-size: clamp(17px, 4.4vh, 24px); color: var(--gold); }
+#classPick span { font-size: clamp(11px, 2.8vh, 14px); color: var(--dim); line-height: 1.15; }
+#classPick em { font-style: normal; font-weight: 700; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--crimson-hi); }
+#clsName { font-weight: 700; font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold-dim); text-shadow: 0 1px 0 #000; }
+#ultBox { width: 150px; margin-top: 3px; } #ultBox span { font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink); text-shadow: 0 1px 0 #000; }
+#ultBox .bar { height: 6px; background: rgba(0, 0, 0, 0.55); border: 1px solid var(--gold-dim); } #ultBox .bar i { display: block; height: 100%; width: 0; background: linear-gradient(#b8d8ff, #5a86d0); }
+#ultBox.on .bar i { background: linear-gradient(#fff4c0, #e0a020); } #ultBox.on span { color: var(--gold); }
+#chips span.cls { border-color: var(--gold-dim); } #chips span.ult { color: var(--gold); }
+#levelup h3 { margin: 6px 0 4px; font-family: var(--body); font-size: 12px; letter-spacing: 0.24em; color: var(--gold-dim); text-align: center; }
+#classCards { display: flex; gap: clamp(8px, 2vw, 18px); justify-content: center; }
+#levelup.two h1 { font-size: clamp(26px, 8vh, 44px); } #levelup.two .card > p { margin: 2px 0; font-size: 12px; }
+#levelup.two .card3 { min-height: clamp(64px, 24vh, 104px); padding: 10px 6px 6px; gap: 3px; } #levelup.two .card3 b { font-size: clamp(16px, 4.4vh, 22px); } #levelup.two .card3 span { font-size: clamp(11px, 2.9vh, 14px); }
+.card3.cls { border-color: #8a6a2a; } .card3.ult { border-color: #e8d28a; box-shadow: 0 0 14px rgba(232, 210, 138, 0.5); }
+#cloakVeil { position: fixed; inset: 0; pointer-events: none; z-index: 2; opacity: 0; transition: opacity 0.25s; background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0) 55%, rgba(235, 245, 255, 0.34) 100%); }
+#cloakVeil.on { opacity: 1; }
 /* core loop HUD: wave, level, boss bar, banner, level-up cards, game over */
 #lvl { margin-top: 5px; display: flex; align-items: center; gap: 8px; }
 #lvlN { font-weight: 700; font-size: 13px; letter-spacing: 0.14em; color: var(--gold); text-shadow: 0 1px 0 #000; min-width: 3.2em; }
@@ -232,11 +251,14 @@ body.pad .card3.sel { border-color: var(--gold); background: linear-gradient(#3c
     <div id="killbox"><div id="kills">0</div><span>Slain</span></div>
     <div id="hpBar"><div id="hpFill"></div></div>
     <div id="lvl"><span id="lvlN">LV 1</span><div id="xpBar"><i id="xpFill"></i></div></div>
+    <div id="clsName"></div>
+    <div id="ultBox" hidden><span id="ultName"></span><div class="bar"><i id="ultFill"></i></div></div>
     <div id="chips"></div>
   </div>
   <div id="waveBox"><b id="waveN">WAVE 1</b><span id="waveLeft"></span><span id="floorN">FLOOR 1</span></div>
   <div id="compass" hidden><i id="compassArrow"></i><b id="compassDist"></b></div>
   <div id="boss" hidden><span id="bossName"></span><div class="bar"><i id="bossFill"></i></div></div>
+  <div id="cloakVeil"></div>
   <div id="banner"><b id="bannerT"></b><span id="bannerS"></span></div>
   <div id="frenzy" hidden></div>
   <div id="hurt"></div>
@@ -279,12 +301,17 @@ body.pad .card3.sel { border-color: var(--gold); background: linear-gradient(#3c
       <p><b>Shift</b> sprint</p><p><b>Right click</b> aim</p>
       <p><b>C</b> slide while running</p><p><b>R</b> reload</p><p><b>Tab</b> tuning</p><p></p>
     </div>
+    <div id="classPick">
+      <button type="button" data-cls="gunslinger" class="sel"><b>Gunslinger</b><span>Fast guns, lots of bullets</span><em>+15% fire rate</em></button>
+      <button type="button" data-cls="assassin"><b>Assassin</b><span>Fast, deadly, slides and hides</span><em>+10% move speed</em></button>
+      <button type="button" data-cls="witch"><b>Witch</b><span>Curses, poison and the dead</span><em>Your hits poison</em></button>
+    </div>
     <p class="padhelp"><b>Left stick</b> moves, <b>right stick</b> looks. <b>RT</b> fires, <b>LT</b> aims. <b>Click the left stick</b> to sprint. <b>B</b> slides while sprinting. <b>X</b> reloads. <b>Start</b> pauses. Press <b>A</b> to begin.</p>
     <p class="touchhelp"><b>Left thumb</b> moves. <b>Drag the right side</b> to look. Hold <b>Fire</b> and drag to shoot while turning. <b>Run</b> and <b>Aim</b> toggle, <b>Slide</b> and <b>Reload</b> are taps. <b>Tune</b> is top right.</p>
     <button id="play" type="button"><span id="playLabel">ENTER THE HALL</span></button>
   </div>
 </div>
-<div class="overlay" id="levelup" hidden><div class="card"><h1>LEVEL UP</h1><p>Choose a gift for this run <span class="kbd">(press 1, 2 or 3)</span><span class="padk">(D-pad to choose, A to take it)</span></p><div id="cards"></div></div></div>
+<div class="overlay" id="levelup" hidden><div class="card"><h1>LEVEL UP</h1><p>Take one of each row <span class="kbd">(keys 4 5 6 for the class skill, 1 2 3 for the gift)</span><span class="padk">(D-pad to choose, up and down to change row, A to take it)</span></p><h3 id="clsHead" hidden>CLASS SKILL</h3><div id="classCards" hidden></div><h3 id="cardHead" hidden>GIFT</h3><div id="cards" hidden></div></div></div>
 <div class="overlay" id="gameover" hidden><div class="card"><h1>YOU FELL</h1><p id="overStats"></p><button id="restart" type="button">RISE AGAIN</button><p class="kbd">or press Enter</p><p class="padk">or press A</p></div></div>
 <div class="overlay" id="rotate"><div class="card"><div class="phone"></div><h1 style="font-size:clamp(34px,9vw,60px)">Turn your phone sideways</h1><p>The hall plays in landscape.</p></div></div>
 <div class="overlay" id="fatal" hidden><div class="card"><h1 style="font-size:48px">No 3D here</h1><p>This browser could not start WebGL. Try Safari or Chrome directly.</p></div></div>

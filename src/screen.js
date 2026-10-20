@@ -307,6 +307,7 @@
     else if (kind === 'wave') { tone('sawtooth', 90, 70, 0.5, 0.3); noise(0.4, 400, 120, 0.18); }
     else if (kind === 'boss') { tone('sawtooth', 70, 38, 1.0, 0.45); noise(0.7, 300, 80, 0.3); }
     else if (kind === 'blast') { noise(0.25, 1500, 150, 0.35); }
+    else if (kind === 'cloak') { noise(0.4, 3000, 400, 0.2); tone('sine', 700, 300, 0.3, 0.12); }
     else if (kind === 'spit') { noise(0.12, 900, 300, 0.3, 'bandpass'); tone('sine', 300, 140, 0.1, 0.2); }
     else if (kind === 'zap') { noise(0.14, 6000, 1500, 0.3); tone('sawtooth', 900, 200, 0.1, 0.18); }
     else if (kind === 'fireball') { noise(0.35, 1200, 200, 0.3); tone('sawtooth', 220, 90, 0.3, 0.2); }
@@ -353,7 +354,8 @@
     if (e.code === 'KeyR' && running) I.reload = true;
     if (e.code === 'KeyM' && running) minimap.toggle();                                  // open or close the big map
     if (e.code === 'KeyF' && running) startInspect();   // F shows both sides, press again for the magazine
-    if (running && e.code.startsWith('Digit') && +e.code.slice(5) >= 1 && +e.code.slice(5) <= 3) I.pick = +e.code.slice(5) - 1;   // level-up choice
+    if (running && e.code.startsWith('Digit') && +e.code.slice(5) >= 1 && +e.code.slice(5) <= 3) I.pick = +e.code.slice(5) - 1;   // level-up gift
+    if (running && e.code.startsWith('Digit') && +e.code.slice(5) >= 4 && +e.code.slice(5) <= 6) I.pickClass = +e.code.slice(5) - 4;   // level-up class skill
     if (running && (e.code === 'Enter' || e.code === 'NumpadEnter')) I.restart = true;                                     // after you fall
     if (e.code === 'Tab') { e.preventDefault(); if (started) togglePanel(); }
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
@@ -459,9 +461,9 @@
     const out = {
       mx, mz, lookX: I.lookX, lookY: I.lookY, touchX: I.touchX, touchY: I.touchY, padX: pr ? pr.padX : 0, padY: pr ? pr.padY : 0,
       fire: mouse.fire || tch.fire || !!(pr && pr.fire), ads: mouse.ads || tch.ads || !!(pr && pr.ads),
-      sprint: !!(keys.ShiftLeft || keys.ShiftRight) || tch.sprint || !!(pr && pr.sprint), slide: I.slide || !!(pr && pr.slide), reload: I.reload || !!(pr && pr.reload), pick: I.pick, restart: I.restart
+      sprint: !!(keys.ShiftLeft || keys.ShiftRight) || tch.sprint || !!(pr && pr.sprint), slide: I.slide || !!(pr && pr.slide), reload: I.reload || !!(pr && pr.reload), pick: I.pick, pickClass: I.pickClass, restart: I.restart
     };
-    I.lookX = I.lookY = I.touchX = I.touchY = 0; I.slide = false; I.reload = false; I.pick = undefined; I.restart = false;
+    I.lookX = I.lookY = I.touchX = I.touchY = 0; I.slide = false; I.reload = false; I.pick = undefined; I.pickClass = undefined; I.restart = false;
     return out;
   }
 
@@ -470,11 +472,12 @@
   const overlay = $('start'), playBtn = $('play'), playLabel = $('playLabel'), diedEl = $('died');
   let lastKills = -1, hitT = 0, hitKill = false, diedT = 0;
   const minimap = Minimap.create($, () => ref.map), compass = Compass.create($);
-  const hud = Hud.create($, { pick: (i) => { I.pick = i; }, restart: () => { I.restart = true; } });
+  const hud = Hud.create($, { pick: (i) => { I.pick = i; }, pickClass: (i) => { I.pickClass = i; }, restart: () => { I.restart = true; } });
 
   function setRunning(v) {
     running = v;
     overlay.hidden = v;
+    classPick.hidden = started;
     if (!v) {
       mouse.fire = mouse.ads = false; tch.fire = false; bFire.classList.remove('on');
       playLabel.textContent = started ? 'RESUME' : 'ENTER THE HALL';
@@ -495,12 +498,27 @@
   function padMenus() {
     const r = pad.now; if (!r) return;
     if (r.start) { if (running) setRunning(false); else begin(true); return; }
-    if (!running) { if (r.confirm) begin(true); return; }
+    if (!running) { if (r.nav && !started) chooseClass(classSel + r.nav); if (r.confirm) begin(true); return; }
     if (minimap.isOpen) { if (r.map || r.confirm) minimap.setOpen(false); return; }               // the big map covers the screen: any pad press that is not a move closes it, so it can never trap a controller
     if (r.map) { minimap.toggle(); return; }
-    if (state.choices) { if (r.nav) hud.moveSel(r.nav); if (r.confirm && hud.selected() >= 0) I.pick = hud.selected(); }
+    if (state.choices || state.classChoices) {
+      if (r.nav) hud.moveSel(r.nav);
+      if (r.navY) hud.moveRow(r.navY);
+      const sel = hud.selected();
+      if (r.confirm && sel) { if (sel.row === 'class') I.pickClass = sel.index; else I.pick = sel.index; }
+    }
     else if (state.over && r.confirm) I.restart = true;
   }
+
+  // class picker on the start card (before the first run; a run keeps its class when you rise again)
+  const classPick = $('classPick'), classBtns = Array.from(classPick.querySelectorAll('button')), CLASS_IDS = classBtns.map((b) => b.dataset.cls);
+  let classSel = 0;
+  function chooseClass(i) {
+    classSel = (i + CLASS_IDS.length) % CLASS_IDS.length;
+    classBtns.forEach((b, j) => b.classList.toggle('sel', j === classSel));
+    ref.setCfg({ classId: CLASS_IDS[classSel] }); ref.reset(); state = ref.snapshot();
+  }
+  classBtns.forEach((b, i) => b.addEventListener('click', () => chooseClass(i)));
 
   const TUNE = [
     ['Movement', null],
@@ -628,7 +646,7 @@
       } else if (e.type === 'kill') {
         hitT = 0.28; hitKill = true; sfx('kill');
         const en = mons.get(e.id);
-        if (en) { mons.delete(e.id); dying.push({ en, t: 0 }); }
+        if (en) { mons.delete(e.id); dropBadges(en); dying.push({ en, t: 0 }); }
         burst(e.x, 1.2 * e.scale, e.z, e.boss ? 40 : 24, [0xb01818, 0x701010, 0x3a0a0a, 0xff6a20], 5, 0.8, 11, e.boss ? 2 : 1.3);
         if (fxOn()) { fx.play(view.fxPreset, 'kill', e.x, 1.2 * e.scale, e.z, { scale: e.scale, boss: e.boss }); bigShake(FxPlan.shake(view.fxPreset, 'kill') * (e.boss ? 1.6 : 1)); }
       } else if (e.type === 'blast') { burst(e.x, e.y, e.z, 10, [0xff9a1c, 0xff4500, 0xffd060], 5, 0.4, 4, 1.1); sfx('blast'); if (fxOn()) { fx.play(view.fxPreset, 'blast', e.x, e.y, e.z, { r: e.r }); bigShake(FxPlan.shake(view.fxPreset, 'blast')); } }
@@ -636,6 +654,13 @@
       else if (e.type === 'slide') { sfx('slide'); }
       else if (e.type === 'shoot') { sfx(e.proj === 'bolt' ? 'zap' : e.proj === 'spit' ? 'spit' : 'fireball'); }
       else if (e.type === 'projHit') { burst(e.x, e.y, e.z, e.proj === 'fire' ? 12 : 7, e.proj === 'spit' ? [0x9cff4a, 0x4fd02a, 0x2a6a18] : e.proj === 'bolt' ? [0xeaffff, 0x6fd8ff, 0xffffff] : [0xffe070, 0xff5a14, 0xc8260c], 4, 0.4, 6, 0.8); if (e.onPlayer) sfx('hurt'); }
+      else if (e.type === 'status') { const S = STATUS[e.kind]; statusPulse.set(e.id, { kind: e.kind, t: 0.4 }); burst(e.x, e.y + 0.3, e.z, 10, e.kind === 'poison' ? [0xb45cff, 0x7a2cc8, 0xe0b8ff] : e.kind === 'bleed' ? [0xe23a42, 0x8a1018] : [0xf0c860, 0xfff0b0], 3.5, 0.5, 2, 0.9); }
+      else if (e.type === 'cloakStart') { sfx('cloak'); }
+      else if (e.type === 'ultStart') { sfx('boss'); bigShake(0.12); }
+      else if (e.type === 'skillLevel' || e.type === 'skillNew') { sfx('levelup'); }
+      else if (e.type === 'ricochet') { addTracer(e.x1, e.y1, e.z1); burst(e.x1, e.y1, e.z1, 4, [0xffe070, 0xffb347], 3, 0.3, 8, 0.6); }
+      else if (e.type === 'plague') { burst(e.x, 1, e.z, 14, [0xb45cff, 0x7a2cc8, 0xe0b8ff], 4, 0.6, 3, 1); }
+      else if (e.type === 'raise') { burst(e.x, 1, e.z, 14, [0x6fe08a, 0x2a6a40, 0xc8ffd8], 4, 0.7, -2, 1); sfx('orb'); }
       else if (e.type === 'eliteBlast') { burst(e.x, 1, e.z, 16, [0x9cff4a, 0xffe070, 0xff5a14], 6, 0.5, 4, 0.9); sfx('fireball'); }
       else if (e.type === 'orb') { sfx('orb'); }
       else if (e.type === 'pickup' || e.type === 'skill') { sfx('pickup'); }
@@ -655,6 +680,70 @@
     for (const id of list) { const g = ELITE_GLOW[id]; o[0] += g[0] / n; o[1] += g[1] / n; o[2] += g[2] / n; }
     return [o[0] * k, o[1] * k, o[2] * k];
   }
+  // the dead the Witch raised: the monster's own shape, tinted green and a little see-through
+  // status effects, shown on the monster the way Crusader Tactics does: a coloured glow on the body and a badge over the head
+  const STATUS = {
+    poison: { col: [0.36, 0.08, 0.55], css: '#b45cff', flag: 'poisoned' },
+    bleed: { col: [0.42, 0.03, 0.04], css: '#e23a42', flag: 'bleeding' },
+    hex: { col: [0.42, 0.34, 0.05], css: '#f0c860', flag: 'cursed' }
+  };
+  const statusPulse = new Map();                                                // monster id -> { kind, t } for the burst when a status first lands
+  function statusGlow(m, t) {
+    const o = [0, 0, 0], p = statusPulse.get(m.id), br = 0.7 + 0.3 * Math.sin(t * 7 + m.id);
+    for (const k in STATUS) if (m[STATUS[k].flag]) { const c = STATUS[k].col; o[0] += c[0] * br; o[1] += c[1] * br; o[2] += c[2] * br; }
+    if (p) { const c = STATUS[p.kind].col, k = p.t / 0.4; o[0] += c[0] * 1.6 * k; o[1] += c[1] * 1.6 * k; o[2] += c[2] * 1.6 * k; }
+    return o;
+  }
+  const badgeTex = {};
+  function badgeTexture(kind) {                                                 // a small round icon drawn once: droplet (bleed), skull (poison), rune (hex)
+    if (badgeTex[kind]) return badgeTex[kind];
+    const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'), col = STATUS[kind].css;
+    g.fillStyle = 'rgba(8,4,6,0.85)'; g.beginPath(); g.arc(32, 32, 29, 0, 7); g.fill();
+    g.strokeStyle = col; g.lineWidth = 4; g.beginPath(); g.arc(32, 32, 27, 0, 7); g.stroke();
+    g.fillStyle = col; g.strokeStyle = col; g.lineWidth = 4; g.lineCap = 'round';
+    if (kind === 'bleed') { g.beginPath(); g.moveTo(32, 12); g.bezierCurveTo(46, 30, 46, 46, 32, 50); g.bezierCurveTo(18, 46, 18, 30, 32, 12); g.fill(); }
+    else if (kind === 'poison') { g.beginPath(); g.arc(32, 28, 14, 0, 7); g.fill(); g.fillRect(24, 36, 16, 12); g.fillStyle = '#10060c'; g.beginPath(); g.arc(26, 29, 4, 0, 7); g.arc(38, 29, 4, 0, 7); g.fill(); g.fillRect(30, 38, 4, 7); }
+    else { g.beginPath(); for (let i = 0; i < 5; i++) { const a = -Math.PI / 2 + i * 4 * Math.PI / 5; g.lineTo(32 + Math.cos(a) * 18, 33 + Math.sin(a) * 18); } g.closePath(); g.stroke(); g.beginPath(); g.arc(32, 33, 4, 0, 7); g.fill(); }
+    return (badgeTex[kind] = new THREE.CanvasTexture(c));
+  }
+  const badgeMats = {}, badgeTop = {};
+  function badgeMat(kind) { return badgeMats[kind] || (badgeMats[kind] = new THREE.SpriteMaterial({ map: badgeTexture(kind), transparent: true, fog: false })); }
+  function badgeHeight(kind) {                                                  // head top for this monster kind, in model units (cached)
+    if (badgeTop[kind] === undefined) { let y = 0; for (const sp of ref.kinds[kind].spheres) y = Math.max(y, sp.y + sp.r); badgeTop[kind] = y + (ref.kinds[kind].hover || 0); }
+    return badgeTop[kind];
+  }
+  function statusBadges(en, m, st) {
+    const kinds = Object.keys(STATUS).filter((k) => m[STATUS[k].flag]);
+    if (!kinds.length && !en.badges) return;
+    if (!en.badges) en.badges = {};
+    const yaw = st.player.yaw, rx = Math.cos(yaw), rz = Math.sin(yaw), top = badgeHeight(m.kind) * m.scale + 0.45, sz = Math.max(0.5, m.scale * 0.42);
+    let i = 0;
+    for (const k in STATUS) {
+      let b = en.badges[k];
+      const on = kinds.includes(k);
+      if (on && !b) { b = en.badges[k] = new THREE.Sprite(badgeMat(k)); scene.add(b); }
+      if (!b) continue;
+      b.visible = on;
+      if (!on) continue;
+      const off = (i - (kinds.length - 1) / 2) * sz * 1.05; i++;
+      b.position.set(m.x + rx * off, top, m.z + rz * off); b.scale.setScalar(sz * (1 + 0.08 * Math.sin(st.t * 6 + i)));
+    }
+  }
+  function dropBadges(en) { if (!en.badges) return; for (const k in en.badges) scene.remove(en.badges[k]); en.badges = null; }
+  const thrallMons = new Map();
+  function syncThralls(st) {
+    const seen = new Set();
+    for (const th of (st.cls && st.cls.thralls) || []) {
+      seen.add(th.id);
+      let en = thrallMons.get(th.id);
+      if (!en) { en = RIGS.build(th.kind); en.skin.transparent = true; en.skin.opacity = 0.7; thrallMons.set(th.id, en); scene.add(en.root); }
+      en.root.position.set(th.x, (ref.kinds[th.kind].hover || 0) * th.scale, th.z); en.root.rotation.y = -th.yaw; en.root.scale.setScalar(th.scale * MODEL);
+      RIGS.animate(en, { id: th.id, state: 'chase', phase: st.t * 7 + th.id, atkK: 0, castK: 0 }, st.t);
+      const pulse = 0.28 + 0.1 * Math.sin(st.t * 6 + th.id);
+      en.skin.emissive.setRGB(0.05, pulse, 0.12); en.skin.opacity = 0.35 + 0.4 * Math.min(1, th.k * 4);
+    }
+    for (const [id, en] of thrallMons) if (!seen.has(id)) { scene.remove(en.root); thrallMons.delete(id); }
+  }
   function syncMonsters(st, dt) {
     const seen = new Set();
     for (const m of st.monsters) {
@@ -665,9 +754,12 @@
       RIGS.animate(en, m, st.t);
       const lt = smoothLight(m.x, m.z), f = clamp(m.flash / 0.12, 0, 1), warn = m.state === 'windup' ? 0.35 + 0.25 * Math.sin(st.t * 30) : (m.castK > 0 ? 0.12 + 0.3 * m.castK : m.atkK > 0.4 ? 0.2 * m.atkK : 0);
       const ge = eliteGlow(m.elite, st.t);                                    // elites glow the colour of their abilities
-      en.skin.emissive.setRGB(Math.max(0, (lt[0] - 0.14)) * 0.22 + f * 0.7 + warn + ge[0], Math.max(0, (lt[1] - 0.1)) * 0.12 + f * 0.35 + ge[1], f * 0.3 + ge[2]);
+      const sf = statusGlow(m, st.t);                                          // poison glows purple, bleed red, hex gold; a fresh hit pulses
+      en.skin.emissive.setRGB(Math.max(0, (lt[0] - 0.14)) * 0.22 + f * 0.7 + warn + ge[0] + sf[0], Math.max(0, (lt[1] - 0.1)) * 0.12 + f * 0.35 + ge[1] + sf[1], f * 0.3 + ge[2] + sf[2]);
+      statusBadges(en, m, st);
     }
-    for (const [id, en] of mons) if (!seen.has(id)) { scene.remove(en.root); mons.delete(id); }
+    for (const [id, en] of mons) if (!seen.has(id)) { scene.remove(en.root); dropBadges(en); mons.delete(id); }
+    for (const [id, p] of statusPulse) { p.t -= dt; if (p.t <= 0) statusPulse.delete(id); }
     for (let i = dying.length - 1; i >= 0; i--) {
       const d = dying[i]; d.t += dt;
       const k = d.t / 0.55;
@@ -677,6 +769,19 @@
     }
   }
 
+  // the Assassin's cloak: gun and hands glow white (the same white glow as Crusader Tactics) so you can tell monsters cannot see you
+  let cloakK = 0;
+  const WHITE = new THREE.Color(1, 1, 1), GUN_EM = new THREE.Color(0x1c0c0c), GLOVE_EM = new THREE.Color(0x1a100c);
+  function cloakGlow(st, dt) {
+    const c = st.cls && st.cls.cloak, want = c ? (c.k < 0.5 ? 0.45 + 0.55 * (Math.sin(st.t * 24) > 0 ? 1 : 0.2) * c.k * 2 : 1) : 0;   // blinks in the last half second
+    cloakK += (want - cloakK) * Math.min(1, dt * 10 + 0.0001);
+    const k = Math.min(1, cloakK * 0.85);
+    gunLook.gunMat.emissive.copy(GUN_EM).lerp(WHITE, k);
+    gloveMat.emissive.copy(GLOVE_EM).lerp(WHITE, k);
+    gunLook.glowMat.color.lerp(WHITE, k);
+    cloakVeil.classList.toggle('on', cloakK > 0.3);
+  }
+  const cloakVeil = $('cloakVeil');
   function updateView(st, dt, time) {
     const p = st.player;
     camera.position.set(p.x, p.eye, p.z);
@@ -717,6 +822,7 @@
       sp * 0.22 + sl * 0.3 + Math.sin(bob) * 0.012 * bobAmt + rl.rz + mo.rz
     );
     gunLook.update(time, flashT / 0.06);
+    cloakGlow(st, dt);
     // muzzle flash
     flashT = Math.max(0, flashT - dt);
     flashMesh.visible = flashT > 0;
@@ -770,6 +876,7 @@
   let state = ref.snapshot(), frameErr = '';
   function ensureFloor(st) { if (st.floorId !== loadedFloor) { worldView.load(ref.map, view.fogFar); loadedFloor = st.floorId; } }   // a new floor (or a new run) is baked and drawn here
   ensureFloor(state);
+  chooseClass(0);
   function frame(now) {
     requestAnimationFrame(frame);
     const dt = Math.min((now - clock.last) / 1000, 0.05); clock.last = now;
@@ -782,7 +889,7 @@
       I.lookX = I.lookY = I.touchX = I.touchY = 0; I.slide = false; I.reload = false;
     }
     stage('floor', () => ensureFloor(state));
-    stage('monsters', () => syncMonsters(state, dt));
+    stage('monsters', () => { syncMonsters(state, dt); syncThralls(state); });
     stage('view', () => updateView(state, running && !panelOpen ? dt : 0, now / 1000));
     stage('draw', () => renderer.render(scene, camera));
   }

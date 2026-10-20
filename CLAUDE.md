@@ -32,6 +32,7 @@ Keep the code neat: small focused files and functions in clear folders, never on
 - `node tests/monsters.test.js` : monster checks (wind-up and reach, ranged attackers, projectiles, slide, unlock waves)
 - `node tests/rigs.test.js` : every monster builds into a rig and every pose runs
 - `node tests/elites.test.js` : past the monster cap (more health and damage forever, elites with abilities, volatile blast)
+- `node tests/classes.test.js` : classes (Gunslinger, Assassin, Witch: start bonuses, two-row level-ups, every skill and ultimate, cloak, skill levels)
 - `node tests/floor.test.js` : floor checks (sizes, connected rooms, far-corner door, short carpet)
 - `python3 tools/floor_map.py out.png [floor ...]` : draws top-down pictures of generated floors
 - `python3 tools/hall_shot.py out_dir [view ...]` : draws pictures of the hall the way the game does, with no GPU (corridor, hall, torch, banner, ceiling, carpet, or x,z,yaw,pitch)

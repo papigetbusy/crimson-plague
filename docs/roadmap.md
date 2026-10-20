@@ -2,7 +2,7 @@
 
 The plan for everything the game still needs, in phases. Rewritten with the owner on 2026-10-19 (it replaces the first 8-phase plan and borrows the way Crusader Tactics was built). **Work only on the current phase.**
 
-**Current phase: 4 — Classes, skills and level-ups** (status: not started; Phases 1, 2 and 3 were signed off by the owner on 2026-10-19)
+**Current phase: 4 — Classes, skills and level-ups** (status: first batch built for private testing: three classes; Phases 1, 2 and 3 were signed off by the owner on 2026-10-19)
 
 ## How we build (every phase works this way)
 - **Every phase starts rough and ugly on purpose** (grey boxes, placeholder shapes, plain text menus) and is built out step by step. Nothing is pretty until its phase says so.
@@ -60,8 +60,8 @@ Starts as plain grey-box floors. The goal is the shape and size of the world.
 
 ## Phase 4 — Classes, skills and level-ups
 The most important choices in the game.
-- [ ] A class system like Crusader Tactics; classes and skills are chosen in tandem.
-- [ ] 4 skills plus 1 ultimate per run, a replace-skill menu, skills that level with use, perk picks at set levels.
+- [ ] A class system like Crusader Tactics; classes and skills are chosen in tandem. (First batch built: Gunslinger, Assassin, Witch, picked before a run; every level-up gives one class skill and one regular card.)
+- [ ] 4 skills plus 1 ultimate per run (first batch: all passive, the ultimate charges from kills and fires by itself), a replace-skill menu, skills that level with use, perk picks at set levels.
 - [ ] Skill rarity and combinations that stack; stronger temporary power-ups and pickups.
 - [ ] XP curve and level-up pacing tuned across many floors.
 - **Check:** different class and skill picks make runs feel different.

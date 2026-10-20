@@ -69,7 +69,9 @@ with sync_playwright() as p:
     pad(page, held=[RIGHT]); wait(page); pad(page); wait(page)
     check('phone: D-pad right moves the highlight to the second card', page.evaluate("()=>Array.from(document.querySelectorAll('.card3')).findIndex(b=>b.classList.contains('sel'))") == 1)
     pad(page, held=[A]); wait(page, 200); pad(page); wait(page, 300)
-    check('phone: A takes the highlighted card', not shown(page, '#levelup'))
+    check('phone: A takes the highlighted class skill, then the gift row is highlighted', page.evaluate("()=>document.getElementById('classCards').children.length===0&&document.querySelectorAll('#cards .card3.sel').length===1") and shown(page, '#levelup'))
+    pad(page, held=[A]); wait(page, 200); pad(page); wait(page, 300)
+    check('phone: A takes the highlighted gift and the game goes on', not shown(page, '#levelup'))
     # pause and resume with Start
     pad(page, held=[START]); wait(page); pad(page); wait(page, 200)
     check('phone: Start pauses', shown(page, '#start'))

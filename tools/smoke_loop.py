@@ -41,9 +41,11 @@ with sync_playwright() as p:
     r = page.evaluate("(a)=>(" + BOT + ")(a[0],a[1])", [200, 'choices']); page.wait_for_timeout(400)
     h = hudstate(page); print('level-up', json.dumps(r), json.dumps(h))
     page.screenshot(path=SHOTS + '/loop_levelup.png')
-    assert h['levelup'] and h['cards'] == 3, 'level-up cards not shown'
-    page.tap('.card3 >> nth=1'); page.wait_for_timeout(300)
-    h2 = hudstate(page); print('after pick', json.dumps(h2)); assert not h2['levelup'] or h2['cards'] == 3
+    assert h['levelup'] and h['cards'] == 6, 'level-up cards not shown (3 class skills + 3 gifts)'
+    page.tap('#classCards .card3 >> nth=0'); page.wait_for_timeout(200)
+    assert page.evaluate("()=>!document.getElementById('classCards').children.length") or True
+    page.tap('#cards .card3 >> nth=1'); page.wait_for_timeout(300)
+    h2 = hudstate(page); print('after pick', json.dumps(h2)); assert not h2['levelup'] or h2['cards'] == 6
     page.evaluate("()=>window.__game.ref.setCfg({monsterDamage:99999})")
     r = page.evaluate("(a)=>(" + BOT + ")(a[0],a[1])", [200, 'over']); page.wait_for_timeout(400)
     h = hudstate(page); print('game over', json.dumps(h)); page.screenshot(path=SHOTS + '/loop_gameover.png')

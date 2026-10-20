@@ -9,7 +9,7 @@
      B (Circle)       slide while sprinting
      X (Square)       reload
    Menus: A (Cross) confirms (start, resume, pick a level-up card, rise again), Start (Options) pauses and resumes, Back (View / Share) opens and closes the big map,
-          D-pad or left stick left/right moves between level-up cards.
+          D-pad or left stick left/right moves between level-up cards, up/down between the two rows (class skill row, gift row), and left/right picks the class on the start card.
    Not wired yet because the game has no such thing yet: Y and RB (weapons), LB and A in play (abilities), R3 (melee). */
 const PadInput = (function () {
   const BTN = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, BACK: 8, START: 9, L3: 10, R3: 11, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 };
@@ -26,9 +26,9 @@ const PadInput = (function () {
   const axis = (pad, i) => (pad.axes && typeof pad.axes[i] === 'number' ? pad.axes[i] : 0);
 
   function create() {
-    let prev = {}, sprintOn = false, flick = 0;
+    let prev = {}, sprintOn = false, flick = 0, flickY = 0;
     const edge = (name, now) => { const e = now && !prev[name]; prev[name] = now; return e; };
-    function reset() { prev = {}; sprintOn = false; flick = 0; }
+    function reset() { prev = {}; sprintOn = false; flick = 0; flickY = 0; }
 
     // pad: a Gamepad (or anything shaped like one). Returns the play input plus one-shot menu presses.
     function read(pad) {
@@ -47,9 +47,11 @@ const PadInput = (function () {
       const padDir = (down(pad, BTN.RIGHT) ? 1 : 0) - (down(pad, BTN.LEFT) ? 1 : 0);
       const dir = padDir || stickDir;
       const nav = dir !== 0 && dir !== flick ? dir : 0; flick = dir;
+      const stickY = mzUp < -FLICK ? -1 : mzUp > FLICK ? 1 : 0, padY2 = (down(pad, BTN.DOWN) ? 1 : 0) - (down(pad, BTN.UP) ? 1 : 0);
+      const dirY = padY2 || stickY, navY = dirY !== 0 && dirY !== flickY ? dirY : 0; flickY = dirY;       // up and down move between the two rows of level-up cards
       const confirm = edge('A', down(pad, BTN.A));
       const start = edge('START', down(pad, BTN.START)), map = edge('BACK', down(pad, BTN.BACK));
-      return { mx, mz: -mzUp, padX, padY, fire, ads, sprint: sprinting, slide, reload, reloadHeld: down(pad, BTN.X), nav, confirm, start, map };
+      return { mx, mz: -mzUp, padX, padY, fire, ads, sprint: sprinting, slide, reload, reloadHeld: down(pad, BTN.X), nav, confirm, start, map, navY };
     }
     return { read, reset };
   }

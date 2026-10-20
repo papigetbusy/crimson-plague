@@ -23,6 +23,7 @@ const Referee = (function () {
   const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
   const lerp = (a, b, t) => a + (b - a) * t;
   const D = typeof RefereeData !== 'undefined' ? RefereeData : require('./referee_data.js');   // monster kinds, skills, wave plan
+  const CL = typeof RefereeClass !== 'undefined' ? RefereeClass : require('./referee_class.js');   // the Gunslinger, Assassin and Witch rules
   const SH = typeof RefereeShots !== 'undefined' ? RefereeShots : require('./referee_shots.js');   // monster projectiles
 const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js');              // the floors: rooms and winding corridors from a seed
 
@@ -73,6 +74,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     // monsters (base = the horned fiend; every kind multiplies these, see referee_data.js)
     monsterCount: 6,          // how many may be alive in wave 1; one more each wave, up to the cap in referee_data.js
     startWave: 1,
+    classId: '',              // '' = no class; the screen picks gunslinger, assassin or witch before a run
     monsterHp: 70,
     monsterSpeed: 3.6,
     monsterDamage: 7,
@@ -218,7 +220,8 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
 
     function newRun() {
       R.wave = cfg.startWave; R.phase = 'intermission'; R.timer = L.firstDelay; R.level = 1; R.xp = 0;
-      R.stacks = {}; R.choices = null; R.pending = 0; R.frenzy = 0; R.over = null; R.time = 0; R.hold = null;
+      R.stacks = {}; R.choices = null; R.classChoices = null; R.pending = 0; R.frenzy = 0; R.over = null; R.time = 0; R.hold = null;
+      kit.reset(cfg.classId);
       grantStartKit();
       M = computeMods();
     }
@@ -230,6 +233,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
         const s = open[Math.floor(rng() * open.length)]; R.stacks[s.id] = stackOf(s.id) + 1;
       }
       R.level = 1 + n;
+      kit.grantKit(n, R.level);
     }
     function placePlayer() {
       P.x = M0.start.x; P.z = M0.start.z; P.yaw = M0.start.yaw; P.pitch = 0;
@@ -261,12 +265,13 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     function gainXp(v) {
       R.xp += v;
       while (R.xp >= D.xpNeed(R.level)) { R.xp -= D.xpNeed(R.level); R.level++; R.pending++; events.push({ type: 'levelUp', level: R.level }); }
-      if (!R.choices && R.pending > 0) rollChoices();
+      if (!R.choices && !R.classChoices && R.pending > 0) rollChoices();
     }
     function rollChoices() {
       const open = D.SKILLS.filter((s) => stackOf(s.id) < s.max);
       R.pending--;
-      if (!open.length) { P.hp = Math.min(maxHp(), P.hp + 25); if (R.pending > 0) rollChoices(); return; }
+      R.classChoices = kit.choices(R.level);                // a class skill row comes with every level-up
+      if (!open.length) { if (!R.classChoices) { P.hp = Math.min(maxHp(), P.hp + 25); if (R.pending > 0) rollChoices(); } return; }
       for (let i = open.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); const t = open[i]; open[i] = open[j]; open[j] = t; }
       R.choices = open.slice(0, 3).map((s) => s.id);
     }
@@ -278,7 +283,14 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       if (id === 'hp') P.hp = Math.min(maxHp(), P.hp + skillOf('hp').per);
       events.push({ type: 'skill', id });
       R.choices = null;
-      if (R.pending > 0) rollChoices();
+      if (!R.classChoices && R.pending > 0) rollChoices();
+    }
+    function pickClass(i) {
+      const id = R.classChoices && R.classChoices[i];
+      if (!id) return;
+      kit.pick(id);
+      R.classChoices = null;
+      if (!R.choices && R.pending > 0) rollChoices();
     }
 
     /* ---------------- monsters: stats, spawning, loot ---------------- */
@@ -348,7 +360,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     }
     function killMonster(m) {
       const k = D.KINDS[m.kind];
-      kills++;
+      kills++; kit.onKill(m);
       events.push({ type: 'kill', id: m.id, kind: m.kind, boss: !!k.boss, x: m.x, z: m.z, scale: m.scale, yaw: m.yaw });
       dropLoot(m, k);
       if (m.elite.length) {
@@ -377,10 +389,11 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       reveal(P);
       events.push({ type: 'floorChange', floor: floorNo });
     }
-    function damageMonster(m, dmg, crit, x, y, z, splash) {
+    function damageMonster(m, dmg, crit, x, y, z, splash, quiet) {
       if (m.hp <= 0) return;
-      m.hp -= dmg; m.flash = 0.12; if (!splash) m.stun = 0.08;
-      events.push({ type: 'hit', id: m.id, dmg: Math.round(dmg), crit, x, y, z, splash: !!splash });
+      dmg *= kit.takenMul(m);                               // a hexed monster takes extra
+      m.hp -= dmg;
+      if (!quiet) { m.flash = 0.12; if (!splash) m.stun = 0.08; events.push({ type: 'hit', id: m.id, dmg: Math.round(dmg), crit, x, y, z, splash: !!splash }); }
       if (M.steal > 0) P.hp = Math.min(maxHp(), P.hp + dmg * M.steal);
       if (m.hp <= 0) killMonster(m);
     }
@@ -401,11 +414,17 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       player: () => ({ x: P.x, z: P.z, eye: P.eye, sliding: P.sliding }), hurt: (d, id) => hurtPlayer(d, id), event: (e) => events.push(e)
     });
 
+    const kit = CL.create({
+      rng, P, monsters: () => monsters, damage: (m, d, c, x, y, z, sp, q) => damageMonster(m, d, c, x, y, z, sp, q),
+      heal: (v) => { P.hp = Math.min(maxHp(), P.hp + v); }, maxHp: () => maxHp(), baseDmg: () => cfg.damage * M.dmg, isBoss: (m) => !!D.KINDS[m.kind].boss,
+      event: (e) => events.push(e), tryMove: (o, dx, dz, r) => tryMove(o, dx, dz, r), nextId: () => nextId++
+    });
+
     /* ---------------- reload ---------------- */
     function startReload() {
       if (P.reloading || P.ammo >= maxMag()) return;
       P.reloading = true; P.reloadT = 0; P.reloadEmpty = P.ammo <= 0;
-      P.reloadDur = (cfg.reloadTime + (P.reloadEmpty ? cfg.reloadEmptyExtra : 0)) * M.reloadMul;
+      P.reloadDur = (cfg.reloadTime + (P.reloadEmpty ? cfg.reloadEmptyExtra : 0)) * M.reloadMul * kit.reloadMul(); kit.onReload();
       events.push({ type: 'reloadStart', dur: P.reloadDur, empty: P.reloadEmpty });
     }
 
@@ -437,7 +456,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       const rx = cy, rz = sy;                              // right
       const ux = -sy * sp, uy = cp, uz = cy * sp;          // up
       const ex = P.x, ey = P.eye, ez = P.z;
-      const bullets = 1 + M.multi, dmgOne = cfg.damage * M.dmg * (R.frenzy > 0 ? L.frenzyDmg : 1);
+      const vol = kit.beginShot(), bullets = 1 + M.multi + vol.extra, dmgOne = cfg.damage * M.dmg * (R.frenzy > 0 ? L.frenzyDmg : 1);
       for (let b = 0; b < bullets; b++) {
         const s = s0 + (b > 0 ? 0.02 : 0);
         const a = rng() * Math.PI * 2, rr = Math.sqrt(rng()) * s;
@@ -460,8 +479,10 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
           ex: endx, ey: endy, ez: endz, hit: bestM ? 'monster' : (bestT >= cfg.range - 0.2 ? 'none' : 'wall')
         });
         if (bestM) {
-          const dmg = dmgOne * (bestHead ? cfg.headMul : 1);
-          damageMonster(bestM, dmg, bestHead, endx, endy, endz, false);
+          const crit = kit.rollCrit(vol.force); if (crit) events.push({ type: 'crit' });
+          const dmg = dmgOne * (bestHead ? cfg.headMul : 1) * (crit ? kit.critMul() : 1);
+          damageMonster(bestM, dmg, bestHead || crit, endx, endy, endz, false);
+          kit.onHit(bestM, dmg, crit, endx, endy, endz);
           if (M.blast > 0) {
             events.push({ type: 'blast', x: endx, y: endy, z: endz, r: L.blastRadius });
             for (const o of monsters.slice()) if (o !== bestM && Math.hypot(o.x - endx, o.z - endz) < L.blastRadius + 0.5 * o.scale) damageMonster(o, dmg * M.blast, false, o.x, 1.2 * o.scale, o.z, true);
@@ -469,7 +490,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
         }
       }
       P.kick += cfg.recoilKick;
-      P.ammo--;
+      if (!kit.mods().freeAmmo) P.ammo--;
       if (P.ammo <= 0) startReload();
     }
 
@@ -532,6 +553,8 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
         if (m.cT <= 0) { m.state = 'chase'; m.chT = k.charge.every; }
       } else if (k.charge && m.state !== 'cast' && m.chT <= 0 && dist > 3.5 && dist < 22 && hasLOS(m.x, m.z, P.x, P.z)) {
         m.state = 'windup'; m.wT = k.charge.windup;
+      } else if (kit.cloaked() && !k.boss && m.state !== 'cast' && m.state !== 'attack') {
+        m.state = 'lost'; m.yawT = m.yaw + Math.sin(time * 1.3 + m.phase) * 0.9;     // an Assassin's cloak: it cannot see you, so it stops and looks around
       } else if (k.shoot && shooterStep(m, k, dt, dist, dx, dz)) {
         // a ranged attacker: it stopped, or is stepping back, or is rearing back to throw (see shooterStep)
         mvx = m.shMx; mvz = m.shMz;
@@ -609,8 +632,9 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       inp = inp || {};
       const p = P;
       if (R.over) { if (inp.restart) restartRun(); return { state: snapshot(), events }; }
-      if (R.choices) {                                   // the level-up pause: nothing moves until a skill is picked
+      if (R.choices || R.classChoices) {                 // the level-up pause: nothing moves until a skill (and a class skill) is picked
         if (Number.isInteger(inp.pick)) pickSkill(inp.pick);
+        if (Number.isInteger(inp.pickClass)) pickClass(inp.pickClass);
         return { state: snapshot(), events };
       }
       time += dt; R.time += dt;
@@ -630,7 +654,8 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       const wx = rx * mx + fx * mz, wz = rz * mx + fz * mz;
       const ads = !!inp.ads && !p.reloading;   // aiming drops while reloading
       p.sprinting = !!inp.sprint && mz > 0.25 && !ads && !p.sliding;
-      let top = (p.sprinting ? cfg.sprintSpeed : cfg.walkSpeed) * M.speed;
+      const CM = kit.mods();                                       // the class bonuses (and a running ultimate)
+      let top = (p.sprinting ? cfg.sprintSpeed : cfg.walkSpeed) * M.speed * CM.speed;
       if (ads) top *= cfg.adsSpeedMul;
 
       p.slideCd -= dt;
@@ -640,7 +665,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
           p.sliding = true; p.slideT = cfg.slideTime;
           p.sdx = p.vx / sp; p.sdz = p.vz / sp;
           p.slideCd = cfg.slideTime + cfg.slideCooldown;
-          events.push({ type: 'slide' });
+          events.push({ type: 'slide' }); kit.slideStart();
         }
       }
       if (p.sliding) {
@@ -678,7 +703,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       }
       p.fireCd -= dt;
       if (p.fireCd < 0 && !inp.fire) p.fireCd = 0;
-      const interval = 1 / (cfg.fireRate * M.rate * (R.frenzy > 0 ? L.frenzyRate : 1));
+      const interval = 1 / (cfg.fireRate * M.rate * CM.rate * (R.frenzy > 0 ? L.frenzyRate : 1));
       let shots = 0;
       if (inp.fire && !p.reloading && p.ammo <= 0) startReload();
       while (inp.fire && !p.reloading && p.ammo > 0 && p.fireCd <= 0 && shots < 3) { shoot(); p.fireCd += interval; shots++; }
@@ -688,7 +713,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       const pc = clamp(Math.floor(p.z / CELL), 0, GH - 1) * GW + clamp(Math.floor(p.x / CELL), 0, GW - 1);
       if (pc !== flowCell || flowTimer <= 0) { buildFlow(p.x, p.z); flowTimer = 0.4; }
       for (const m of monsters.slice()) if (!R.over) updateMonster(m, dt);
-      mshots.update(dt);
+      mshots.update(dt); kit.update(dt);
       if (R.phase === 'fight') {
         spawnTimer -= dt;
         if (spawnTimer <= 0 && spawnQ.length && monsters.length < aliveMax()) {
@@ -730,6 +755,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
         monsters: monsters.map((m) => ({
           id: m.id, kind: m.kind, x: m.x, z: m.z, yaw: m.yaw, hp: m.hp, maxHp: m.maxHp,
           flash: m.flash, state: m.state, phase: m.phase, scale: m.scale, elite: m.elite,
+          poisoned: !!(m.fx && m.fx.poison), bleeding: !!(m.fx && m.fx.bleed), cursed: !!(m.fx && m.fx.hexT > 0),
           atkK: m.state === 'attack' ? clamp(1 - m.atk / D.KINDS[m.kind].wind, 0, 1) : 0,              // 0 to 1 as a melee blow winds up; resets when it lands (the screen raises the weapon with it)
           castK: m.state === 'cast' ? clamp(1 - m.shW / D.KINDS[m.kind].shoot.wind, 0, 1) : 0           // the same for a ranged monster rearing back to throw
         })),
@@ -743,6 +769,8 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
         level: { n: R.level, xp: R.xp, need: D.xpNeed(R.level) },
         orbs: orbs.map((o) => ({ id: o.id, x: o.x, z: o.z, v: o.v })),
         pickups: pickups.map((q) => ({ id: q.id, kind: q.kind, x: q.x, z: q.z, life: q.life })),
+        classChoices: R.classChoices ? R.classChoices.map((id) => kit.card(id, R.level)) : null,
+        cls: kit.view(R.level),
         choices: R.choices ? R.choices.map((id) => { const s = skillOf(id); return { id, name: s.name, desc: s.desc, stack: stackOf(id), max: s.max }; }) : null,
         skills: D.SKILLS.filter((s) => stackOf(s.id) > 0).map((s) => ({ id: s.id, name: s.name, n: stackOf(s.id) })),
         frenzy: R.frenzy,
@@ -756,11 +784,15 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     function spawnAt(kind, x, z) { addMonster(kind, x, z); }
     function spawnElite(kind, x, z) { forceElite = true; addMonster(kind, x, z); forceElite = false; }   // for tests: an elite right here
     function setCfg(o) { Object.assign(cfg, o); }
+    function giveXp(v) { gainXp(v); }                                                  // tests: some experience right now
+    function setHp(v) { P.hp = v; }                                                    // tests: set the player's health
+    function giveSkill(id) { kit.pick(id); }                                           // tests: hand the player a class skill
+    function monsterFx(i) { return monsters[i] && monsters[i].fx; }                     // tests: statuses on a monster
     function reset() { deaths = 0; restartRun(); events = []; }
 
     newRun(); loadFloor(floorOf(R.wave)); placePlayer();
     // first state, so the screen can draw before the first step
-    return { get map() { return M0; }, cfg, setCfg, place, spawnAt, spawnElite, step, snapshot, reset, kinds: D.KINDS, defaults: Object.assign({}, DEFAULT_CFG) };
+    return { get map() { return M0; }, cfg, setCfg, place, spawnAt, spawnElite, giveSkill, giveXp, setHp, monsterFx, step, snapshot, reset, kinds: D.KINDS, defaults: Object.assign({}, DEFAULT_CFG) };
   }
 
   return { create };
