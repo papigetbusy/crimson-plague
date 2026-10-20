@@ -36,6 +36,12 @@ jobs:
         run: node tests/fx.test.js
       - name: Gun look checks
         run: node tests/gun.test.js
+      - name: Ember Rifle checks
+        run: node tests/ember.test.js
+      - name: Revolver checks
+        run: node tests/revolver.test.js
+      - name: Gun catalog checks (20 guns)
+        run: node tests/guns.test.js
       - name: Hall look tests
         run: node tests/world.test.js
       - name: Floor tests

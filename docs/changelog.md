@@ -1,4 +1,6 @@
 # Changelog (newest first, one plain line each)
+- 2026-10-20: 20 new guns (4 each of pistol, SMG, shotgun, sniper, heavy machine gun) with their own hand positions, one status colour each; the Effects and Gun menus (pick any gun, any skin) are only in the private cheat build (`node tools/build.js x --cheat`, git-ignored `cheat/`); the published game has neither.
+- 2026-10-20: Hellfire gun skin (not pushed): red plates, orange glow that flows down the barrel, fire that streams back when you run, red tracer bullets; pick it in Tune > Gun skin.
 - 2026-10-20 · Claude · Phase 5 signed off by the owner and pushed: fog waves, gold and coins, the safe room with a merchant, traps, monster dots on the minimap, a tougher Demon Lord who enrages; weather and key-gated doors moved to Phase 9.
 - 2026-10-20 · Claude · Roadmap: key-gated doors moved from Phase 5 to Phase 9 at the owner's word, with the plan written down; weather is the last Phase 5 piece.
 - 2026-10-20 · Claude · Phase 5 traps (private test, not pushed): spike patches that are always up, flame vents on a beat and rising spikes on deeper floors; they hurt you (a slice of your health, more on deeper floors) and monsters too; seen traps and every living monster now show on the minimap.

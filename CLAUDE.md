@@ -28,6 +28,9 @@ Keep the code neat: small focused files and functions in clear folders, never on
 - `node tests/touch.test.js` : touch button settings checks (size range, what can be hidden)
 - `node tests/fx.test.js` : effect checks (look presets escalate common to legendary, sprite pool)
 - `node tests/gun.test.js` : gun look checks (smoothed shape, skins, motion)
+- `node tests/ember.test.js` : Ember Rifle checks (code-built gun: sight window clear, anchors, face budget)
+- `node tests/revolver.test.js` : Revolver checks (picture silhouette, open trigger guard, sight clear, glow, face budget)
+- `node tests/guns.test.js` : the 20 catalog guns (5 types x 4 versions: sight clear, hands on grip and fore-end, skin exists, face budget)
 - `node tests/world.test.js` : hall look checks (banners, floors, ribs, baked light)
 - `node tests/monsters.test.js` : monster checks (wind-up and reach, ranged attackers, projectiles, slide, unlock waves)
 - `node tests/rigs.test.js` : every monster builds into a rig and every pose runs
@@ -43,5 +46,6 @@ Keep the code neat: small focused files and functions in clear folders, never on
 - `python3 tools/smoke_pad.py` : fake-controller run on phone and desktop sizes (connect, play, level-up, pause, unplug)
 - `node tools/preview_models.js rifle|fiend out.json` then `python3 tools/preview_models.py out.json out.png side|front|back|three|top` : draws a model with no GPU
 - `node tools/guard.js` : architecture guard
-- `node tools/build.js` : builds `site/index.html` (one playable page)
+- `node tools/build.js` : builds `site/index.html` (one playable page, the real game: no Effects or Gun menu)
+- `node tools/build.js x --cheat` : builds the private cheat page `cheat/index.html` (git-ignored, never published) with the Effects and Gun menus; the owner tests on this one
 - `python3 tools/smoke.py` : phone/desktop smoke test (needs Playwright)

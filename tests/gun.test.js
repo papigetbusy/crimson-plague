@@ -67,4 +67,15 @@ const hs2 = { t: 0, done: false }; let f2 = 0; for (let i = 0; i < 80; i++) { if
 t('A hold that is let go early does nothing, and a later full hold works again', f2 === 1);
 const hs3 = { t: 0, done: false }; let f3 = 0; for (let i = 0; i < 400; i++) if (Motion.holdStep(hs3, 0.02, true, false)) f3++;
 t('Holding Reload with a magazine that is not full never starts the inspect (it just reloads)', f3 === 0);
+// Hellfire skin
+const hf = Skins.byId('hellfire');
+t('Hellfire is a near-black gun with molten orange-yellow glow and trim, a flowing glow and red tracers', hf.val < 0.6 && hf.glow > 25 && hf.glow < 45 && hf.trim > 25 && hf.mode === 'flow' && hf.tracer === 0xff2418);
+t('The Hellfire glow band moves along the barrel as time passes', Skins.flowAt(-0.2, 0) !== Skins.flowAt(-0.2, 0.3));
+t('The Hellfire glow is brighter at the crest of the band than in the dark part', (() => { let lo = 9, hi = 0; for (let z = 0; z > -0.5; z -= 0.005) { const v = Skins.flowAt(z, 0); lo = Math.min(lo, v); hi = Math.max(hi, v); } return hi > 1.3 && lo < 0.7; })());
+t('Running makes much more fire than standing still, and other skins make none', Skins.flameRate({ flame: true }, 1) > 3 * Skins.flameRate({ flame: true }, 0) && Skins.flameRate(Skins.byId('gilded'), 1) === 0);
+t('The glow burns brighter when you run and flashes when you shoot, on every skin', Skins.SKINS.every((k) => Skins.glowAt(k, 1, 0, 1).k > Skins.glowAt(k, 1, 0, 0).k && Skins.glowAt(k, 1, 1, 0).k > Skins.glowAt(k, 1, 0, 0).k));
+t('The flowing glow band moves faster when you run', Math.abs(Skins.flowAt(-0.2, 0.2, 1) - Skins.flowAt(-0.2, 0, 1)) !== Math.abs(Skins.flowAt(-0.2, 0.2, 0) - Skins.flowAt(-0.2, 0, 0)));
+
+
+
 console.log(fails ? fails + ' FAILED' : 'all gun checks ok'); process.exit(fails ? 1 : 0);

@@ -80,7 +80,16 @@ One feature at a time, each tested on the phone. The safe room and the shop floo
 
 ## Phase 6 — Loot, shops, saves and seeds
 - [ ] Guns drop from monsters and bosses (bosses best); rarity tiers with a 1% legendary; weapon affixes; consumables; relics or gun mods. Each gun has its own fire rate, damage, reload and animations.
-- [ ] Grok's black neon-green revolver, built to look exactly like the pictures.
+- [x] Grok's black neon-green revolver, built from the picture's own silhouette (src/models/revolver.js; model done 2026-10-20, owner liked the shape).
+- [ ] **The weapon system (owner, 2026-10-20).** Rules to build:
+  - Everyone starts with the same plain silver handgun (the base weapon).
+  - You can hold two guns at once (to confirm with the owner: carry two and swap, or fire both together).
+  - Monsters drop guns. The rarity of drops follows the wave: waves 1-10 mostly common with a few uncommon (green); 11-20 mostly uncommon with a few rare (blue); 21-30 mostly rare with a few epic (purple); 31 and up mostly epic, with a chance of legendary. Rarity colours to confirm with the owner.
+  - Gun types: pistol, SMG, shotgun, sniper, heavy machine gun, four versions of each (models done, see below). Each type reads at a glance by its shape, each version is distinct in shape detail, colour, glow and effects.
+  - Status effects, shown by colour: green = radiation, purple = poison, yellow = electric, blue = ice, red = fire, black = dark magic, white = light magic. A normal gun carries one; only legendaries carry two (that is what makes them special).
+  - Effects and projectiles come from the owner's Crusader Tactics packs (effects and projectile assets).
+  - Damage keeps growing with the waves until the cap (the owner will pick the cap later).
+  - Each gun has its own hands (hold) and reload; the hands follow the gun's anchors (done in screen.js).
 - [ ] Save slots: save often, delete saves, go back to a save after death.
 - [ ] Three seeds (map, damage, loot) so a bad roll never locks a save; all randomness through the referee's seeded random.
 - **Check:** a save is never a dead end, and drops feel earned.

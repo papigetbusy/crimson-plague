@@ -98,24 +98,18 @@
   const gunBody = new THREE.Group(); gun.add(gunBody);
   const gb = (w, h, d, m, x, y, z, p) => boxMesh(w, h, d, m, x, y, z, p || gunBody);
   // the rifle itself: Grok's gothic assault rifle, built from voxels (src/models/gothic_rifle.js)
-  const RIFLE = GothicRifle.build(), RA = RIFLE.anchors;
   const gunLook = GunLook.create(THREE, gunBody);                // smoothed shiny meshes, skins, glow and the little light on the hands (src/screen/gun_look.js)
-  const voxelPart = (part, vox, parent) => { const g = new THREE.Group(); parent.add(g); return gunLook.part(part, vox, g); };
-  voxelPart(RIFLE.parts.body, RIFLE.vox, gunBody);
-  // charging handle (right side) and magazine are their own parts so they can move
-  const charge = voxelPart(RIFLE.parts.bolt, RIFLE.vox, gunBody); charge.position.set(RA.boltRest[0], RA.boltRest[1], RA.boltRest[2]);
-  const CHARGE_Z = RA.boltRest[2];
-  const mag = voxelPart(RIFLE.parts.mag, RIFLE.vox, gunBody); mag.rotation.x = 0.1;
-  const MAG_BASE = new THREE.Vector3(RA.magPivot[0], RA.magPivot[1], RA.magPivot[2]);
-  mag.position.copy(MAG_BASE);
-
+  const gunRig = new THREE.Group(); gunBody.add(gunRig);        // the voxel parts of whichever gun is in your hands (rebuilt by setGun)
+  const rigParts = [];
+  const voxelPart = (part, vox, parent) => { const g = new THREE.Group(); parent.add(g); rigParts.push(g); return gunLook.part(part, vox, g); };
+  const MAG_BASE = new THREE.Vector3(), SIGHT = { y: 0, z: 0 };
+  let charge, mag, CHARGE_Z = 0, muzzle;
   // the red dot floats between the scope rings; ADS lines it up with the eye
-  const SIGHT = { y: RA.sightDot[1], z: RA.sightDot[2] };
   const EYE_RELIEF = 0.5;
   const dotMat = new THREE.MeshBasicMaterial({ color: 0xff2424, fog: false });
-  gb(0.008, 0.008, 0.004, dotMat, 0, SIGHT.y, SIGHT.z);
+  const dotMesh = gb(0.008, 0.008, 0.004, dotMat, 0, 0, 0);
   const dotGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xff2a2a, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, transparent: true }));
-  dotGlow.scale.setScalar(0.035); dotGlow.position.set(0, SIGHT.y, SIGHT.z + 0.004); gunBody.add(dotGlow);
+  dotGlow.scale.setScalar(0.035); gunBody.add(dotGlow);
 
   // gloved hands and forearms (forearms stretch between a fixed elbow and the hand)
   const limbGeo = new THREE.BoxGeometry(1, 1, 1);
@@ -127,14 +121,14 @@
   gb(0.035, 0.1, 0.11, gloveMat, 0.08, 0.05, 0, handL);
   gb(0.05, 0.035, 0.09, gloveMat, 0.07, 0.1, -0.03, handL);
   gb(0.15, 0.1, 0.05, goldLit, 0, -0.015, 0.11, handL);
-  const handR = new THREE.Group(); handR.position.set(0, -0.15, 0.15); gunBody.add(handR);
+  const handR = new THREE.Group(); gunBody.add(handR);
   gb(0.12, 0.14, 0.07, gloveMat, 0, 0, 0, handR);
   for (const y of [0.045, 0.005, -0.035]) gb(0.11, 0.035, 0.08, gloveMat, 0, y, -0.075, handR);
   gb(0.035, 0.04, 0.1, gloveMat, -0.075, 0.07, -0.03, handR);
   gb(0.14, 0.1, 0.045, goldLit, 0, -0.01, 0.07, handR);
   const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
-  const HOLD = V3(0, -0.12, -0.45), MAGH = V3(0, -0.15, -0.13), BELT = V3(-0.15, -0.8, -0.05);
-  const CH_F = V3(0.1, 0.1, -0.17), CH_B = V3(0.1, 0.1, 0.0);
+  const HOLD = V3(0, -0.12, -0.45), MAGH = V3(0, -0.15, -0.13), BELT = V3(-0.15, -0.8, -0.05);   // set per gun by setGun: where the left hand holds, grabs the magazine
+  const CH_F = V3(0.1, 0.1, -0.17), CH_B = V3(0.1, 0.1, 0.0);                                   // and pulls the charging handle
   const ELBOW_L = V3(-0.55, -1.0, 0.7), ELBOW_R = V3(0.3, -0.9, 1.0);
   const Zaxis = V3(0, 0, 1), tA = V3(0, 0, 0), tB = V3(0, 0, 0);
   function placeLimb(m, a, b, th) {
@@ -143,7 +137,7 @@
     m.quaternion.setFromUnitVectors(Zaxis, tA.divideScalar(len));
     m.scale.set(th, th * 0.9, len);
   }
-  const muzzle = new THREE.Object3D(); muzzle.position.set(RA.muzzle[0], RA.muzzle[1], RA.muzzle[2]); gunBody.add(muzzle);
+  muzzle = new THREE.Object3D(); gunBody.add(muzzle);
   const flashMat = new THREE.MeshBasicMaterial({ color: 0xffc860, transparent: true, opacity: 0.95, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
   const flashMesh = new THREE.Group(); muzzle.add(flashMesh);
   boxMesh(0.14, 0.14, 0.06, flashMat, 0, 0, -0.04, flashMesh);
@@ -152,6 +146,28 @@
   flashMesh.visible = false;
   const muzzleLight = new THREE.PointLight(0xff9a40, 0, 14, 2); muzzle.add(muzzleLight);
   const fogGlow = new THREE.PointLight(0xffa860, 0, 16, 2); gun.add(fogGlow); fogGlow.position.set(0, 0.1, -0.3);   // the glow of your gun, only lit in fog
+
+  // swap the gun in your hands: rebuilds the parts, moves the sight dot and muzzle, and puts both hands where this gun is held (the hands anchors in gun_kit.js)
+  let curGun = null;
+  let gunChanged = () => {};
+  function setGun(id, takeSkin) {
+    const entry = GunList.find(id); if (!entry) return; curGun = entry.id;
+    const G = entry.build(), A = G.anchors, H = entry.hands || G.hands || { grip: A.handGrip || [0, -0.15, 0.15], fore: A.handFore || [0, -0.12, -0.45], mag: A.handMag || [0, -0.15, -0.13] };
+    gunLook.release(); rigParts.forEach((g) => gunRig.remove(g)); rigParts.length = 0;
+    voxelPart(G.parts.body, G.vox, gunRig);
+    charge = voxelPart(G.parts.bolt, G.vox, gunRig); charge.position.set(A.boltRest[0], A.boltRest[1], A.boltRest[2]); CHARGE_Z = A.boltRest[2];
+    mag = voxelPart(G.parts.mag, G.vox, gunRig); mag.rotation.x = 0.1; MAG_BASE.set(A.magPivot[0], A.magPivot[1], A.magPivot[2]); mag.position.copy(MAG_BASE);
+    SIGHT.y = A.sightDot[1]; SIGHT.z = A.sightDot[2];
+    dotMesh.position.set(0, SIGHT.y, SIGHT.z); dotGlow.position.set(0, SIGHT.y, SIGHT.z + 0.004);
+    muzzle.position.set(A.muzzle[0], A.muzzle[1], A.muzzle[2]);
+    handR.position.set(H.grip[0], H.grip[1], H.grip[2]);
+    HOLD.set(H.fore[0], H.fore[1], H.fore[2]); MAGH.set(H.mag[0], H.mag[1], H.mag[2]);
+    CH_F.set(A.boltRest[0] + 0.1, A.boltRest[1] + 0.04, A.boltRest[2]); CH_B.copy(CH_F); CH_B.z += 0.17;
+    if (entry.hands) { CH_F.set(0.1, 0.1, -0.17); CH_B.set(0.1, 0.1, 0.0); }                          // the rifle keeps its old handle spots
+    if (takeSkin && G.skin) view.gunSkin = G.skin;
+    gunLook.setSkin(view.gunSkin || 'crimson'); view.gun = curGun; gunChanged();
+  }
+  setGun(typeof CHEATS !== 'undefined' && CHEATS ? view.gun || 'rifle' : 'rifle');
 
   // reload choreography: hand keyframes (k = 0..1 through the reload)
   const RL_NORMAL = { hand: [[0, HOLD], [0.16, MAGH], [0.24, MAGH], [0.38, BELT], [0.46, BELT], [0.64, MAGH], [0.72, MAGH], [0.9, HOLD], [1, HOLD]], grab: 0.24, pullEnd: 0.38, newStart: 0.46, seat: 0.64, tilt: [0.14, 0.8, 1.0], snd: { magout: 0.3, magin: 0.66 }, bolt: null };
@@ -254,7 +270,7 @@
     t.m.position.copy(tmpV).add(tmpV2).multiplyScalar(0.5);
     t.m.lookAt(tmpV2);
     t.m.scale.set(tr.width, tr.width, len);
-    t.m.material.color.setHex(tr.color);
+    t.m.material.color.setHex(gunLook.skin().tracer || tr.color);
     t.m.visible = true; t.life = t.dur = tr.life; t.m.material.opacity = 0.9;
     if (fxOn() && tr.trail) fx.trail(view.fxPreset, tmpV, tmpV2);
   }
@@ -563,8 +579,10 @@
   const panel = $('panel'), panelBody = $('panelBody');
   const sliderEls = {};
   // touch button sizes and show/hide switches sit at the top of the panel (phones only); a hidden toggle button is switched off so it cannot stay stuck on
-  const fxSet = FxPicker.mount(panelBody, view, { save: () => saveTune(), art: fx.art() });
-  const skinSet = GunSkinPicker.mount(panelBody, view, { save: () => saveTune(), set: (id) => gunLook.setSkin(id), inspect: (kind) => startInspect(kind) });
+  const CHEAT = typeof CHEATS !== 'undefined' && CHEATS, noMenu = { sync() {} };   // the Effects and Gun menus exist only in the private cheat build
+  const fxSet = !CHEAT ? noMenu : FxPicker.mount(panelBody, view, { save: () => saveTune(), art: fx.art() });
+  const skinSet = !CHEAT ? noMenu : GunSkinPicker.mount(panelBody, view, { save: () => saveTune(), set: (id) => gunLook.setSkin(id), inspect: (kind) => startInspect(kind), guns: GunList.LIST, setGun: (id) => setGun(id, true) });
+  gunChanged = () => skinSet.sync();
   const wallSet = WallSkin.mount(panelBody, view, WallSkin.create(texStone), { save: () => saveTune() });
   const touchSet = TouchLayout.mount(panelBody, view, { save: () => saveTune(), hid: (id) => {
     if (id === 'ads') { tch.ads = false; bAds.classList.remove('on'); }
@@ -622,7 +640,7 @@
   /* ============ per-frame presentation ============ */
   const clock = { last: performance.now() };
   const reloadHold = { t: 0, done: false };
-  let equipK = 0, inspK = 0, inspKind = 'sides', kickDir = [0, 0], emberT = 0, nextInspect = 'sides';
+  let equipK = 0, inspK = 0, inspKind = 'sides', kickDir = [0, 0], emberT = 0, flameT = 0, nextInspect = 'sides';
   const startInspect = (kind) => { if (running && inspK === 0 && !state.over && !state.player.reloading) { inspKind = kind || nextInspect; nextInspect = inspKind === 'sides' ? 'mag' : 'sides'; inspK = 0.0001; } };
   let bob = 0, kickG = 0, flashT = 0, sway = 0, roll = 0, lastSlideK = 0;
   const gunHip = new THREE.Vector3(), gunAds = new THREE.Vector3();
@@ -831,6 +849,16 @@
     if (GunMotion.holdStep(reloadHold, dt, rHeld, running && p.ammo >= p.magSize && !p.reloading && !state.over && inspK === 0)) startInspect();
     if (equipK < 1) equipK = Math.min(1, equipK + dt / 0.7);
     if (inspK > 0) { inspK += dt / GunMotion.LENGTH[inspKind]; if (inspK >= 1 || p.reloading || p.sprintK > 0.2 || p.adsT > 0.15 || flashT > 0.04) inspK = 0; }
+    if (gunLook.skin().flame && running) {      // fire licks along the gun and streams back past you the faster you run
+      flameT -= dt; const rate = GunSkins.flameRate(gunLook.skin(), planar);
+      if (flameT <= 0) {
+        flameT = 1 / rate; camera.getWorldDirection(tmpV2); tmpV.set(0, 0.02, -0.15 - Math.random() * 0.55); gunBody.localToWorld(tmpV);
+        const p0 = parts[partCursor++ % parts.length], back = 0.4 + planar * 2.4;
+        p0.m.visible = true; p0.m.position.copy(tmpV); p0.m.material.color.setHex([0xff2a10, 0xff6a1a, 0xffb040][(Math.random() * 3) | 0]);
+        p0.m.scale.setScalar(0.3 + Math.random() * 0.5); p0.v.set(-tmpV2.x * back + (Math.random() - 0.5) * 0.4, 0.5 + Math.random() * 0.7, -tmpV2.z * back + (Math.random() - 0.5) * 0.4);
+        p0.life = 0.3 + Math.random() * 0.25 + planar * 0.15; p0.grav = -0.8;
+      }
+    }
     if (gunLook.skin().embers && running) { emberT -= dt; if (emberT <= 0) { emberT = 0.07; muzzle.getWorldPosition(tmpV); burst(tmpV.x + (Math.random() - 0.5) * 0.5, tmpV.y + (Math.random() - 0.3) * 0.1, tmpV.z + (Math.random() - 0.5) * 0.5, 1, [0xff6a1a, 0xff3a10, 0xffb040], 0.5, 0.7, -1.5, 0.35); } }
     const mo = GunMotion.add(GunMotion.add(GunMotion.kick(kickG, ad, kickDir), GunMotion.idle(time, still, ad)), GunMotion.add(GunMotion.equip(equipK), GunMotion.inspect(inspKind, inspK)));
     charge.position.z += GunMotion.bolt(kickG, 0.04);
@@ -844,7 +872,7 @@
       lerp(0.05, 0, ad) + sp * 0.5 + sl * 0.12 + rl.ry + mo.ry,
       sp * 0.22 + sl * 0.3 + Math.sin(bob) * 0.012 * bobAmt + rl.rz + mo.rz
     );
-    gunLook.update(time, flashT / 0.06);
+    gunLook.update(time, flashT / 0.06, running ? planar : 0);
     cloakGlow(st, dt);
     // muzzle flash
     flashT = Math.max(0, flashT - dt);

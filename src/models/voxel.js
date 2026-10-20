@@ -64,18 +64,32 @@ const Voxel = (function () {
     return this;
   };
   // every voxel becomes k x k x k smaller voxels (same colour and look), so the shape can be smoothed finely afterwards
-  Grid.prototype.upsample = function (k) {
+  // shell = true keeps only the small voxels that touch the outside (the buried middle can never be seen), which keeps a fine gun small enough for a phone
+  Grid.prototype.upsample = function (k, shell) {
     const g = new Grid(this.seed);
     for (const [map, kind] of [[this.solid, 'solid'], [this.glow, 'glow']]) for (const t of map.values()) {
+      const open = shell ? [!this.has(t.x - 1, t.y, t.z), !this.has(t.x + 1, t.y, t.z), !this.has(t.x, t.y - 1, t.z), !this.has(t.x, t.y + 1, t.z), !this.has(t.x, t.y, t.z - 1), !this.has(t.x, t.y, t.z + 1)] : null;
       for (let a = 0; a < k; a++) for (let b = 0; b < k; b++) for (let c = 0; c < k; c++) {
+        if (open && !((a === 0 && open[0]) || (a === k - 1 && open[1]) || (b === 0 && open[2]) || (b === k - 1 && open[3]) || (c === 0 && open[4]) || (c === k - 1 && open[5]))) continue;
         const x = t.x * k + a, y = t.y * k + b, z = t.z * k + c, kk = key(x, y, z), v = { x, y, z, c: t.c, fc: t.fc };
         if (kind === 'glow') g.glow.set(kk, v); else g.solid.set(kk, v);
       }
     }
+    if (shell) { g.coarse = this; g.k = k; }       // the buried voxels were left out, but they still count as solid for face hiding
+    return g;
+  };
+  // a copy moved by (dx, dy, dz) voxels (used to put every gun's grip in the same place)
+  Grid.prototype.shifted = function (dx, dy, dz) {
+    const g = new Grid(this.seed);
+    for (const [map, out] of [[this.solid, g.solid], [this.glow, g.glow]]) for (const v of map.values()) out.set(key(v.x + dx, v.y + dy, v.z + dz), Object.assign({}, v, { x: v.x + dx, y: v.y + dy, z: v.z + dz }));
     return g;
   };
   Grid.prototype.count = function () { return this.solid.size + this.glow.size; };
-  Grid.prototype.has = function (x, y, z) { const k = key(x, y, z); return this.solid.has(k) || this.glow.has(k); };
+  Grid.prototype.has = function (x, y, z) {
+    const k = key(x, y, z);
+    if (this.solid.has(k) || this.glow.has(k)) return true;
+    return !!this.coarse && this.coarse.has(Math.floor(x / this.k), Math.floor(y / this.k), Math.floor(z / this.k));
+  };
 
   // face table: outward direction, then two edge axes u, v with u x v = direction
   const FACES = [

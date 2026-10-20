@@ -55,3 +55,16 @@ t('Demon lord v2 is bigger and fiercer: taller horns (no more than 0.8 taller), 
 t('Demon lord v2 stays under 80,000 faces (one boss on screen)', total(demon2) < 80000);
 console.log('     (demon lord v1 ' + total(demon) + ', v2 ' + total(demon2) + ' faces, tallest ' + tallest(demon).toFixed(2) + ' -> ' + tallest(demon2).toFixed(2) + ')');
 process.exit(bad ? 1 : 0);
+{ // the finer gun (upsample pass): same gun, smaller cubes
+  const a1 = GothicRifle.build(1), a2 = GothicRifle.build(2);
+  const world = (m) => { const g = m.parts.body.grid; let lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9]; for (const mp of [g.solid, g.glow]) for (const v of mp.values()) { lo = [Math.min(lo[0], v.x), Math.min(lo[1], v.y), Math.min(lo[2], v.z)]; hi = [Math.max(hi[0], v.x + 1), Math.max(hi[1], v.y + 1), Math.max(hi[2], v.z + 1)]; } return lo.concat(hi).map((n) => n * m.vox); };
+  const w1 = world(a1), w2 = world(a2);
+  t('The finer gun has smaller cubes', Math.abs(a2.vox * 2 - a1.vox) < 1e-9);
+  t('The finer gun is the same size in the world as before', w1.every((n, i) => Math.abs(n - w2[i]) < 0.0001));
+  t('The finer gun keeps every anchor (muzzle, sight dot, hands, magazine and handle) exactly where it was', JSON.stringify(a1.anchors.muzzle) === JSON.stringify(a2.anchors.muzzle) && JSON.stringify(a1.anchors.sightDot) === JSON.stringify(a2.anchors.sightDot) && JSON.stringify(a1.anchors.boltRest) === JSON.stringify(a2.anchors.boltRest) && JSON.stringify(a1.anchors.handMag) === JSON.stringify(a2.anchors.handMag));
+  t('The finer gun turns the magazine and handle pivots into the smaller cubes', a2.parts.mag.pivot.every((n, i) => n === a1.parts.mag.pivot[i] * 2) && a2.parts.bolt.pivot.every((n, i) => n === a1.parts.bolt.pivot[i] * 2));
+  const g = a2.parts.body.grid, V = a2.vox, y0 = Math.round(a2.anchors.dotWindow.y0 / V), y1 = Math.round(a2.anchors.dotWindow.y1 / V), zd = Math.floor(a2.anchors.sightDot[2] / V);
+  let blocked = 0; for (let z = zd; z < zd + 80; z++) for (let y = y0 + 2; y < y1; y++) for (let x = -4; x < 4; x++) if (g.has(x, y, z)) blocked++;
+  t('The finer gun still has a clear line of sight to the red dot', blocked === 0);
+  t('The finer gun stays under 120,000 faces and keeps the buried middle out of memory', faces(a2.parts.body.grid) + faces(a2.parts.mag.grid) + faces(a2.parts.bolt.grid) < 120000 && a2.parts.body.grid.solid.size < 150000);
+}

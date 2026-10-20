@@ -33,7 +33,10 @@ const GothicRifle = (function () {
   const ROUND_MIN = 10, ROUND_POW = 3;
   function rounded(hw, t) { const e = Math.abs(2 * t - 1); return Math.max(2, Math.round(hw * Math.pow(1 - Math.pow(e, ROUND_POW), 1 / ROUND_POW))); }
 
-  function build() {
+  // scale: every voxel is cut into scale x scale x scale smaller ones (same shape, colours and anchors, finer surface); the gun stays the same size in the world
+  const SCALE = 1;
+  function build(scale) {
+    const SC = scale || SCALE;
     const body = new Voxel.Grid(11), mag = new Voxel.Grid(12), bolt = new Voxel.Grid(13);
     const zr = (xa, xb) => { const a = Math.round(Zv(xb)), b = Math.round(Zv(xa)); return [a, Math.max(b, a + 1)]; };
     const yr = (ya, yb) => { const a = Math.round(Yv(yb)), b = Math.round(Yv(ya)); return [a, Math.max(b, a + 1)]; };
@@ -106,10 +109,11 @@ const GothicRifle = (function () {
     bolt.box(8 * K, -K, -2 * K, 9 * K, 3 * K, K, R3, 0.06);
     bolt.box(4 * K, 0, -K, 6 * K, K, K, C2, 0.04);
 
-    const u = (v) => v * VOX;
+    const u = (v) => v * VOX;                                          // anchors stay in world units, so they do not move when the voxels get finer
+    const up = (g) => (SC > 1 ? g.upsample(SC, true) : g), sc = (v) => v.map((n) => n * SC);   // grids and the pivots that are counted in voxels grow together
     return {
-      vox: VOX,
-      parts: { body: { grid: body, pivot: [0, 0, 0] }, mag: { grid: mag, pivot: magPivot }, bolt: { grid: bolt, pivot: [7 * K, K, 0] } },
+      vox: VOX / SC,
+      parts: { body: { grid: up(body), pivot: [0, 0, 0], scale: SC }, mag: { grid: up(mag), pivot: sc(magPivot), scale: SC }, bolt: { grid: up(bolt), pivot: sc([7 * K, K, 0]), scale: SC } },
       anchors: {
         muzzle: [0, u(Yv(362)), u(frontZ)],
         sightDot: [0, u(dotY), u(dotZ)],
@@ -123,6 +127,6 @@ const GothicRifle = (function () {
       },
     };
   }
-  return { build, VOX };
+  return { build, VOX, SCALE };
 })();
 if (typeof module !== 'undefined') module.exports = GothicRifle;

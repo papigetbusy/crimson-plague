@@ -7,3 +7,4 @@ __pycache__
 
 # Art packs the licences let us use but not hand out (see tools/extract_ct_assets.py)
 assets-private
+cheat/
