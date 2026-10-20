@@ -1,0 +1,107 @@
+/* World bake: turns the referee's map (rows of cells, torches) into merged quads with torch light baked into the vertex colours.
+   Pure: no THREE, no browser, so a tool can draw the same hall offline. Returns { buckets: { stone: {pos, uv, col}, floor: ..., ... } per texture kind, light(x, y, z, nx, ny, nz) -> [r, g, b] the same torch light for things that move }. */
+const WorldBake = (function () {
+  const DIM = 0.82;                                                       // overall light level, a touch darker (owner, 2026-10-19)
+  function bake(map) {
+    const CELL = map.CELL, WALL_H = map.WALL_H, GW = map.W, GH = map.H, rows = map.rows, torches = map.torches;
+    const solidC = (cx, cz) => {
+      if (cx < 0 || cz < 0 || cx >= GW || cz >= GH) return true;
+      const c = rows[cz][cx];
+      return c !== '.' && c !== 'c';
+    };
+    function losV(ax, az, bx, bz) {
+      const dx = bx - ax, dz = bz - az, d = Math.hypot(dx, dz);
+      for (let s = 0.35; s < d - 0.1; s += 0.5) {
+        if (solidC(Math.floor((ax + dx / d * s) / CELL), Math.floor((az + dz / d * s) / CELL))) return false;
+      }
+      return true;
+    }
+    function bakeLight(px, py, pz, nx, ny, nz) {
+      let r = 0.17, g = 0.125, b = 0.15;
+      for (const t of torches) {
+        const dx = t.x - px, dy = t.y - py, dz = t.z - pz;
+        const d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 > 420) continue;
+        const d = Math.sqrt(d2) || 0.001;
+        const nd = (nx * dx + ny * dy + nz * dz) / d;
+        if (nd < 0.02) continue;
+        if (!losV(px + nx * 0.06, pz + nz * 0.06, t.x, t.z)) continue;
+        const f = (t.kind === 'brazier' ? 3.3 : 2.5) / (1 + d2 / 12) * (0.3 + 0.7 * nd);
+        r += f; g += f * 0.56; b += f * 0.24;
+      }
+      return [Math.min(r, 2.0) * DIM, Math.min(g, 2.0) * DIM, Math.min(b, 2.0) * DIM];
+    }
+    const buckets = {};
+    const B = (k) => buckets[k] || (buckets[k] = { pos: [], uv: [], col: [] });
+    function addFace(key, O, U, V, nu, nv, n) {
+      const b = B(key);
+      const vert = (a, c) => {
+        const p = [O[0] + U[0] * a + V[0] * c, O[1] + U[1] * a + V[1] * c, O[2] + U[2] * a + V[2] * c];
+        return { p, a, c, l: bakeLight(p[0], p[1], p[2], n[0], n[1], n[2]) };
+      };
+      const push = (v) => { b.pos.push(v.p[0], v.p[1], v.p[2]); b.uv.push(v.a, v.c); b.col.push(v.l[0], v.l[1], v.l[2]); };
+      for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) {
+        const v00 = vert(i / nu, j / nv), v10 = vert((i + 1) / nu, j / nv), v11 = vert((i + 1) / nu, (j + 1) / nv), v01 = vert(i / nu, (j + 1) / nv);
+        push(v00); push(v10); push(v11); push(v00); push(v11); push(v01);
+      }
+    }
+    function addBox(key, x0, y0, z0, x1, y1, z1) {
+      const dx = x1 - x0, dy = y1 - y0, dz = z1 - z0;
+      addFace(key, [x1, y0, z1], [0, 0, -dz], [0, dy, 0], 1, 1, [1, 0, 0]);
+      addFace(key, [x0, y0, z0], [0, 0, dz], [0, dy, 0], 1, 1, [-1, 0, 0]);
+      addFace(key, [x0, y0, z1], [dx, 0, 0], [0, dy, 0], 1, 1, [0, 0, 1]);
+      addFace(key, [x1, y0, z0], [-dx, 0, 0], [0, dy, 0], 1, 1, [0, 0, -1]);
+      addFace(key, [x0, y1, z1], [dx, 0, 0], [0, 0, -dz], 1, 1, [0, 1, 0]);
+      addFace(key, [x0, y0, z0], [dx, 0, 0], [0, 0, dz], 1, 1, [0, -1, 0]);
+    }
+    const KIND = { '#': 'stone', 'B': 'stone', 'W': 'panel', 'P': 'pillar' };
+    // the floor tile set for a cell: worn beside the carpet, otherwise a plain, cracked or warm-stained set mixed by position
+    function floorKey(cx, cz) {
+      if (rows[cz][cx - 1] === 'c' || rows[cz][cx + 1] === 'c') return 'floorEdge';
+      const h = (cx * 7 + cz * 13 + cx * cz) % 7;
+      return h === 0 || h === 3 ? 'floor2' : h === 5 ? 'floor3' : 'floor';
+    }
+    // a banner: a cloth slab and a gold rod standing a hand's width off the wall (the wall behind stays plain stone)
+    function hangBanner(nx, nz, plane, mid) {
+      const slab = (key, half, d0, d1, y0, y1) => {
+        const a = nx ? [plane + nx * d0, plane + nx * d1] : [mid - half, mid + half], b = nz ? [plane + nz * d0, plane + nz * d1] : [mid - half, mid + half];
+        addBox(key, Math.min(a[0], a[1]), y0, Math.min(b[0], b[1]), Math.max(a[0], a[1]), y1, Math.max(b[0], b[1]));
+      };
+      slab('cloth', 0.78, 0.04, 0.14, 0.8, WALL_H - 1.0);
+      slab('gold', 0.92, 0.0, 0.2, WALL_H - 1.0, WALL_H - 0.84);
+    }
+    for (let cz = 0; cz < GH; cz++) for (let cx = 0; cx < GW; cx++) {
+      const ch = rows[cz][cx], x0 = cx * CELL, x1 = x0 + CELL, z0 = cz * CELL, z1 = z0 + CELL;
+      if (ch === '.' || ch === 'c') {
+        addFace(ch === 'c' ? 'carpet' : floorKey(cx, cz), [x0, 0, z1], [CELL, 0, 0], [0, 0, -CELL], 4, 4, [0, 1, 0]);
+        addFace('ceil', [x0, WALL_H, z0], [CELL, 0, 0], [0, 0, CELL], 2, 2, [0, -1, 0]);
+        if (cz % 4 === 0 && cz > 0 && cz < GH - 1) {                    // a stone rib across the ceiling every fourth cell, with a gold edge: depth and rhythm overhead
+          addBox('stone', x0, WALL_H - 0.6, z0, x1, WALL_H, z0 + 0.6);
+          addBox('gold', x0, WALL_H - 0.72, z0, x1, WALL_H - 0.6, z0 + 0.6);
+        }
+        continue;
+      }
+      const key = KIND[ch];
+      if (ch === 'B') {
+        if (!solidC(cx + 1, cz)) hangBanner(1, 0, x1, z0 + CELL / 2);
+        if (!solidC(cx - 1, cz)) hangBanner(-1, 0, x0, z0 + CELL / 2);
+        if (!solidC(cx, cz + 1)) hangBanner(0, 1, z1, x0 + CELL / 2);
+        if (!solidC(cx, cz - 1)) hangBanner(0, -1, z0, x0 + CELL / 2);
+      }
+      if (!solidC(cx + 1, cz)) addFace(key, [x1, 0, z1], [0, 0, -CELL], [0, WALL_H, 0], 2, 5, [1, 0, 0]);
+      if (!solidC(cx - 1, cz)) addFace(key, [x0, 0, z0], [0, 0, CELL], [0, WALL_H, 0], 2, 5, [-1, 0, 0]);
+      if (!solidC(cx, cz + 1)) addFace(key, [x0, 0, z1], [CELL, 0, 0], [0, WALL_H, 0], 2, 5, [0, 0, 1]);
+      if (!solidC(cx, cz - 1)) addFace(key, [x1, 0, z0], [-CELL, 0, 0], [0, WALL_H, 0], 2, 5, [0, 0, -1]);
+      if (ch === 'P') {
+        addBox('gold', x0 - 0.14, 0, z0 - 0.14, x1 + 0.14, 0.38, z1 + 0.14);
+        addBox('gold', x0 - 0.14, WALL_H - 0.7, z0 - 0.14, x1 + 0.14, WALL_H - 0.3, z1 + 0.14);
+        addBox('stone', x0 - 0.06, WALL_H - 0.3, z0 - 0.06, x1 + 0.06, WALL_H, z1 + 0.06);
+      }
+    }
+
+    for (let i = 0; i < buckets.gold.col.length; i++) buckets.gold.col[i] *= 0.55;   // gold trim catches the torch light but must not blow out to flat orange
+    return { buckets, light: bakeLight };
+  }
+  return { bake };
+})();
+if (typeof module !== 'undefined') module.exports = WorldBake;

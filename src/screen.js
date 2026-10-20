@@ -34,126 +34,8 @@
   } catch (e) { /* storage can be unavailable */ }
 
   /* ============ texture painting (small canvases, nearest filter = chunky pixels) ============ */
-  function mulberry(seed) {
-    let a = seed >>> 0;
-    return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-  }
-  const rgb = (r, g, b) => 'rgb(' + (clamp(r, 0, 255) | 0) + ',' + (clamp(g, 0, 255) | 0) + ',' + (clamp(b, 0, 255) | 0) + ')';
-  function makeTex(w, h, seed, paint) {
-    const c = document.createElement('canvas'); c.width = w; c.height = h;
-    const g = c.getContext('2d');
-    paint(g, w, h, mulberry(seed));
-    const t = new THREE.CanvasTexture(c);
-    t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter;
-    t.generateMipmaps = false; t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    return t;
-  }
-  function nrect(g, x, y, w, h, r, gg, b, v, rng) {
-    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
-      const n = (rng() - 0.5) * v;
-      g.fillStyle = rgb(r + n, gg + n * 0.7, b + n * 0.7); g.fillRect(x + i, y + j, 1, 1);
-    }
-  }
-  function outline(g, x, y, w, h, r, gg, b, rng) {
-    for (let i = 0; i < w; i++) for (const yy of [y, y + h - 1]) { const n = (rng() - 0.5) * 24; g.fillStyle = rgb(r + n, gg + n, b + n * 0.5); g.fillRect(x + i, yy, 1, 1); }
-    for (let j = 1; j < h - 1; j++) for (const xx of [x, x + w - 1]) { const n = (rng() - 0.5) * 24; g.fillStyle = rgb(r + n, gg + n, b + n * 0.5); g.fillRect(xx, y + j, 1, 1); }
-  }
-  const GOLD = [205, 160, 64];
-  function paintStone(g, w, h, rng, shade) {
-    shade = shade || 1;
-    const bh = 8, bw = 16;
-    for (let by = 0; by * bh < h; by++) {
-      const off = (by % 2) * 8;
-      for (let bx = -1; bx * bw < w; bx++) {
-        const x0 = bx * bw + off, y0 = by * bh, tone = (rng() - 0.5) * 14;
-        for (let j = 0; j < bh; j++) for (let i = 0; i < bw; i++) {
-          const x = x0 + i, y = y0 + j;
-          if (x < 0 || x >= w || y >= h) continue;
-          let v = (46 + tone + (rng() - 0.5) * 14) * shade;
-          if (i === 0 || j === 0) v = 18 * shade;
-          else if (i === 1 || j === 1) v += 10 * shade;
-          g.fillStyle = rgb(v, v, v + 3); g.fillRect(x, y, 1, 1);
-        }
-      }
-    }
-  }
-  function plinth(g, w, h, rng) {
-    nrect(g, 0, h - 7, w, 7, 20, 18, 20, 8, rng);
-    for (let x = 0; x < w; x += 2) { g.fillStyle = rgb(150, 115, 48); g.fillRect(x, h - 7, 1, 1); }
-  }
-  const texStone = makeTex(32, 64, 11, (g, w, h, r) => { paintStone(g, w, h, r); plinth(g, w, h, r); });
-  const texBanner = makeTex(32, 64, 12, (g, w, h, r) => {
-    paintStone(g, w, h, r);
-    const x0 = 5, x1 = 26, y0 = 4, y1 = 52;
-    nrect(g, x0, y0, x1 - x0 + 1, y1 - y0 + 1, 112, 16, 22, 18, r);
-    outline(g, x0 + 2, y0 + 2, x1 - x0 - 3, y1 - y0 - 3, 62, 6, 10, r);
-    outline(g, x0, y0, x1 - x0 + 1, y1 - y0 + 1, GOLD[0], GOLD[1], GOLD[2], r);
-    for (let x = x0; x <= x1; x += 2) { g.fillStyle = rgb(GOLD[0], GOLD[1], GOLD[2]); g.fillRect(x, y1 + 1, 1, (x % 4) ? 2 : 4); }
-    const gp = (x, y) => { const n = (r() - 0.5) * 30; g.fillStyle = rgb(GOLD[0] + n, GOLD[1] + n, GOLD[2] + n * 0.5); g.fillRect(x, y, 1, 1); };
-    for (let i = 0; i < 13; i++) { const x = 9 + Math.floor(i * 0.5); gp(x, 14 + i); gp(x + 1, 14 + i); gp(22 - Math.floor(i * 0.5), 14 + i); gp(21 - Math.floor(i * 0.5), 14 + i); }
-    for (let y = 27; y <= 44; y++) { gp(15, y); gp(16, y); }
-    for (let x = 11; x <= 20; x++) { gp(x, 45); gp(x, 46); }
-    for (let a = 0; a < 16; a++) gp(Math.round(15.5 + Math.cos(a / 16 * 6.283) * 3), Math.round(9 + Math.sin(a / 16 * 6.283) * 3));
-    gp(15, 49); gp(16, 49); gp(14, 50); gp(17, 50); gp(15, 51); gp(16, 51);
-    plinth(g, w, h, r);
-  });
-  const texPanel = makeTex(32, 64, 13, (g, w, h, r) => {
-    paintStone(g, w, h, r);
-    nrect(g, 7, 6, 18, 46, 96, 14, 18, 16, r);
-    for (let x = 8; x < 25; x += 5) { g.fillStyle = rgb(40, 6, 10); g.fillRect(x, 7, 1, 44); }
-    for (let y = 7; y < 52; y += 5) { g.fillStyle = rgb(40, 6, 10); g.fillRect(8, y, 16, 1); }
-    outline(g, 7, 6, 18, 46, 60, 8, 12, r);
-    outline(g, 5, 4, 22, 50, GOLD[0], GOLD[1], GOLD[2], r);
-    plinth(g, w, h, r);
-  });
-  const texPillar = makeTex(32, 64, 14, (g, w, h, r) => {
-    paintStone(g, w, h, r, 0.8);
-    nrect(g, 0, 3, w, 3, GOLD[0], GOLD[1], GOLD[2], 30, r);
-    nrect(g, 0, 56, w, 3, GOLD[0], GOLD[1], GOLD[2], 30, r);
-    nrect(g, 9, 11, 14, 40, 14, 9, 10, 8, r);
-    outline(g, 9, 11, 14, 40, GOLD[0], GOLD[1], GOLD[2], r);
-    nrect(g, 12, 26, 8, 11, 190, 26, 32, 30, r);
-    g.fillStyle = rgb(255, 120, 110); g.fillRect(13, 27, 3, 2);
-    outline(g, 11, 25, 10, 13, GOLD[0], GOLD[1], GOLD[2], r);
-  });
-  const texGold = makeTex(16, 16, 15, (g, w, h, r) => {
-    nrect(g, 0, 0, w, h, GOLD[0] - 10, GOLD[1] - 10, GOLD[2] - 8, 36, r);
-    for (let i = 0; i < w; i++) { g.fillStyle = rgb(110, 80, 30); g.fillRect(i, 0, 1, 1); g.fillRect(0, i, 1, 1); }
-  });
-  const texFloor = makeTex(32, 32, 16, (g, w, h, r) => {
-    for (let ty = 0; ty < 2; ty++) for (let tx = 0; tx < 2; tx++) {
-      const tone = (r() - 0.5) * 10;
-      for (let j = 0; j < 16; j++) for (let i = 0; i < 16; i++) {
-        let v = 38 + tone + (r() - 0.5) * 12;
-        if (i === 0 || j === 0) v = 15; else if (i === 1 || j === 1) v += 6;
-        g.fillStyle = rgb(v, v, v + 3); g.fillRect(tx * 16 + i, ty * 16 + j, 1, 1);
-      }
-    }
-  });
-  const texCarpet = makeTex(32, 32, 17, (g, w, h, r) => {
-    nrect(g, 0, 0, w, h, 104, 14, 20, 20, r);
-    for (let y = 0; y < h; y++) {
-      for (const x of [1, 2, 29, 30]) { const n = (r() - 0.5) * 30; g.fillStyle = rgb(GOLD[0] + n, GOLD[1] + n, GOLD[2] + n * 0.5); g.fillRect(x, y, 1, 1); }
-      for (const x of [3, 4, 5, 26, 27, 28]) { g.fillStyle = rgb(58 + (r() - 0.5) * 12, 7, 11); g.fillRect(x, y, 1, 1); }
-      for (let x = 7; x < 25; x++) {
-        const d = Math.abs(x - 15.5) + Math.abs((y % 16) - 7.5);
-        if (d > 5 && d < 6.6) { g.fillStyle = rgb(60, 8, 12); g.fillRect(x, y, 1, 1); }
-        else if (d < 1.6) { g.fillStyle = rgb(GOLD[0] - 20, GOLD[1] - 20, GOLD[2] - 20); g.fillRect(x, y, 1, 1); }
-      }
-    }
-  });
-  const texCeil = makeTex(32, 32, 18, (g, w, h, r) => paintStone(g, w, h, r, 0.6));
-  const texSkin = makeTex(8, 8, 19, (g, w, h, r) => {
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-      const n = (r() - 0.5) * 34, q = r();
-      if (q < 0.14) g.fillStyle = rgb(48, 12, 12);
-      else if (q > 0.92) g.fillStyle = rgb(150, 62, 46);
-      else g.fillStyle = rgb(112 + n, 30 + n * 0.5, 26 + n * 0.4);
-      g.fillRect(x, y, 1, 1);
-    }
-  });
-  const texBone = makeTex(4, 4, 20, (g, w, h, r) => nrect(g, 0, 0, w, h, 188, 168, 128, 34, r));
-  const texDark = makeTex(4, 4, 21, (g, w, h, r) => nrect(g, 0, 0, w, h, 38, 22, 22, 14, r));
+  const T = WorldTex.create(THREE);
+  const { texStone, texBanner, texPanel, texPillar, texGold, texFloor, texFloor2, texFloor3, texFloorEdge, texCarpet, texCeil, texCloth, texSkin, texBone, texDark } = T;
 
   /* ============ renderer, scene, camera ============ */
   const canvas = $('gl');
@@ -162,7 +44,7 @@
     renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
   } catch (e) { $('fatal').hidden = false; return; }
   renderer.setPixelRatio(1);
-  const FOG_COL = 0x040102;
+  const FOG_COL = 0x0c0406;                                   // a deep, warm crimson-black haze (was almost pure black)
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(FOG_COL);
   scene.fog = new THREE.Fog(FOG_COL, 5, view.fogFar);
@@ -185,77 +67,9 @@
   const lantern = new THREE.PointLight(0xffb070, 0.8, 20, 2); camera.add(lantern);
 
   /* ============ world: merged quads with baked torch light ============ */
-  const solidC = (cx, cz) => {
-    if (cx < 0 || cz < 0 || cx >= GW || cz >= GH) return true;
-    const c = rows[cz][cx];
-    return c !== '.' && c !== 'c';
-  };
-  function losV(ax, az, bx, bz) {
-    const dx = bx - ax, dz = bz - az, d = Math.hypot(dx, dz);
-    for (let s = 0.35; s < d - 0.1; s += 0.5) {
-      if (solidC(Math.floor((ax + dx / d * s) / CELL), Math.floor((az + dz / d * s) / CELL))) return false;
-    }
-    return true;
-  }
-  function bakeLight(px, py, pz, nx, ny, nz) {
-    let r = 0.17, g = 0.125, b = 0.15;
-    for (const t of torches) {
-      const dx = t.x - px, dy = t.y - py, dz = t.z - pz;
-      const d2 = dx * dx + dy * dy + dz * dz;
-      if (d2 > 420) continue;
-      const d = Math.sqrt(d2) || 0.001;
-      const nd = (nx * dx + ny * dy + nz * dz) / d;
-      if (nd < 0.02) continue;
-      if (!losV(px + nx * 0.06, pz + nz * 0.06, t.x, t.z)) continue;
-      const f = (t.kind === 'brazier' ? 3.3 : 2.5) / (1 + d2 / 12) * (0.3 + 0.7 * nd);
-      r += f; g += f * 0.56; b += f * 0.24;
-    }
-    return [Math.min(r, 2.0), Math.min(g, 2.0), Math.min(b, 2.0)];
-  }
-  const buckets = {};
-  const B = (k) => buckets[k] || (buckets[k] = { pos: [], uv: [], col: [] });
-  function addFace(key, O, U, V, nu, nv, n) {
-    const b = B(key);
-    const vert = (a, c) => {
-      const p = [O[0] + U[0] * a + V[0] * c, O[1] + U[1] * a + V[1] * c, O[2] + U[2] * a + V[2] * c];
-      return { p, a, c, l: bakeLight(p[0], p[1], p[2], n[0], n[1], n[2]) };
-    };
-    const push = (v) => { b.pos.push(v.p[0], v.p[1], v.p[2]); b.uv.push(v.a, v.c); b.col.push(v.l[0], v.l[1], v.l[2]); };
-    for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) {
-      const v00 = vert(i / nu, j / nv), v10 = vert((i + 1) / nu, j / nv), v11 = vert((i + 1) / nu, (j + 1) / nv), v01 = vert(i / nu, (j + 1) / nv);
-      push(v00); push(v10); push(v11); push(v00); push(v11); push(v01);
-    }
-  }
-  function addBox(key, x0, y0, z0, x1, y1, z1) {
-    const dx = x1 - x0, dy = y1 - y0, dz = z1 - z0;
-    addFace(key, [x1, y0, z1], [0, 0, -dz], [0, dy, 0], 1, 1, [1, 0, 0]);
-    addFace(key, [x0, y0, z0], [0, 0, dz], [0, dy, 0], 1, 1, [-1, 0, 0]);
-    addFace(key, [x0, y0, z1], [dx, 0, 0], [0, dy, 0], 1, 1, [0, 0, 1]);
-    addFace(key, [x1, y0, z0], [-dx, 0, 0], [0, dy, 0], 1, 1, [0, 0, -1]);
-    addFace(key, [x0, y1, z1], [dx, 0, 0], [0, 0, -dz], 1, 1, [0, 1, 0]);
-    addFace(key, [x0, y0, z0], [dx, 0, 0], [0, 0, dz], 1, 1, [0, -1, 0]);
-  }
-  const KIND = { '#': 'stone', 'B': 'banner', 'W': 'panel', 'P': 'pillar' };
-  for (let cz = 0; cz < GH; cz++) for (let cx = 0; cx < GW; cx++) {
-    const ch = rows[cz][cx], x0 = cx * CELL, x1 = x0 + CELL, z0 = cz * CELL, z1 = z0 + CELL;
-    if (ch === '.' || ch === 'c') {
-      addFace(ch === 'c' ? 'carpet' : 'floor', [x0, 0, z1], [CELL, 0, 0], [0, 0, -CELL], 2, 2, [0, 1, 0]);
-      addFace('ceil', [x0, WALL_H, z0], [CELL, 0, 0], [0, 0, CELL], 2, 2, [0, -1, 0]);
-      continue;
-    }
-    const key = KIND[ch];
-    if (!solidC(cx + 1, cz)) addFace(key, [x1, 0, z1], [0, 0, -CELL], [0, WALL_H, 0], 2, 5, [1, 0, 0]);
-    if (!solidC(cx - 1, cz)) addFace(key, [x0, 0, z0], [0, 0, CELL], [0, WALL_H, 0], 2, 5, [-1, 0, 0]);
-    if (!solidC(cx, cz + 1)) addFace(key, [x0, 0, z1], [CELL, 0, 0], [0, WALL_H, 0], 2, 5, [0, 0, 1]);
-    if (!solidC(cx, cz - 1)) addFace(key, [x1, 0, z0], [-CELL, 0, 0], [0, WALL_H, 0], 2, 5, [0, 0, -1]);
-    if (ch === 'P') {
-      addBox('gold', x0 - 0.14, 0, z0 - 0.14, x1 + 0.14, 0.38, z1 + 0.14);
-      addBox('gold', x0 - 0.14, WALL_H - 0.7, z0 - 0.14, x1 + 0.14, WALL_H - 0.3, z1 + 0.14);
-      addBox('stone', x0 - 0.06, WALL_H - 0.3, z0 - 0.06, x1 + 0.06, WALL_H, z1 + 0.06);
-    }
-  }
+  const world = WorldBake.bake(map), buckets = world.buckets, bakeLight = world.light;
   const worldMats = [];
-  const TEX = { stone: texStone, banner: texBanner, panel: texPanel, pillar: texPillar, gold: texGold, floor: texFloor, carpet: texCarpet, ceil: texCeil };
+  const TEX = { stone: texStone, cloth: texCloth, panel: texPanel, pillar: texPillar, gold: texGold, floor: texFloor, floor2: texFloor2, floor3: texFloor3, floorEdge: texFloorEdge, carpet: texCarpet, ceil: texCeil };
   for (const key in buckets) {
     const b = buckets[key], geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(b.pos, 3));
