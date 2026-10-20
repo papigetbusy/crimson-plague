@@ -44,6 +44,8 @@ jobs:
         run: node tests/monsters.test.js
       - name: Monster rig tests
         run: node tests/rigs.test.js
+      - name: Elite and past-the-cap tests
+        run: node tests/elites.test.js
       - name: Build the page
         run: node tools/build.js "build-$(date -u +%Y%m%d-%H%M)-${GITHUB_SHA::7}"
       - name: Publish previews and models

@@ -50,4 +50,5 @@ t('Referee: a full right-stick push turns the player at the pad turn speed (abou
 t('Referee: aiming slows the stick turn', Math.abs(yawAfter({ padX: 1, ads: true }, 1)) < Math.abs(yawAfter({ padX: 1 }, 1)) * 0.8);
 t('Referee: pushing the stick left turns the other way and a stick past full tilt is clamped', yawAfter({ padX: -1 }, 1) < -3 && Math.abs(yawAfter({ padX: 5 }, 1) - yawAfter({ padX: 1 }, 1)) < 1e-9);
 t('Referee: pushing the right stick up looks up, and the look is clamped', (() => { const ref = Referee.create(5); let out; for (let i = 0; i < 300; i++) out = ref.step(1 / 60, { padY: -1 }); return out.state.player.pitch > 1.4 && out.state.player.pitch <= 1.45 + 1e-9; })());
+t('The Back button gives one map press per push, so holding it does not flicker the map open and shut', (() => { const c = PadInput.create(); const a = c.read(pad(null, [B.BACK])), b = c.read(pad(null, [B.BACK])), n = c.read(pad()), d = c.read(pad(null, [B.BACK])); return a.map && !b.map && !n.map && d.map; })());
 process.exit(bad ? 1 : 0);

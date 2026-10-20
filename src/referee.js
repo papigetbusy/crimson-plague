@@ -255,6 +255,8 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       R.wave++; R.phase = 'intermission'; R.timer = L.intermission;
     }
     const aliveMax = () => Math.min(L.aliveCap, cfg.monsterCount + R.wave - 1);
+    let forceElite = false;
+    const overCap = () => Math.max(0, cfg.monsterCount + R.wave - 1 - L.aliveCap);     // how many waves past the point where the screen is full
 
     function gainXp(v) {
       R.xp += v;
@@ -283,8 +285,8 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     function statsFor(kind, wave) {
       const k = D.KINDS[kind], w = wave - 1;
       return {
-        hp: cfg.monsterHp * k.hpMul * (1 + L.hpPerWave * w),
-        dmg: cfg.monsterDamage * k.dmgMul * (1 + L.dmgPerWave * w),
+        hp: cfg.monsterHp * k.hpMul * (1 + L.hpPerWave * w) * (1 + L.capHp * overCap()),
+        dmg: cfg.monsterDamage * k.dmgMul * (1 + L.dmgPerWave * w) * (1 + L.capDmg * overCap()),
         spd: cfg.monsterSpeed * k.speedMul * Math.min(L.speedMax, 1 + L.speedPerWave * w)
       };
     }
@@ -318,12 +320,21 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       addMonster(kind, best[0], best[1]);
       return true;
     }
+    // elites only appear once the waves are past the cap; no random is used before that, so early runs play out exactly as before
+    function rollElite() {
+      const over = overCap(); if (over <= 0 && !forceElite) return [];
+      if (!forceElite && rng() >= Math.min(L.eliteMax, L.eliteBase + L.elitePer * over)) return [];
+      const open = D.AFFIXES.filter((a) => over >= a.from), n = Math.min(L.eliteAffixMax, open.length, 1 + Math.floor(over / L.eliteAffixEvery)), pool = open.slice(), got = [];
+      while (got.length < n) got.push(pool.splice((rng() * pool.length) | 0, 1)[0]);
+      return got;
+    }
     function addMonster(kind, x, z) {
       const k = D.KINDS[kind];
-      const sv = k.boss ? 1 : 0.92 + rng() * 0.18, st = statsFor(kind, R.wave);
+      const sv = k.boss ? 1 : 0.92 + rng() * 0.18, st = statsFor(kind, R.wave), elite = k.boss ? [] : rollElite();
+      if (elite.length) { st.hp *= L.eliteHp; for (const a of elite) { st.hp *= a.hp || 1; st.dmg *= a.dmg || 1; st.spd *= a.speed || 1; } }
       monsters.push({
         id: nextId++, kind, x, z, hp: st.hp, maxHp: st.hp, dmg: st.dmg, spd0: st.spd,
-        sv, scale: cfg.monsterScale * sv * k.size, spd: 0.85 + rng() * 0.3, yaw: k.guard ? Math.atan2(M0.door.nx, -M0.door.nz) : 0, yawT: k.guard ? Math.atan2(M0.door.nx, -M0.door.nz) : 0, phase: rng() * 6, atk: k.wind || 0.4, shT: 0.8 + rng() * 1.6, shW: 0,
+        elite: elite.map((a) => a.id), sv, scale: cfg.monsterScale * sv * k.size * (elite.length ? L.eliteScale : 1), spd: 0.85 + rng() * 0.3, yaw: k.guard ? Math.atan2(M0.door.nx, -M0.door.nz) : 0, yawT: k.guard ? Math.atan2(M0.door.nx, -M0.door.nz) : 0, phase: rng() * 6, atk: k.wind || 0.4, shT: 0.8 + rng() * 1.6, shW: 0,
         flash: 0, stun: 0, state: k.guard ? 'guard' : 'chase', chT: k.charge ? 1.5 : 0, wT: 0, cT: 0, cdx: 0, cdz: 0, summoned: false
       });
       events.push({ type: 'spawn', kind, boss: !!k.boss });
@@ -340,6 +351,13 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       kills++;
       events.push({ type: 'kill', id: m.id, kind: m.kind, boss: !!k.boss, x: m.x, z: m.z, scale: m.scale, yaw: m.yaw });
       dropLoot(m, k);
+      if (m.elite.length) {
+        for (let i = 1; i < L.eliteXp; i++) orbs.push({ id: nextId++, x: m.x + (rng() - 0.5), z: m.z + (rng() - 0.5), v: k.xp, life: L.orbLife });
+        if (m.elite.includes('volatile')) {                                 // a volatile elite blows up when it dies
+          events.push({ type: 'eliteBlast', x: m.x, z: m.z, r: L.volatileRadius });
+          if (Math.hypot(P.x - m.x, P.z - m.z) < L.volatileRadius) hurtPlayer(m.dmg * L.volatileDmg, m.id);
+        }
+      }
       monsters = monsters.filter((o) => o !== m);
       if (k.boss) openDoor();
     }
@@ -711,7 +729,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
         },
         monsters: monsters.map((m) => ({
           id: m.id, kind: m.kind, x: m.x, z: m.z, yaw: m.yaw, hp: m.hp, maxHp: m.maxHp,
-          flash: m.flash, state: m.state, phase: m.phase, scale: m.scale,
+          flash: m.flash, state: m.state, phase: m.phase, scale: m.scale, elite: m.elite,
           atkK: m.state === 'attack' ? clamp(1 - m.atk / D.KINDS[m.kind].wind, 0, 1) : 0,              // 0 to 1 as a melee blow winds up; resets when it lands (the screen raises the weapon with it)
           castK: m.state === 'cast' ? clamp(1 - m.shW / D.KINDS[m.kind].shoot.wind, 0, 1) : 0           // the same for a ranged monster rearing back to throw
         })),
@@ -736,12 +754,13 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     function place(x, z, yaw) { P.x = x; P.z = z; if (yaw !== undefined) P.yaw = yaw; P.vx = P.vz = 0; flowCell = -1; }
     // put a monster somewhere (tests and tools only)
     function spawnAt(kind, x, z) { addMonster(kind, x, z); }
+    function spawnElite(kind, x, z) { forceElite = true; addMonster(kind, x, z); forceElite = false; }   // for tests: an elite right here
     function setCfg(o) { Object.assign(cfg, o); }
     function reset() { deaths = 0; restartRun(); events = []; }
 
     newRun(); loadFloor(floorOf(R.wave)); placePlayer();
     // first state, so the screen can draw before the first step
-    return { get map() { return M0; }, cfg, setCfg, place, spawnAt, step, snapshot, reset, kinds: D.KINDS, defaults: Object.assign({}, DEFAULT_CFG) };
+    return { get map() { return M0; }, cfg, setCfg, place, spawnAt, spawnElite, step, snapshot, reset, kinds: D.KINDS, defaults: Object.assign({}, DEFAULT_CFG) };
   }
 
   return { create };

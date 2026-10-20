@@ -54,7 +54,7 @@ Starts as plain grey-box floors. The goal is the shape and size of the world.
 ## Phase 3 — Monsters and waves
 - [ ] The Crusader Tactics monster list as the base roster (ranged and special attackers, elites), each with its own behaviour, first as simple placeholder shapes, then Grok's art one monster at a time.
 - [ ] Waves scale with floor; variants unlock on set floors; a monster mix per floor that keeps waves interesting.
-- [ ] A monster cap per floor. After the cap: more damage, more health, skills and abilities, with no upper limit.
+- [x] A monster cap per floor. After the cap: more damage, more health, skills and abilities, with no upper limit. (Built: past the cap every wave adds health and damage, and elites appear with abilities Armored, Swift, Brutal, Volatile; more abilities stack on the further you go. Owner to feel it on the phone.)
 - **Check:** difficulty keeps climbing past the cap and fights stay readable on the phone.
 - **Gate:** floors 3, 4 and 5 still feel fresh.
 

@@ -75,6 +75,11 @@ with sync_playwright() as p:
     check('phone: Start pauses', shown(page, '#start'))
     pad(page, held=[START]); wait(page); pad(page); wait(page, 200)
     check('phone: Start resumes', not shown(page, '#start'))
+    # the big map: Back opens it, any pad press closes it, so it can never trap the controller
+    pad(page, held=[8]); wait(page); pad(page); wait(page, 200)
+    check('phone: Back opens the big map', shown(page, '#mapOverlay'))
+    pad(page, held=[0]); wait(page); pad(page); wait(page, 200)
+    check('phone: A closes the big map again', not shown(page, '#mapOverlay'))
     # unplug
     page.evaluate("()=>{window.__pad=null}"); wait(page, 250)
     check('phone: when the controller goes, the touch controls come back', not hasClass(page, 'pad') and shown(page, '#bFire') and shown(page, '#joyZone') and shown(page, '#lookZone'))

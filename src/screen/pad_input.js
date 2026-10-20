@@ -8,7 +8,7 @@
      L3 (click left)  sprint (stays on until you stop moving or aim)
      B (Circle)       slide while sprinting
      X (Square)       reload
-   Menus: A (Cross) confirms (start, resume, pick a level-up card, rise again), Start (Options) pauses and resumes,
+   Menus: A (Cross) confirms (start, resume, pick a level-up card, rise again), Start (Options) pauses and resumes, Back (View / Share) opens and closes the big map,
           D-pad or left stick left/right moves between level-up cards.
    Not wired yet because the game has no such thing yet: Y and RB (weapons), LB and A in play (abilities), R3 (melee). */
 const PadInput = (function () {
@@ -48,8 +48,8 @@ const PadInput = (function () {
       const dir = padDir || stickDir;
       const nav = dir !== 0 && dir !== flick ? dir : 0; flick = dir;
       const confirm = edge('A', down(pad, BTN.A));
-      const start = edge('START', down(pad, BTN.START));
-      return { mx, mz: -mzUp, padX, padY, fire, ads, sprint: sprinting, slide, reload, reloadHeld: down(pad, BTN.X), nav, confirm, start };
+      const start = edge('START', down(pad, BTN.START)), map = edge('BACK', down(pad, BTN.BACK));
+      return { mx, mz: -mzUp, padX, padY, fire, ads, sprint: sprinting, slide, reload, reloadHeld: down(pad, BTN.X), nav, confirm, start, map };
     }
     return { read, reset };
   }

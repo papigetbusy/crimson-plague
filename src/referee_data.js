@@ -58,8 +58,21 @@ const RefereeData = (function () {
     spawnPathMin: 8, spawnPathMax: 26,                  // monsters appear a walk of this many cells away from you (2 units a cell)
     shooterCap: 4,                                     // at most this many ranged monsters alive at once, so the fight stays readable on a phone
     meleeReachMul: 1.45, meleeReachAdd: 0.6,           // a melee monster hits from this far: size times the first number, plus the second
-    exploreRadius: 9                                    // how many cells around you the minimap reveals
+    exploreRadius: 9,                                   // how many cells around you the minimap reveals
+    // past the monster cap (aliveCap): the extra waves cannot add more bodies, so every wave past it adds power instead, with no top limit
+    capHp: 0.08, capDmg: 0.04,                          // extra health / damage fraction per wave past the cap, on every monster
+    eliteBase: 0.06, elitePer: 0.03, eliteMax: 0.6,     // chance a spawn is an elite: base plus a bit per wave past the cap
+    eliteHp: 1.5, eliteXp: 3, eliteScale: 1.15,
+    eliteAffixEvery: 8, eliteAffixMax: 4,               // an elite carries one ability, plus one more for every 8 waves past the cap
+    volatileRadius: 3.6, volatileDmg: 1.0               // an exploding elite hurts you within this far, for this times its damage
   };
+  // elite abilities, unlocked in this order as the waves past the cap pile up (from = waves past the cap needed)
+  const AFFIXES = [
+    { id: 'armored',  name: 'Armored',  from: 0, hp: 2.2 },
+    { id: 'swift',    name: 'Swift',    from: 0, speed: 1.45 },
+    { id: 'brutal',   name: 'Brutal',   from: 3, dmg: 1.8 },
+    { id: 'volatile', name: 'Volatile', from: 6 }
+  ];
 
   const xpNeed = (level) => Math.round(20 + 14 * level + 2 * level * level);
 
@@ -90,6 +103,6 @@ const RefereeData = (function () {
     if (boss) list.unshift('demon');
     return list;
   }
-  return { KINDS, SKILLS, LOOP, xpNeed, waveKinds };
+  return { KINDS, SKILLS, LOOP, AFFIXES, xpNeed, waveKinds };
 })();
 if (typeof module !== 'undefined') module.exports = RefereeData;

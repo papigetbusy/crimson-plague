@@ -496,6 +496,8 @@
     const r = pad.now; if (!r) return;
     if (r.start) { if (running) setRunning(false); else begin(true); return; }
     if (!running) { if (r.confirm) begin(true); return; }
+    if (minimap.isOpen) { if (r.map || r.confirm) minimap.setOpen(false); return; }               // the big map covers the screen: any pad press that is not a move closes it, so it can never trap a controller
+    if (r.map) { minimap.toggle(); return; }
     if (state.choices) { if (r.nav) hud.moveSel(r.nav); if (r.confirm && hud.selected() >= 0) I.pick = hud.selected(); }
     else if (state.over && r.confirm) I.restart = true;
   }
@@ -634,6 +636,7 @@
       else if (e.type === 'slide') { sfx('slide'); }
       else if (e.type === 'shoot') { sfx(e.proj === 'bolt' ? 'zap' : e.proj === 'spit' ? 'spit' : 'fireball'); }
       else if (e.type === 'projHit') { burst(e.x, e.y, e.z, e.proj === 'fire' ? 12 : 7, e.proj === 'spit' ? [0x9cff4a, 0x4fd02a, 0x2a6a18] : e.proj === 'bolt' ? [0xeaffff, 0x6fd8ff, 0xffffff] : [0xffe070, 0xff5a14, 0xc8260c], 4, 0.4, 6, 0.8); if (e.onPlayer) sfx('hurt'); }
+      else if (e.type === 'eliteBlast') { burst(e.x, 1, e.z, 16, [0x9cff4a, 0xffe070, 0xff5a14], 6, 0.5, 4, 0.9); sfx('fireball'); }
       else if (e.type === 'orb') { sfx('orb'); }
       else if (e.type === 'pickup' || e.type === 'skill') { sfx('pickup'); }
       else if (e.type === 'levelUp') { sfx('levelup'); }
@@ -645,6 +648,13 @@
     }
   }
 
+  const ELITE_GLOW = { armored: [0.12, 0.2, 0.38], swift: [0.4, 0.34, 0.02], brutal: [0.42, 0.06, 0.03], volatile: [0.1, 0.42, 0.06] };   // look only
+  function eliteGlow(list, t) {
+    if (!list || !list.length) return [0, 0, 0];
+    const k = 0.75 + 0.25 * Math.sin(t * 5), n = list.length, o = [0, 0, 0];
+    for (const id of list) { const g = ELITE_GLOW[id]; o[0] += g[0] / n; o[1] += g[1] / n; o[2] += g[2] / n; }
+    return [o[0] * k, o[1] * k, o[2] * k];
+  }
   function syncMonsters(st, dt) {
     const seen = new Set();
     for (const m of st.monsters) {
@@ -654,7 +664,8 @@
       en.root.position.set(m.x, (ref.kinds[m.kind].hover || 0) * m.scale, m.z); en.root.rotation.y = -m.yaw; en.root.scale.setScalar(m.scale * MODEL);
       RIGS.animate(en, m, st.t);
       const lt = smoothLight(m.x, m.z), f = clamp(m.flash / 0.12, 0, 1), warn = m.state === 'windup' ? 0.35 + 0.25 * Math.sin(st.t * 30) : (m.castK > 0 ? 0.12 + 0.3 * m.castK : m.atkK > 0.4 ? 0.2 * m.atkK : 0);
-      en.skin.emissive.setRGB(Math.max(0, (lt[0] - 0.14)) * 0.22 + f * 0.7 + warn, Math.max(0, (lt[1] - 0.1)) * 0.12 + f * 0.35, f * 0.3);
+      const ge = eliteGlow(m.elite, st.t);                                    // elites glow the colour of their abilities
+      en.skin.emissive.setRGB(Math.max(0, (lt[0] - 0.14)) * 0.22 + f * 0.7 + warn + ge[0], Math.max(0, (lt[1] - 0.1)) * 0.12 + f * 0.35 + ge[1], f * 0.3 + ge[2]);
     }
     for (const [id, en] of mons) if (!seen.has(id)) { scene.remove(en.root); mons.delete(id); }
     for (let i = dying.length - 1; i >= 0; i--) {
@@ -756,24 +767,24 @@
   }
 
   /* ============ main loop ============ */
-  let state = ref.snapshot();
+  let state = ref.snapshot(), frameErr = '';
   function ensureFloor(st) { if (st.floorId !== loadedFloor) { worldView.load(ref.map, view.fogFar); loadedFloor = st.floorId; } }   // a new floor (or a new run) is baked and drawn here
   ensureFloor(state);
   function frame(now) {
     requestAnimationFrame(frame);
     const dt = Math.min((now - clock.last) / 1000, 0.05); clock.last = now;
-    pollPad(dt); padMenus();
+    try { pollPad(dt); padMenus(); } catch (e) { /* a controller hiccup must not stop the frame */ }
+    // each stage guards itself: one bad frame in the drawing code must never freeze the rules or the controller, and the first error is shown on screen so it can be read off a phone
+    const stage = (name, fn) => { try { fn(); } catch (e) { if (!frameErr) { frameErr = name + ': ' + (e && e.message ? e.message : e); toastEl.textContent = 'Error in ' + frameErr; toastEl.classList.add('show'); toastT = 1e9; if (window.console) console.error(e); } } };
     if (running && !panelOpen) {
-      const out = ref.step(dt, gatherInput());
-      state = out.state;
-      handleEvents(out.events);
+      stage('rules', () => { const out = ref.step(dt, gatherInput()); state = out.state; stage('events', () => handleEvents(out.events)); });
     } else {
       I.lookX = I.lookY = I.touchX = I.touchY = 0; I.slide = false; I.reload = false;
     }
-    ensureFloor(state);
-    syncMonsters(state, dt);
-    updateView(state, running && !panelOpen ? dt : 0, now / 1000);
-    renderer.render(scene, camera);
+    stage('floor', () => ensureFloor(state));
+    stage('monsters', () => syncMonsters(state, dt));
+    stage('view', () => updateView(state, running && !panelOpen ? dt : 0, now / 1000));
+    stage('draw', () => renderer.render(scene, camera));
   }
   requestAnimationFrame((t) => { clock.last = t; frame(t); });
   setRunning(false);
