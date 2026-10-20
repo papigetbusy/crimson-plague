@@ -23,7 +23,8 @@ const Referee = (function () {
   const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
   const lerp = (a, b, t) => a + (b - a) * t;
   const D = typeof RefereeData !== 'undefined' ? RefereeData : require('./referee_data.js');   // monster kinds, skills, wave plan
-  const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js');              // the floors: rooms and winding corridors from a seed
+  const SH = typeof RefereeShots !== 'undefined' ? RefereeShots : require('./referee_shots.js');   // monster projectiles
+const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js');              // the floors: rooms and winding corridors from a seed
 
   function makeRng(seed) {
     let a = seed >>> 0;
@@ -238,7 +239,7 @@ const Referee = (function () {
       if (explored) reveal(P);
     }
     function restartRun() {
-      kills = 0; monsters = []; orbs = []; pickups = []; spawnQ = []; spawnTimer = 0.4;
+      kills = 0; monsters = []; orbs = []; pickups = []; spawnQ = []; spawnTimer = 0.4; mshots.clear();
       newRun(); loadFloor(floorOf(R.wave)); placePlayer();
       events.push({ type: 'restart' });
     }
@@ -314,14 +315,18 @@ const Referee = (function () {
         }
       }
       if (!best) return false;
+      addMonster(kind, best[0], best[1]);
+      return true;
+    }
+    function addMonster(kind, x, z) {
+      const k = D.KINDS[kind];
       const sv = k.boss ? 1 : 0.92 + rng() * 0.18, st = statsFor(kind, R.wave);
       monsters.push({
-        id: nextId++, kind, x: best[0], z: best[1], hp: st.hp, maxHp: st.hp, dmg: st.dmg, spd0: st.spd,
-        sv, scale: cfg.monsterScale * sv * k.size, spd: 0.85 + rng() * 0.3, yaw: k.guard ? Math.atan2(M0.door.nx, -M0.door.nz) : 0, yawT: k.guard ? Math.atan2(M0.door.nx, -M0.door.nz) : 0, phase: rng() * 6, atk: 0.4,
+        id: nextId++, kind, x, z, hp: st.hp, maxHp: st.hp, dmg: st.dmg, spd0: st.spd,
+        sv, scale: cfg.monsterScale * sv * k.size, spd: 0.85 + rng() * 0.3, yaw: k.guard ? Math.atan2(M0.door.nx, -M0.door.nz) : 0, yawT: k.guard ? Math.atan2(M0.door.nx, -M0.door.nz) : 0, phase: rng() * 6, atk: k.wind || 0.4, shT: 0.8 + rng() * 1.6, shW: 0,
         flash: 0, stun: 0, state: k.guard ? 'guard' : 'chase', chT: k.charge ? 1.5 : 0, wT: 0, cT: 0, cdx: 0, cdz: 0, summoned: false
       });
       events.push({ type: 'spawn', kind, boss: !!k.boss });
-      return true;
     }
     function dropLoot(m, k) {
       orbs.push({ id: nextId++, x: m.x, z: m.z, v: k.xp, life: L.orbLife });
@@ -347,7 +352,7 @@ const Referee = (function () {
     // through the door: a new, bigger floor; what you carry (health, ammo, level, skills) comes with you
     function nextFloor() {
       for (const o of orbs) gainXp(o.v);
-      monsters = []; orbs = []; pickups = []; spawnQ = [];
+      monsters = []; orbs = []; pickups = []; spawnQ = []; mshots.clear();
       loadFloor(floorNo + 1);
       P.x = M0.start.x; P.z = M0.start.z; P.yaw = M0.start.yaw; P.vx = P.vz = 0; P.sliding = false; P.slideT = 0; P.invuln = 1.5;
       R.hold = null; R.phase = 'intermission'; R.timer = L.intermission; spawnTimer = 0.4;
@@ -363,7 +368,7 @@ const Referee = (function () {
     }
 
     function hurtPlayer(d, id) {
-      if (P.invuln > 0 || R.over) return;
+      if (P.invuln > 0 || R.over || P.sliding) return;   // a slide is untouchable from start to finish
       P.hp -= d; P.hurt = 0.3; P.sinceHit = 0;
       events.push({ type: 'playerHit', dmg: d, id });
       if (P.hp <= 0) {
@@ -372,6 +377,11 @@ const Referee = (function () {
         events.push({ type: 'dead' });
       }
     }
+
+    const mshots = SH.create({
+      nextId: () => nextId++, solidAt: (x, z) => solid(Math.floor(x / CELL), Math.floor(z / CELL)),
+      player: () => ({ x: P.x, z: P.z, eye: P.eye, sliding: P.sliding }), hurt: (d, id) => hurtPlayer(d, id), event: (e) => events.push(e)
+    });
 
     /* ---------------- reload ---------------- */
     function startReload() {
@@ -446,17 +456,44 @@ const Referee = (function () {
     }
 
     /* ---------------- monster behaviour ---------------- */
+    // a ranged attacker (mushroom, eyeball, flame spirit, and the Demon Lord's fireball). Returns true when it is busy shooting, so the melee and chase code is skipped.
+    // It keeps its distance (backs off when you are inside `keep`), stops while it has a clear shot, rears back for `wind` seconds, then throws; the throw is aimed where you stand
+    // at that moment, so moving or sliding dodges it.
+    function shooterStep(m, k, dt, dist, dx, dz) {
+      const S = k.shoot;
+      m.shMx = m.shMz = 0;
+      if (m.state === 'cast') {
+        m.shW -= dt; m.yawT = Math.atan2(dx, -dz);
+        if (m.shW <= 0) {
+          const sc = m.scale, ux = dx / (dist || 1), uz = dz / (dist || 1);
+          mshots.fire({ proj: S.proj, owner: m.id, x: m.x + ux * 0.6 * sc, y: S.y * sc, z: m.z + uz * 0.6 * sc, tx: P.x, tz: P.z, ty: P.eye - 0.35, speed: S.speed, r: S.r * Math.max(1, sc * 0.8), dmg: m.dmg * S.dmg });
+          events.push({ type: 'shoot', proj: S.proj, id: m.id, x: m.x, z: m.z });
+          m.state = 'chase'; m.shT = S.cd * (0.8 + rng() * 0.4);
+        }
+        return true;
+      }
+      m.shT -= dt;
+      const clear = dist < S.range && dist > (S.min || 0) && hasLOS(m.x, m.z, P.x, P.z);
+      if (!clear) return false;
+      if (m.shT <= 0) { m.state = 'cast'; m.shW = S.wind; return true; }
+      if (S.keep && dist < S.keep) {                      // too close: back away while it waits to throw again
+        const sp = m.spd0 * m.spd * 0.6; m.shMx = -dx / dist * sp; m.shMz = -dz / dist * sp; m.state = 'chase'; m.yawT = Math.atan2(dx, -dz);
+        return true;
+      }
+      if (S.keep && dist < S.range) { m.state = 'chase'; m.yawT = Math.atan2(dx, -dz); return true; }   // in range with a clear shot: hold still and wait for the throw
+      return false;
+    }
     function updateMonster(m, dt) {
       const k = D.KINDS[m.kind], sc = m.scale;
       m.flash = Math.max(0, m.flash - dt);
       m.stun = Math.max(0, m.stun - dt);
       const dx = P.x - m.x, dz = P.z - m.z;
       const dist = Math.hypot(dx, dz) || 0.0001;
-      const reach = 1.25 * sc + 0.45;
+      const reach = L.meleeReachMul * sc + L.meleeReachAdd;
       let mvx = 0, mvz = 0;
       const was = m.state;
       if (m.state === 'guard') {                          // asleep on his feet at the door until you come into sight or hurt him
-        if (m.hp < m.maxHp || (dist < k.guard.wake && hasLOS(m.x, m.z, P.x, P.z))) { m.state = 'chase'; events.push({ type: 'bossWake' }); }
+        if (m.hp < m.maxHp || (dist < k.guard.wake && hasLOS(m.x, m.z, P.x, P.z))) { m.state = 'chase'; m.shT = 0.4; events.push({ type: 'bossWake' }); }   // he opens the fight with a fireball
         else { m.yaw += clamp(angleDiff(m.yawT, m.yaw), -dt * 9, dt * 9); return; }
       }
       if (k.summonAt && !m.summoned && m.hp <= m.maxHp * k.summonAt) {
@@ -475,14 +512,17 @@ const Referee = (function () {
         mvx = m.cdx * sp; mvz = m.cdz * sp; m.yawT = Math.atan2(m.cdx, -m.cdz);
         if (dist < reach) { hurtPlayer(m.dmg * k.charge.hit, m.id); m.cT = 0; }
         if (m.cT <= 0) { m.state = 'chase'; m.chT = k.charge.every; }
-      } else if (k.charge && m.chT <= 0 && dist > 3.5 && dist < 22 && hasLOS(m.x, m.z, P.x, P.z)) {
+      } else if (k.charge && m.state !== 'cast' && m.chT <= 0 && dist > 3.5 && dist < 22 && hasLOS(m.x, m.z, P.x, P.z)) {
         m.state = 'windup'; m.wT = k.charge.windup;
+      } else if (k.shoot && shooterStep(m, k, dt, dist, dx, dz)) {
+        // a ranged attacker: it stopped, or is stepping back, or is rearing back to throw (see shooterStep)
+        mvx = m.shMx; mvz = m.shMz;
       } else {
         m.state = dist < (was === 'attack' ? reach * 1.2 : reach) ? 'attack' : 'chase';   // a little give, so a monster pushed by its friends keeps swinging
         if (m.state === 'attack') {
-          if (was !== 'attack') m.atk = 0.45;
+          if (was !== 'attack') m.atk = k.wind;                                          // the blow lands this long after it reaches you, no longer
           m.atk -= dt;
-          if (m.atk <= 0) { m.atk = 1 / (cfg.monsterAttackRate * k.rate); hurtPlayer(m.dmg, m.id); }
+          if (m.atk <= 0) { m.atk = 1 / (cfg.monsterAttackRate * k.rate); if (dist < reach * 1.25) hurtPlayer(m.dmg, m.id); }   // you can still step out of reach in the wind-up
           m.yawT = Math.atan2(dx, -dz);
         } else {
           let dirx, dirz;
@@ -630,11 +670,13 @@ const Referee = (function () {
       const pc = clamp(Math.floor(p.z / CELL), 0, GH - 1) * GW + clamp(Math.floor(p.x / CELL), 0, GW - 1);
       if (pc !== flowCell || flowTimer <= 0) { buildFlow(p.x, p.z); flowTimer = 0.4; }
       for (const m of monsters.slice()) if (!R.over) updateMonster(m, dt);
+      mshots.update(dt);
       if (R.phase === 'fight') {
         spawnTimer -= dt;
         if (spawnTimer <= 0 && spawnQ.length && monsters.length < aliveMax()) {
           const heavyN = monsters.filter((m) => D.KINDS[m.kind].heavy).length;
-          const i = spawnQ.findIndex((kd) => !D.KINDS[kd].heavy || D.KINDS[kd].boss || heavyN < L.heavyCap);
+          const shootN = monsters.filter((m) => D.KINDS[m.kind].shoot && !D.KINDS[m.kind].boss).length;
+          const i = spawnQ.findIndex((kd) => (!D.KINDS[kd].heavy || D.KINDS[kd].boss || heavyN < L.heavyCap) && (!D.KINDS[kd].shoot || D.KINDS[kd].boss || shootN < L.shooterCap));
           if (i >= 0 && spawnMonster(spawnQ[i])) { spawnQ.splice(i, 1); spawnTimer = L.spawnGap; } else spawnTimer = 0.3;
         }
         if (!spawnQ.length && !monsters.length) endWave();
@@ -669,12 +711,15 @@ const Referee = (function () {
         },
         monsters: monsters.map((m) => ({
           id: m.id, kind: m.kind, x: m.x, z: m.z, yaw: m.yaw, hp: m.hp, maxHp: m.maxHp,
-          flash: m.flash, state: m.state, phase: m.phase, scale: m.scale
+          flash: m.flash, state: m.state, phase: m.phase, scale: m.scale,
+          atkK: m.state === 'attack' ? clamp(1 - m.atk / D.KINDS[m.kind].wind, 0, 1) : 0,              // 0 to 1 as a melee blow winds up; resets when it lands (the screen raises the weapon with it)
+          castK: m.state === 'cast' ? clamp(1 - m.shW / D.KINDS[m.kind].shoot.wind, 0, 1) : 0           // the same for a ranged monster rearing back to throw
         })),
         floor: floorNo, floorId: M0.id,
         door: { x: M0.door.x, z: M0.door.z, open: doorOpen },
         compass: boss && boss.state === 'guard' ? { x: boss.x, z: boss.z } : null,      // points at the boss from the moment he spawns until the fight with him starts
         explored,
+        shots: mshots.view(),
         wave: { n: R.wave, phase: R.phase, timer: Math.max(0, R.timer), left: spawnQ.length + monsters.length, boss: R.phase === 'fight' ? !!boss || spawnQ.some((kd) => D.KINDS[kd].boss) : R.wave % L.bossEvery === 0 },
         bossBar: boss ? { name: D.KINDS[boss.kind].name, hp: boss.hp, maxHp: boss.maxHp, state: boss.state } : null,
         level: { n: R.level, xp: R.xp, need: D.xpNeed(R.level) },
@@ -689,12 +734,14 @@ const Referee = (function () {
 
     // put the player somewhere (tests and tools only: the game never teleports you)
     function place(x, z, yaw) { P.x = x; P.z = z; if (yaw !== undefined) P.yaw = yaw; P.vx = P.vz = 0; flowCell = -1; }
+    // put a monster somewhere (tests and tools only)
+    function spawnAt(kind, x, z) { addMonster(kind, x, z); }
     function setCfg(o) { Object.assign(cfg, o); }
     function reset() { deaths = 0; restartRun(); events = []; }
 
     newRun(); loadFloor(floorOf(R.wave)); placePlayer();
     // first state, so the screen can draw before the first step
-    return { get map() { return M0; }, cfg, setCfg, place, step, snapshot, reset, kinds: D.KINDS, defaults: Object.assign({}, DEFAULT_CFG) };
+    return { get map() { return M0; }, cfg, setCfg, place, spawnAt, step, snapshot, reset, kinds: D.KINDS, defaults: Object.assign({}, DEFAULT_CFG) };
   }
 
   return { create };

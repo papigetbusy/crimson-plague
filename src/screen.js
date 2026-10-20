@@ -205,6 +205,8 @@
 
   /* ============ monsters: four voxel kinds, built and posed by src/screen/monster_rigs.js ============ */
   const RIGS = MonsterRigs.create(THREE), MODEL = RIGS.MODEL;
+  const shotsView = ShotsView.create(THREE, scene, glowTex);   // spit, bolts and fireballs the monsters throw
+  { const q = ['goblin', 'skeleton', 'mushroom', 'eyeball', 'flame'], warm = () => { if (!q.length) return; if (!RIGS.warmStep(q[0])) q.shift(); setTimeout(warm, 120); }; setTimeout(warm, 3000); }   // cut and smooth the newer kinds a slice at a time in the background, so the first one to appear does not stall a frame
   const mons = new Map();     // id -> entry
   const dying = [];
   const smoothLight = (x, z) => worldView.light(x, 1.5, z, 0, 1, 0);
@@ -305,6 +307,9 @@
     else if (kind === 'wave') { tone('sawtooth', 90, 70, 0.5, 0.3); noise(0.4, 400, 120, 0.18); }
     else if (kind === 'boss') { tone('sawtooth', 70, 38, 1.0, 0.45); noise(0.7, 300, 80, 0.3); }
     else if (kind === 'blast') { noise(0.25, 1500, 150, 0.35); }
+    else if (kind === 'spit') { noise(0.12, 900, 300, 0.3, 'bandpass'); tone('sine', 300, 140, 0.1, 0.2); }
+    else if (kind === 'zap') { noise(0.14, 6000, 1500, 0.3); tone('sawtooth', 900, 200, 0.1, 0.18); }
+    else if (kind === 'fireball') { noise(0.35, 1200, 200, 0.3); tone('sawtooth', 220, 90, 0.3, 0.2); }
   }
 
   /* ============ input ============ */
@@ -627,6 +632,8 @@
       } else if (e.type === 'blast') { burst(e.x, e.y, e.z, 10, [0xff9a1c, 0xff4500, 0xffd060], 5, 0.4, 4, 1.1); sfx('blast'); if (fxOn()) { fx.play(view.fxPreset, 'blast', e.x, e.y, e.z, { r: e.r }); bigShake(FxPlan.shake(view.fxPreset, 'blast')); } }
       else if (e.type === 'playerHit') { sfx('hurt'); }
       else if (e.type === 'slide') { sfx('slide'); }
+      else if (e.type === 'shoot') { sfx(e.proj === 'bolt' ? 'zap' : e.proj === 'spit' ? 'spit' : 'fireball'); }
+      else if (e.type === 'projHit') { burst(e.x, e.y, e.z, e.proj === 'fire' ? 12 : 7, e.proj === 'spit' ? [0x9cff4a, 0x4fd02a, 0x2a6a18] : e.proj === 'bolt' ? [0xeaffff, 0x6fd8ff, 0xffffff] : [0xffe070, 0xff5a14, 0xc8260c], 4, 0.4, 6, 0.8); if (e.onPlayer) sfx('hurt'); }
       else if (e.type === 'orb') { sfx('orb'); }
       else if (e.type === 'pickup' || e.type === 'skill') { sfx('pickup'); }
       else if (e.type === 'levelUp') { sfx('levelup'); }
@@ -644,9 +651,9 @@
       seen.add(m.id);
       let en = mons.get(m.id);
       if (!en) { en = RIGS.build(m.kind); mons.set(m.id, en); scene.add(en.root); }
-      en.root.position.set(m.x, 0, m.z); en.root.rotation.y = -m.yaw; en.root.scale.setScalar(m.scale * MODEL);
+      en.root.position.set(m.x, (ref.kinds[m.kind].hover || 0) * m.scale, m.z); en.root.rotation.y = -m.yaw; en.root.scale.setScalar(m.scale * MODEL);
       RIGS.animate(en, m, st.t);
-      const lt = smoothLight(m.x, m.z), f = clamp(m.flash / 0.12, 0, 1), warn = m.state === 'windup' ? 0.35 + 0.25 * Math.sin(st.t * 30) : 0;
+      const lt = smoothLight(m.x, m.z), f = clamp(m.flash / 0.12, 0, 1), warn = m.state === 'windup' ? 0.35 + 0.25 * Math.sin(st.t * 30) : (m.castK > 0 ? 0.12 + 0.3 * m.castK : m.atkK > 0.4 ? 0.2 * m.atkK : 0);
       en.skin.emissive.setRGB(Math.max(0, (lt[0] - 0.14)) * 0.22 + f * 0.7 + warn, Math.max(0, (lt[1] - 0.1)) * 0.12 + f * 0.35, f * 0.3);
     }
     for (const [id, en] of mons) if (!seen.has(id)) { scene.remove(en.root); mons.delete(id); }
@@ -744,6 +751,7 @@
     elHit.style.opacity = hitT > 0 ? Math.min(1, hitT / 0.1) : 0;
     elHit.classList.toggle('kill', hitKill);
     diedT = Math.max(0, diedT - dt); diedEl.style.opacity = clamp(diedT / 0.6, 0, 1);
+    shotsView.update(st.shots, st.t);
     hud.update(st, dt); minimap.update(st, dt); compass.update(st); loot.update(st, time);
   }
 

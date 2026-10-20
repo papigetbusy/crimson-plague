@@ -29,6 +29,8 @@ Keep the code neat: small focused files and functions in clear folders, never on
 - `node tests/fx.test.js` : effect checks (look presets escalate common to legendary, sprite pool)
 - `node tests/gun.test.js` : gun look checks (smoothed shape, skins, motion)
 - `node tests/world.test.js` : hall look checks (banners, floors, ribs, baked light)
+- `node tests/monsters.test.js` : monster checks (wind-up and reach, ranged attackers, projectiles, slide, unlock waves)
+- `node tests/rigs.test.js` : every monster builds into a rig and every pose runs
 - `node tests/floor.test.js` : floor checks (sizes, connected rooms, far-corner door, short carpet)
 - `python3 tools/floor_map.py out.png [floor ...]` : draws top-down pictures of generated floors
 - `python3 tools/hall_shot.py out_dir [view ...]` : draws pictures of the hall the way the game does, with no GPU (corridor, hall, torch, banner, ceiling, carpet, or x,z,yaw,pitch)

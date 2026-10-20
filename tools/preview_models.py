@@ -58,7 +58,7 @@ if __name__ == '__main__':
     cz = float(sys.argv[6]) if len(sys.argv) > 6 else 0.0
     tgt = (0, cy, cz)
     cams = {'side': ((5, cy, cz), (0, 1, 0)), 'back': ((0, cy, 5 + cz), (0, 1, 0)), 'front': ((0, cy, -5 + cz), (0, 1, 0)),
-            'three': ((3, cy + 1.2, cz + 3.5), (0, 1, 0)), 'top': ((0, 5, cz + 0.001), (0, 0, -1))}
+            'three': ((3, cy + 1.2, cz + 3.5), (0, 1, 0)), 'fthree': ((-3, cy + 1.2, cz - 4.5), (0, 1, 0)), 'top': ((0, 5, cz + 0.001), (0, 0, -1))}
     eye, up = cams[view]
     img = render(q, eye, tgt, up, (1000, 700), ortho=ext)
     img.save(out)

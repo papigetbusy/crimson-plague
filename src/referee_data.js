@@ -4,15 +4,31 @@
 const RefereeData = (function () {
   // hpMul / speedMul / dmgMul multiply the base numbers in the referee's cfg (monsterHp, monsterSpeed, monsterDamage)
   const KINDS = {
-    fiend: { name: 'Horned Fiend', size: 1.0, hpMul: 1.0, speedMul: 1.0, dmgMul: 1.0, rate: 1.0, xp: 10, heavy: true,
+    fiend: { name: 'Horned Fiend', size: 1.0, hpMul: 1.0, speedMul: 1.0, dmgMul: 1.0, rate: 1.0, xp: 10, heavy: true, wind: 0.3,
       spheres: [{ y: 0.58, r: 0.55, f: 0 }, { y: 1.30, r: 0.62, f: 0 }, { y: 1.95, r: 0.38, f: 0, head: true }] },
-    hound: { name: 'Bone Hound', size: 0.75, hpMul: 0.45, speedMul: 1.65, dmgMul: 0.55, rate: 1.5, xp: 5, heavy: false,
+    hound: { name: 'Bone Hound', size: 0.75, hpMul: 0.45, speedMul: 1.65, dmgMul: 0.55, rate: 1.5, xp: 5, heavy: false, wind: 0.2,
       spheres: [{ y: 0.55, r: 0.5, f: -0.05 }, { y: 0.6, r: 0.4, f: 0.38 }, { y: 0.82, r: 0.42, f: 0.62, head: true }] },
-    golem: { name: 'Rock Golem', size: 1.25, hpMul: 3.5, speedMul: 0.62, dmgMul: 2.5, rate: 0.7, xp: 35, heavy: true,
+    golem: { name: 'Rock Golem', size: 1.25, hpMul: 3.5, speedMul: 0.62, dmgMul: 2.5, rate: 0.7, xp: 35, heavy: true, wind: 0.6,
       spheres: [{ y: 0.62, r: 0.7, f: 0 }, { y: 1.45, r: 0.85, f: 0 }, { y: 2.05, r: 0.45, f: 0, head: true }] },
-    demon: { name: 'Demon Lord', size: 1.4, hpMul: 26, speedMul: 0.85, dmgMul: 3.2, rate: 0.8, xp: 400, heavy: true, boss: true,
+    // ---- the Crusader Tactics roster, placeholder models (Grok's art comes later) ----
+    // wind = seconds from reaching you to the blow landing; shoot = a ranged attacker: stops at range, rears back for wind seconds, throws a projectile (speed units/s, dmg times the monster's damage, r its size, y muzzle height)
+    goblin: { name: 'Goblin', size: 1.0, hpMul: 0.35, speedMul: 1.35, dmgMul: 0.5, rate: 1.6, xp: 4, heavy: false, wind: 0.2,
+      spheres: [{ y: 0.55, r: 0.42, f: 0 }, { y: 1.2, r: 0.32, f: 0, head: true }] },
+    skeleton: { name: 'Skeleton', size: 1.1, hpMul: 1.8, speedMul: 0.75, dmgMul: 1.6, rate: 0.8, xp: 18, heavy: true, wind: 0.55,
+      spheres: [{ y: 0.85, r: 0.38, f: 0 }, { y: 1.45, r: 0.42, f: 0 }, { y: 2.0, r: 0.3, f: 0, head: true }] },
+    mushroom: { name: 'Mushroom', size: 1.0, hpMul: 0.6, speedMul: 0.7, dmgMul: 0.8, rate: 1.0, xp: 12, heavy: false, wind: 0.4,
+      shoot: { range: 16, keep: 7, wind: 0.7, cd: 2.6, speed: 7, dmg: 1.0, r: 0.4, proj: 'spit', y: 0.9 },
+      spheres: [{ y: 0.4, r: 0.5, f: 0 }, { y: 0.95, r: 0.6, f: 0, head: true }] },
+    eyeball: { name: 'Eyeball', size: 1.0, hpMul: 0.55, speedMul: 0.95, dmgMul: 1.0, rate: 1.0, xp: 14, heavy: false, wind: 0.3, hover: 1.35,
+      shoot: { range: 20, keep: 9, wind: 0.5, cd: 2.0, speed: 14, dmg: 0.9, r: 0.3, proj: 'bolt', y: 1.35 },
+      spheres: [{ y: 1.35, r: 0.5, f: 0, head: true }, { y: 0.8, r: 0.25, f: 0 }] },
+    flame: { name: 'Flame Spirit', size: 1.0, hpMul: 0.7, speedMul: 0.85, dmgMul: 1.3, rate: 1.0, xp: 16, heavy: false, wind: 0.3, hover: 1.45,
+      shoot: { range: 18, keep: 8, wind: 0.8, cd: 3.0, speed: 8.5, dmg: 1.3, r: 0.45, proj: 'fire', y: 1.5 },
+      spheres: [{ y: 1.5, r: 0.5, f: 0 }, { y: 1.95, r: 0.32, f: 0, head: true }, { y: 1.0, r: 0.35, f: 0 }] },
+    demon: { name: 'Demon Lord', size: 1.4, hpMul: 26, speedMul: 0.85, dmgMul: 3.2, rate: 0.8, xp: 400, heavy: true, boss: true, wind: 0.45,
       guard: { wake: 12 },                                                   // he waits at the door, and wakes when you come within this many units in sight (or hurt him)
       charge: { every: 7, windup: 0.7, dur: 0.9, mult: 3.4, hit: 1.5 },     // seconds, then speed multiplier and damage multiplier on contact
+      shoot: { range: 22, min: 6, wind: 0.9, cd: 4.5, speed: 9, dmg: 1.1, r: 0.7, proj: 'fire', y: 2.4 },   // a slow, wide fireball he throws from range after rearing back
       summonAt: 0.5, summonKind: 'hound', summonN: 4,                        // calls hounds once, at half health
       spheres: [{ y: 0.8, r: 0.6, f: 0 }, { y: 1.7, r: 0.78, f: 0 }, { y: 2.45, r: 0.4, f: -0.05, head: true }] }
   };
@@ -40,20 +56,36 @@ const RefereeData = (function () {
     healAmount: 30, healChance: 0.07, frenzyChance: 0.03, frenzyTime: 8, frenzyDmg: 1.5, frenzyRate: 1.4,
     waveClearHeal: 25, blastRadius: 2.2,
     spawnPathMin: 8, spawnPathMax: 26,                  // monsters appear a walk of this many cells away from you (2 units a cell)
+    shooterCap: 4,                                     // at most this many ranged monsters alive at once, so the fight stays readable on a phone
+    meleeReachMul: 1.45, meleeReachAdd: 0.6,           // a melee monster hits from this far: size times the first number, plus the second
     exploreRadius: 9                                    // how many cells around you the minimap reveals
   };
 
   const xpNeed = (level) => Math.round(20 + 14 * level + 2 * level * level);
 
+  // what the waves are made of: each kind unlocks on a wave (ten waves to a floor) and has a share that grows then levels off.
+  // The horned fiend fills what is left, so the early waves stay as they were.
+  const MIX = [
+    { kind: 'golem',    from: 4,  share: (w) => Math.min(0.2, 0.04 * (w - 3)) },
+    { kind: 'hound',    from: 2,  share: (w) => Math.min(0.4, 0.14 * (w - 1)) },
+    { kind: 'goblin',   from: 1,  share: (w) => Math.min(0.3, 0.2 + 0.02 * w) },
+    { kind: 'mushroom', from: 5,  share: (w) => Math.min(0.16, 0.08 + 0.01 * (w - 5)) },
+    { kind: 'skeleton', from: 11, share: (w) => Math.min(0.25, 0.08 + 0.02 * (w - 11)) },
+    { kind: 'eyeball',  from: 13, share: (w) => Math.min(0.14, 0.05 + 0.01 * (w - 13)) },
+    { kind: 'flame',    from: 21, share: (w) => Math.min(0.14, 0.05 + 0.01 * (w - 21)) }
+  ];
   // the monsters of wave w, in spawn order (a boss wave starts with its boss)
   function waveKinds(w, rng) {
     const n = 6 + 2 * w + Math.floor(w / 3);
     const boss = w % LOOP.bossEvery === 0;
     const adds = boss ? Math.round(n * 0.5) : n;
-    const houndShare = w < 2 ? 0 : Math.min(0.55, 0.14 * (w - 1));
-    const golemShare = w < 4 ? 0 : Math.min(0.2, 0.04 * (w - 3));
+    const open = MIX.filter((m) => w >= m.from).map((m) => ({ kind: m.kind, sh: m.share(w) })), total = open.reduce((a, m) => a + m.sh, 0), scale = total > 0.85 ? 0.85 / total : 1;   // the unlocked kinds share up to 85% of a wave, the fiend fills the rest
     const list = [];
-    for (let i = 0; i < adds; i++) { const r = rng(); list.push(r < golemShare ? 'golem' : r < golemShare + houndShare ? 'hound' : 'fiend'); }
+    for (let i = 0; i < adds; i++) {
+      let r = rng(), pick = 'fiend';
+      for (const m of open) { const sh = m.sh * scale; if (r < sh) { pick = m.kind; break; } r -= sh; }
+      list.push(pick);
+    }
     for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); const t = list[i]; list[i] = list[j]; list[j] = t; }
     if (boss) list.unshift('demon');
     return list;

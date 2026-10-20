@@ -55,6 +55,13 @@ const BestiaryKit = (function () {
   // copy every voxel of a grid to its mirror across x = 0 (x -> -x-1)
   function mirror(src, dst) { const d = dst || src, all = [...src.solid.values()], gl = [...src.glow.values()]; for (const t of all) d.set(-t.x - 1, t.y, t.z, rgbToHex(t.c), 0); for (const t of gl) d.set(-t.x - 1, t.y, t.z, rgbToHex(t.c), 0, 'glow'); }
   const rgbToHex = (c) => (Math.round(c[0] * 255) << 16) | (Math.round(c[1] * 255) << 8) | Math.round(c[2] * 255);
-  return { rock, ring, line, crack, poly, mirror, pick };
+  // finishes a placeholder model: every part is cut into k x k x k finer voxels (the screen smooths them), joints stay in the coarse voxels
+  function finish(G, joints, VOX, rig, k) {
+    const fine = {}, grids = {};
+    for (const n in G) { grids[n] = G[n].upsample(k); fine[n] = k; }
+    const pose = Object.keys(grids).map((n) => { const j = joints[n] || [0, 0, 0]; return { name: n, grid: grids[n], pivot: j.map((v) => v * k), off: j.map((v) => v * VOX), vox: VOX / k }; });
+    return { vox: VOX, grids, joints, pose, fine, rig, smooth: true };
+  }
+  return { rock, ring, line, crack, poly, mirror, pick, finish };
 })();
 if (typeof module !== 'undefined') module.exports = BestiaryKit;

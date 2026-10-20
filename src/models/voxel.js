@@ -63,6 +63,17 @@ const Voxel = (function () {
     this.ell(-cx, cy, cz, rx, ry, rz, col, v, kind);
     return this;
   };
+  // every voxel becomes k x k x k smaller voxels (same colour and look), so the shape can be smoothed finely afterwards
+  Grid.prototype.upsample = function (k) {
+    const g = new Grid(this.seed);
+    for (const [map, kind] of [[this.solid, 'solid'], [this.glow, 'glow']]) for (const t of map.values()) {
+      for (let a = 0; a < k; a++) for (let b = 0; b < k; b++) for (let c = 0; c < k; c++) {
+        const x = t.x * k + a, y = t.y * k + b, z = t.z * k + c, kk = key(x, y, z), v = { x, y, z, c: t.c, fc: t.fc };
+        if (kind === 'glow') g.glow.set(kk, v); else g.solid.set(kk, v);
+      }
+    }
+    return g;
+  };
   Grid.prototype.count = function () { return this.solid.size + this.glow.size; };
   Grid.prototype.has = function (x, y, z) { const k = key(x, y, z); return this.solid.has(k) || this.glow.has(k); };
 

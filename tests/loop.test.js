@@ -35,7 +35,7 @@ const god = (ref) => { ref.setCfg({ playerHp: 1e7, regen: 0 }); ref.reset(); };
   const r = run(ref, (o) => o.wave.phase === 'fight', 6);
   t('After the pause wave 1 begins and monsters appear', r.out.wave.phase === 'fight' && r.ev.some((e) => e.type === 'waveStart' && e.n === 1));
   const r2 = run(ref, (o) => o.monsters.length >= 6, 20, { idle: true });
-  t('Wave 1 is only horned fiends, and no more than six are alive at once', r2.out.monsters.every((m) => m.kind === 'fiend') && r2.out.monsters.length <= 6);
+  t('Wave 1 is only horned fiends and goblins, and no more than six are alive at once', r2.out.monsters.every((m) => m.kind === 'fiend' || m.kind === 'goblin') && r2.out.monsters.length <= 6);
 }
 { // a whole wave, orbs, xp, level-up, skills
   const ref = Referee.create(12); god(ref);
