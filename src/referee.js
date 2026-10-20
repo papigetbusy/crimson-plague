@@ -218,7 +218,17 @@ const Referee = (function () {
     function newRun() {
       R.wave = cfg.startWave; R.phase = 'intermission'; R.timer = L.firstDelay; R.level = 1; R.xp = 0;
       R.stacks = {}; R.choices = null; R.pending = 0; R.frenzy = 0; R.over = null; R.time = 0; R.hold = null;
+      grantStartKit();
       M = computeMods();
+    }
+    // starting a run on a later wave (the #wave=N test link) hands out the upgrades you would have earned, picked at random, so you are not too weak
+    function grantStartKit() {
+      const n = Math.floor((cfg.startWave - 1) * L.kitPerWave);
+      for (let i = 0; i < n; i++) {
+        const open = D.SKILLS.filter((s) => stackOf(s.id) < s.max); if (!open.length) break;
+        const s = open[Math.floor(rng() * open.length)]; R.stacks[s.id] = stackOf(s.id) + 1;
+      }
+      R.level = 1 + n;
     }
     function placePlayer() {
       P.x = M0.start.x; P.z = M0.start.z; P.yaw = M0.start.yaw; P.pitch = 0;

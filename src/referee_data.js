@@ -33,7 +33,7 @@ const RefereeData = (function () {
   ];
 
   const LOOP = {
-    startWave: 1, intermission: 4, firstDelay: 2.5, bossEvery: 10,
+    startWave: 1, kitPerWave: 0.8, intermission: 4, firstDelay: 2.5, bossEvery: 10,
     aliveCap: 16, heavyCap: 6, spawnGap: 0.55,
     hpPerWave: 0.14, dmgPerWave: 0.05, speedPerWave: 0.02, speedMax: 1.35,
     orbMagnet: 3.5, orbPickup: 0.9, orbLife: 30, pickupLife: 25, pickupRadius: 1.1,

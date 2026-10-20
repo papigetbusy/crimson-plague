@@ -82,6 +82,14 @@ const god = (ref) => { ref.setCfg({ playerHp: 1e7, regen: 0 }); ref.reset(); };
   t('Wave 10 and wave 20 each start with exactly one demon lord boss', mk(10, 1)[0] === 'demon' && mk(10, 1).filter((k) => k === 'demon').length === 1 && mk(20, 4)[0] === 'demon' && mk(9, 1).indexOf('demon') < 0);
 }
 const nearBoss = (ref, d) => { const b = ref.snapshot().monsters.find((q) => q.kind === 'demon'); ref.place(b.x + ref.map.door.nx * (d || 6), b.z + ref.map.door.nz * (d || 6)); };   // walk up to him (the floor is big: the tests do not make the bot cross it)
+{ // starting late hands out upgrades
+  const a = Referee.create(3); a.setCfg({ startWave: 10 }); a.reset();
+  const sa = a.snapshot(), got = sa.skills.reduce((n, k) => n + k.n, 0);
+  t('Starting on wave 10 gives you random upgrades so you are not too weak (about 7)', got >= 6 && got <= 8 && sa.level.n === 1 + got);
+  const b = Referee.create(3); b.setCfg({ startWave: 10 }); b.reset();
+  t('The same seed hands out the same upgrades', JSON.stringify(sa.skills) === JSON.stringify(b.snapshot().skills));
+  const c = Referee.create(3); t('A normal start on wave 1 gives no free upgrades', c.snapshot().skills.length === 0);
+}
 { // boss wave
   const ref = Referee.create(14); ref.setCfg({ startWave: 10, playerHp: 1e7, regen: 0 }); ref.reset();
   const r = run(ref, (o) => o.bossBar, 40, { idle: true });

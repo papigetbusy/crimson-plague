@@ -52,8 +52,9 @@ const Hud = (function () {
       el.waveN.classList.toggle('boss', !!st.wave.boss);
       setText('lv', el.lvlN, 'LV ' + st.level.n);
       el.xpFill.style.width = (Math.min(1, st.level.xp / st.level.need) * 100).toFixed(1) + '%';
-      el.boss.hidden = !st.bossBar;
-      if (st.bossBar) { setText('bn', el.bossName, st.bossBar.name); el.bossFill.style.width = (Math.max(0, st.bossBar.hp / st.bossBar.maxHp) * 100).toFixed(1) + '%'; el.boss.classList.toggle('charge', st.bossBar.state === 'windup' || st.bossBar.state === 'charge'); }
+      const showBoss = st.bossBar && st.bossBar.state !== 'guard';   // his bar waits until he wakes, so it does not cover the compass
+      el.boss.hidden = !showBoss;
+      if (showBoss) { setText('bn', el.bossName, st.bossBar.name); el.bossFill.style.width = (Math.max(0, st.bossBar.hp / st.bossBar.maxHp) * 100).toFixed(1) + '%'; el.boss.classList.toggle('charge', st.bossBar.state === 'windup' || st.bossBar.state === 'charge'); }
       const ck = st.skills.map((s) => s.id + s.n).join();
       if (ck !== chipKey) { chipKey = ck; el.chips.textContent = ''; for (const s of st.skills) { const c = document.createElement('span'); c.textContent = s.name + (s.n > 1 ? ' x' + s.n : ''); el.chips.appendChild(c); } }
       el.frenzy.hidden = !(st.frenzy > 0);
