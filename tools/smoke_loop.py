@@ -49,11 +49,11 @@ with sync_playwright() as p:
     h = hudstate(page); print('game over', json.dumps(h)); page.screenshot(path=SHOTS + '/loop_gameover.png')
     assert h['over'], 'game over card not shown'
     page.tap('#restart'); page.wait_for_timeout(400)
-    h = hudstate(page); print('after restart', json.dumps(h)); assert not h['over'] and h['lv'] == 'LV 1'
+    h = hudstate(page); print('after restart', json.dumps(h)); assert not h['over'] and h['lv'] == 'LV 2'   # this run starts on wave 3, which hands out one free upgrade
     page.goto('about:blank'); page.goto(SITE + '#wave10'); page.wait_for_timeout(500)
     page.evaluate("()=>{window.__game.ref.setCfg({playerHp:1e7});window.__game.ref.reset();}")
     page.tap('#play'); page.wait_for_timeout(300)
-    page.evaluate("()=>{const r=window.__game.ref;for(let i=0;i<60*14;i++)r.step(1/60,{});}"); page.wait_for_timeout(500)
+    page.evaluate("()=>{const r=window.__game.ref;for(let i=0;i<60*14;i++)r.step(1/60,{});const b=r.snapshot().monsters.find(q=>q.kind==='demon'),d=r.map.door;r.place(b.x+d.nx*8,b.z+d.nz*8);for(let i=0;i<30;i++)r.step(1/60,{});}"); page.wait_for_timeout(500)
     h = hudstate(page); print('boss wave', json.dumps(h)); page.screenshot(path=SHOTS + '/loop_boss.png')
     assert h['boss'] and h['bossName'] == 'Demon Lord', 'boss bar missing'
     b.close()
