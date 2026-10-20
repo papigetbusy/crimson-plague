@@ -116,6 +116,6 @@ const RefereeData = (function () {
     h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d) >>> 0; h = Math.imul(h ^ (h >>> 12), 0x297a2d39) >>> 0; h = (h ^ (h >>> 15)) >>> 0;
     return h / 4294967296 < LOOP.fogChance;
   }
-  return { KINDS, SKILLS, LOOP, AFFIXES, xpNeed, waveKinds, fogWave };
+  return { KINDS, SKILLS, LOOP, AFFIXES, MIX, xpNeed, waveKinds, fogWave };
 })();
 if (typeof module !== 'undefined') module.exports = RefereeData;

@@ -45,12 +45,12 @@ const Hud = (function () {
       if (key === r.key) return;
       r.key = key; r.box.hidden = !list; r.head.hidden = !list;
       r.box.textContent = '';
-      r.n = list ? list.length : 0; r.sel = 0;
+      r.n = list ? list.length : 0; r.sel = 0; r.box.classList.toggle('many', r.n > 4);   // a long shelf gets smaller cards so all of it fits
       if (!list) { fixCur(); applySel(); return; }
       list.forEach((c, i) => {
         const b = document.createElement('button'); b.type = 'button'; b.className = 'card3' + (c.ult ? ' ult' : '') + (r.name === 'class' ? ' cls' : '');
         const hint = document.createElement('i'); hint.textContent = String(r.hint + i);
-        const nm = document.createElement('b'); nm.textContent = c.name;
+        const nm = document.createElement('b'); nm.textContent = c.name; if (c.color) nm.style.color = c.color;   // a gun's name is in its rarity colour
         const ds = document.createElement('span'); ds.textContent = r.name === 'class' && c.lvl ? c.now + '  →  ' + c.next : c.desc;   // an upgrade says exactly what changes
         const lv = document.createElement('em');
         if (r.name === 'class') lv.textContent = c.lvl ? 'Level ' + (c.lvl + 1) + ' of ' + c.max : (c.ult ? 'Ultimate' : 'New skill');

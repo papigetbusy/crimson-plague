@@ -7,6 +7,7 @@ const GunList = (function () {
     { id: 'revolver', name: 'Revolver', build: () => Revolver.build() },
   ].concat(GunCatalog.LIST.map((g) => ({ id: g.id, name: nice(g.id), build: g.build })));
   const find = (id) => LIST.find((g) => g.id === id) || LIST[0];
-  return { LIST, find };
+  const HIP_DOT = { y: 0.1755, z: -0.026 };   // the Gothic Rifle's sight dot (look-only): the hip pose was tuned with it, other guns are lifted and moved to match
+  return { LIST, find, HIP_DOT };
 })();
 if (typeof module !== 'undefined') module.exports = GunList;

@@ -21,6 +21,7 @@ t('Clicking the left stick starts a sprint that holds until you stop moving', ((
   return hold.sprint && !stop.sprint && !again.sprint;
 })());
 t('Aiming cancels the sprint', (() => { const c = PadInput.create(); c.read(pad([0, -1, 0, 0], [B.L3])); return !c.read(pad([0, -1, 0, 0], [B.LT])).sprint; })());
+t('Triangle (Y) swaps guns once per press, not while held', (() => { const c = PadInput.create(); const a = c.read(pad(null, [B.Y])), h = c.read(pad(null, [B.Y])), n = c.read(pad()); return a.swap && !h.swap && !n.swap; })());
 t('B slides only while sprinting, once per press (standing still, B does nothing)', (() => {
   const c = PadInput.create();
   const stand = c.read(pad(null, [B.B]));

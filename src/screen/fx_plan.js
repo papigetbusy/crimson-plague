@@ -62,6 +62,16 @@ const FxPlan = (function () {
     void: { tint: '#9a5aff', tracer: 0xb07aff, extra: { flesh: [E('scifi_warp_002', 1.4, 0.4, { add: true, tint: '#b07aff' })], kill: [E('scifi_warp_001', 3.6, 0.7, { add: true, tint: '#b07aff' }), E('spell_death_001', 3.0, 0.9, { tint: '#b07aff', delay: 0.15 })] } },
     plague: { tint: '#7cff5a', tracer: 0x8cff6a, extra: { flesh: [E('directional_bubble_burst_001', 1.4, 0.6, { tint: '#8cff6a' })], kill: [E('spell_poison_001', 3.0, 0.9, { tint: '#8cff6a' }), E('status_poison_001', 2.4, 1.0, { ground: true, tint: '#8cff6a', delay: 0.2 })] } },
   };
+  // the three colours the old five did not cover, built from the same sheets: poison is purple, dark magic is a black-violet, light magic is warm white
+  const recolor = (extra, tint, add) => { const out = {}; for (const k in extra) out[k] = extra[k].map((e) => Object.assign({}, e, { tint: e.tint ? tint : e.tint, add: add === undefined ? e.add : add && e.add })); return out; };
+  ELEMENTS.toxin = { tint: '#c04cff', tracer: 0xc04cff, extra: recolor(ELEMENTS.plague.extra, '#c04cff') };
+  ELEMENTS.dark = { tint: '#5a4a8a', tracer: 0x6a5a9a, extra: recolor(ELEMENTS.void.extra, '#4a3a78', false) };
+  ELEMENTS.light = { tint: '#fff2c8', tracer: 0xfff6d8, extra: recolor(ELEMENTS.ice.extra, '#fff2c8') };
+  // which element each gun status uses (radiation green, poison purple, electric yellow, ice blue, fire red, dark black-violet, light white)
+  const STATUS_EL = { radiation: 'plague', poison: 'toxin', electric: 'storm', ice: 'ice', fire: 'fire', dark: 'dark', light: 'light' };
+  // the look for a gun: its rarity picks the tier (common and uncommon share one) and each status colour it carries adds an element; a legendary shows both
+  const TIER_OF = ['common', 'common', 'rare', 'epic', 'legendary'];
+  const lookFor = (rarity, statuses) => TIER_OF[Math.max(0, Math.min(4, rarity | 0))] + (statuses && statuses.length ? ':' + statuses.map((st) => STATUS_EL[st]).filter(Boolean).join('+') : '');
 
   // the preset list shown in the tune panel
   const PRESETS = [
@@ -76,7 +86,14 @@ const FxPlan = (function () {
     { id: 'voidmaw', label: 'Voidmaw', tier: 'legendary', element: 'void' },
     { id: 'plague', label: 'Plague', tier: 'legendary', element: 'plague' },
   ];
-  const presetOf = (id) => PRESETS.find((p) => p.id === id) || PRESETS[1];
+  // a preset id is a name from the list, or a gun look 'tier:element+element' made by lookFor
+  function presetOf(id) {
+    const named = PRESETS.find((p) => p.id === id);
+    if (named) return Object.assign({ elements: named.element ? [named.element] : [] }, named);
+    const m = /^(common|rare|epic|legendary)(?::([a-z+]*))?$/.exec(String(id));
+    if (m) return { id, tier: m[1], elements: (m[2] || '').split('+').filter((e) => ELEMENTS[e]), element: (m[2] || '').split('+')[0] || undefined };
+    return Object.assign({ elements: [] }, PRESETS[1]);
+  }
 
   const hexNum = (s) => parseInt(String(s).replace('#', ''), 16);
 
@@ -84,25 +101,26 @@ const FxPlan = (function () {
   function plan(id, kind, info) {
     const pr = presetOf(id), tier = pr.tier && TIERS[pr.tier];
     if (!tier) return [];
-    const el = pr.element && ELEMENTS[pr.element], inf = info || {};
+    const els = pr.elements.map((n) => ELEMENTS[n]), el = els[0], inf = info || {};
     let list = (kind === 'flesh' && inf.crit ? tier.flesh.concat(tier.crit) : tier[kind] || []).slice();
-    if (el && el.extra[kind]) list = list.concat(el.extra[kind]);
+    for (const x of els) if (x.extra[kind]) list = list.concat(x.extra[kind]);
     let mul = 1;
     if (kind === 'kill') mul = (inf.scale || 1) * (inf.boss ? 1.8 : 1);
     else if (kind === 'blast') mul = Math.max(0.6, (inf.r || 2) / 2.5);
     return list.map((e) => Object.assign({}, e, { size: e.size * mul, tint: el && e.tintable ? el.tint : e.tint }));
   }
   // how the bullet streak looks: colour, thickness, life, and how many sparkles it sheds along the way
-  function tracer(id) {
+  // n is the shot count: a gun with two colours alternates its streak between them
+  function tracer(id, n) {
     const pr = presetOf(id), tier = pr.tier && TIERS[pr.tier];
     if (!tier) return { color: 0xffd27a, width: 0.03, life: 0.07, trail: 0 };
-    const el = pr.element && ELEMENTS[pr.element];
+    const el = pr.elements.length ? ELEMENTS[pr.elements[(n | 0) % pr.elements.length]] : null;
     return Object.assign({}, tier.tracer, el ? { color: el.tracer } : {});
   }
   const shake = (id, kind) => { const pr = presetOf(id), tier = pr.tier && TIERS[pr.tier]; return tier && (kind === 'kill' || kind === 'blast') ? tier.shake : 0; };
   // the sparkle that rides the bullet streak (one per trail point), tinted to the element
-  function trailSprite(id) {
-    const pr = presetOf(id), el = pr.element && ELEMENTS[pr.element];
+  function trailSprite(id, n) {
+    const pr = presetOf(id), el = pr.elements.length ? ELEMENTS[pr.elements[(n | 0) % pr.elements.length]] : null;
     return pr.tier ? E('round_sparkle_burst_001', 0.55, 0.35, { add: true, tint: el ? el.tint : pr.tier === 'epic' ? '#cfeaff' : '#fff0a0' }) : null;
   }
   // every sheet any preset can ask for (tools/pack_fx.py packs exactly these)
@@ -115,6 +133,6 @@ const FxPlan = (function () {
   }
   // which frame of an n-frame animation to show at this age (0..dur)
   const frameIndex = (n, age, dur) => Math.max(0, Math.min(n - 1, Math.floor(age / dur * n)));
-  return { plan, tracer, shake, trailSprite, needed, frameIndex, PRESETS, presetOf, hexNum };
+  return { plan, tracer, shake, trailSprite, needed, frameIndex, PRESETS, presetOf, hexNum, lookFor, STATUS_EL, ELEMENTS };
 })();
 if (typeof module !== 'undefined') module.exports = FxPlan;

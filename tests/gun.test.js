@@ -78,4 +78,12 @@ t('The flowing glow band moves faster when you run', Math.abs(Skins.flowAt(-0.2,
 
 
 
+
+{ // legendary guns wear two statuses' colours
+  const S = Skins, id = S.forGun('flame', ['fire', 'ice'], 4), k = S.byId(id), fl = S.byId('flame'), fr = S.byId('frost');
+  t('A legendary with two statuses wears a mixed skin: the first status paints the plates, the second sets the glow', id === 'mix:flame:frost' && k.hue === fl.hue && k.glow === fr.glow && k.mode === fr.mode);
+  t('Any lower rarity keeps the gun\'s own paint', S.forGun('flame', ['fire'], 3) === 'flame' && S.forGun('flame', ['fire', 'ice'], 3) === 'flame');
+  t('Every status has a skin, so every legendary mix can be built', ['radiation', 'poison', 'electric', 'fire', 'ice', 'dark', 'light'].every((st) => S.SKINS.some((x) => x.id === S.STATUS_SKIN[st])));
+}
+
 console.log(fails ? fails + ' FAILED' : 'all gun checks ok'); process.exit(fails ? 1 : 0);

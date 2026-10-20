@@ -66,8 +66,8 @@ const FxSprites = (function () {
       return n;
     }
     // sparkles shed along a bullet streak from a to b ({x,y,z} each)
-    function trail(preset, a, b) {
-      const tr = plan.tracer(preset), sp = plan.trailSprite(preset);
+    function trail(preset, a, b, shot) {
+      const tr = plan.tracer(preset, shot), sp = plan.trailSprite(preset, shot);
       if (!art() || !sp || !tr.trail) return 0;
       for (let i = 1; i <= tr.trail; i++) {
         const k = i / (tr.trail + 1), j = 0.08;

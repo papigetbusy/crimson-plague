@@ -13,15 +13,18 @@
   if (!window.THREE) { $('fatal').hidden = false; return; }
 
   const ref = Referee.create((Date.now() & 0xffffff) | 1);
+  const GAME_CFG = { startGun: 'pistol_service', gunDrops: true, gearDrops: true, modDrops: true, stashOpen: true, manualGuns: true };      // the game's rules: you start with the silver pistol and monsters drop guns, armor and charms (the referee's plain defaults keep the tests steady)
+  ref.setCfg(GAME_CFG);
 
   // a link can start the run on a later wave, to try the boss: ...#wave10 (or ?wave=10)
   const startWaveFromLink = (() => { const m = /wave=?(\d+)/.exec(location.hash + location.search); return m ? Math.max(1, Math.min(60, +m[1])) : 1; })();
   const safeFromLink = /safe/.test(location.hash + location.search);                        // ...#wave=11&safe starts in the safe room with gold, to try the shop
-  if (startWaveFromLink > 1) { ref.setCfg({ startWave: startWaveFromLink, startSafe: safeFromLink }); ref.reset(); }
+  if (startWaveFromLink > 1) { ref.setCfg({ startWave: startWaveFromLink, startSafe: safeFromLink }); }
+  ref.reset();
 
   // presentation-only numbers (the tuning panel edits these too)
   const GUN_DEFAULTS = { gunX: 0.29, gunY: -0.36, gunZ: -0.5, gunScale: 1.15 };
-  const view = Object.assign({ pixelH: 300, brightness: 1, fogFar: 34, sound: 1, fxPreset: 'common', wallSkin: 'original', gunSkin: 'crimson' }, GUN_DEFAULTS, TouchLayout.DEFAULTS);
+  const view = Object.assign({ pixelH: 300, brightness: 1, fogFar: 34, sound: 1, fxPreset: 'auto', fxAuto: 1, wallSkin: 'original', gunSkin: 'crimson' }, GUN_DEFAULTS, TouchLayout.DEFAULTS);
   const LS_KEY = 'crimsonhall.tune.v2';
   try {
     let saved = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
@@ -29,7 +32,8 @@
       saved = JSON.parse(localStorage.getItem('crimsonhall.tune.v1') || 'null');
       if (saved) { for (const k of ['gunX', 'gunY', 'gunZ', 'gunScale']) if (saved.view) delete saved.view[k]; if (saved.ref) { delete saved.ref.fovAds; delete saved.ref.fireRate; } }
     }
-    if (saved) { if (saved.ref) ref.setCfg(saved.ref); if (saved.view) Object.assign(view, saved.view); }
+    if (saved) { if (saved.ref) ref.setCfg(saved.ref); if (saved.view) { Object.assign(view, saved.view); if (!saved.view.fxAuto) view.fxPreset = 'auto'; } }   // an old saved look (from before shots followed the gun) is dropped once
+    view.fxAuto = 1;
   } catch (e) { /* storage can be unavailable */ }
 
   /* ============ texture painting (small canvases, nearest filter = chunky pixels) ============ */
@@ -98,6 +102,7 @@
   const gunBody = new THREE.Group(); gun.add(gunBody);
   const gb = (w, h, d, m, x, y, z, p) => boxMesh(w, h, d, m, x, y, z, p || gunBody);
   // the rifle itself: Grok's gothic assault rifle, built from voxels (src/models/gothic_rifle.js)
+  const HIP_DOT = GunList.HIP_DOT;                               // where the rifle's red dot sits in gun space; the hip pose is tuned for it
   const gunLook = GunLook.create(THREE, gunBody);                // smoothed shiny meshes, skins, glow and the little light on the hands (src/screen/gun_look.js)
   const gunRig = new THREE.Group(); gunBody.add(gunRig);        // the voxel parts of whichever gun is in your hands (rebuilt by setGun)
   const rigParts = [];
@@ -148,7 +153,7 @@
   const fogGlow = new THREE.PointLight(0xffa860, 0, 16, 2); gun.add(fogGlow); fogGlow.position.set(0, 0.1, -0.3);   // the glow of your gun, only lit in fog
 
   // swap the gun in your hands: rebuilds the parts, moves the sight dot and muzzle, and puts both hands where this gun is held (the hands anchors in gun_kit.js)
-  let curGun = null;
+  let curGun = null, baseSkin = 'crimson', lookKey = '';
   let gunChanged = () => {};
   function setGun(id, takeSkin) {
     const entry = GunList.find(id); if (!entry) return; curGun = entry.id;
@@ -164,14 +169,16 @@
     HOLD.set(H.fore[0], H.fore[1], H.fore[2]); MAGH.set(H.mag[0], H.mag[1], H.mag[2]);
     CH_F.set(A.boltRest[0] + 0.1, A.boltRest[1] + 0.04, A.boltRest[2]); CH_B.copy(CH_F); CH_B.z += 0.17;
     if (entry.hands) { CH_F.set(0.1, 0.1, -0.17); CH_B.set(0.1, 0.1, 0.0); }                          // the rifle keeps its old handle spots
-    if (takeSkin && G.skin) view.gunSkin = G.skin;
+    baseSkin = G.skin || 'crimson'; if (takeSkin) view.gunSkin = baseSkin;
     gunLook.setSkin(view.gunSkin || 'crimson'); view.gun = curGun; gunChanged();
   }
-  setGun(typeof CHEATS !== 'undefined' && CHEATS ? view.gun || 'rifle' : 'rifle');
+  setGun(ref.snapshot().player.gun.id, true);                                   // the gun the referee says you hold; setGun runs again whenever it changes
 
   // reload choreography: hand keyframes (k = 0..1 through the reload)
   const RL_NORMAL = { hand: [[0, HOLD], [0.16, MAGH], [0.24, MAGH], [0.38, BELT], [0.46, BELT], [0.64, MAGH], [0.72, MAGH], [0.9, HOLD], [1, HOLD]], grab: 0.24, pullEnd: 0.38, newStart: 0.46, seat: 0.64, tilt: [0.14, 0.8, 1.0], snd: { magout: 0.3, magin: 0.66 }, bolt: null };
   const RL_EMPTY = { hand: [[0, HOLD], [0.12, MAGH], [0.18, MAGH], [0.3, BELT], [0.36, BELT], [0.5, MAGH], [0.55, MAGH], [0.64, CH_F], [0.72, CH_B], [0.78, CH_F], [0.9, HOLD], [1, HOLD]], grab: 0.18, pullEnd: 0.3, newStart: 0.36, seat: 0.5, tilt: [0.1, 0.86, 1.0], snd: { magout: 0.24, magin: 0.52, bolt: 0.72 }, bolt: [0.64, 0.78] };
+  // a shotgun has no magazine to swap: the left hand goes to your belt for a shell, feeds it in, three times, then racks the pump
+  const RL_SHELLS = { hand: [[0, HOLD], [0.08, BELT], [0.16, MAGH], [0.24, BELT], [0.32, MAGH], [0.4, BELT], [0.48, MAGH], [0.56, BELT], [0.64, MAGH], [0.74, CH_F], [0.84, CH_B], [0.9, CH_F], [0.96, HOLD], [1, HOLD]], grab: 9, pullEnd: 9, newStart: 9, seat: 9, tilt: [0.1, 0.88, 1.0], snd: { magin: 0.16, magin2: 0.32, magin3: 0.48, bolt: 0.84 }, bolt: [0.74, 0.9] };
   // inspect (magazine): the left hand pulls the magazine out, lifts it in front of the eye (MAG_LOOK is the hand spot that puts the magazine
   // top at camera-space (-0.03, 0.02, -0.38) while the gun is tilted away, worked out with the pose from GunMotion.inspect('mag')), then slides it home
   const MAG_LOOK = V3(-0.094, 0.2415, 0.211), MAG_DOWN = V3(-0.04, -0.3, -0.1);
@@ -192,7 +199,8 @@
   // returns gun offsets for this frame and poses the hands, mag and charging handle
   function animateReload(p) {
     const ins = !p.reloading && inspK > 0 && inspKind === 'mag';
-    const R = ins ? INSPECT_MAG : p.reloadEmpty ? RL_EMPTY : RL_NORMAL;
+    const gtype = RefereeWeapons.GUNS[p.gun.id].type, shells = gtype === 'shotgun';
+    const R = ins ? INSPECT_MAG : shells ? RL_SHELLS : (p.reloadEmpty || gtype === 'sniper') ? RL_EMPTY : RL_NORMAL;   // a sniper works its bolt after every magazine
     const k = p.reloading ? p.reloadK : ins ? inspK : 0;
     kfLerp(R.hand, k, handPos);
     handL.position.copy(handPos);
@@ -210,7 +218,7 @@
     placeLimb(limbR, ELBOW_R, tB, 0.12);
     // sounds on the way through
     if (p.reloading || ins) {
-      for (const n in R.snd) if (rlPrev < R.snd[n] && k >= R.snd[n]) sfx(n);
+      for (const n in R.snd) if (rlPrev < R.snd[n] && k >= R.snd[n]) sfx(n.replace(/\d+$/, ''));
     }
     rlPrev = p.reloading || ins ? k : 0;
     mag.rotation.set(0.1 + (ins ? 0.5 * smooth01((k - 0.3) / 0.1) * (1 - smooth01((k - 0.74) / 0.08)) : 0), ins ? GunMotion.magSpin(k) : 0, 0);   // the held magazine turns so you see both faces
@@ -231,7 +239,10 @@
   const loot = LootView.create(THREE, scene, glowTex);       // XP orbs and pickups
   const trapView = TrapView.create(THREE, scene, glowTex);   // spike patches, flame vents, rising spikes
   const fx = FxSprites.create(THREE, camera, scene);          // sprite explosions, sparks and lightning (look presets, see fx_plan.js)
-  const fxOn = () => fx.art() && view.fxPreset !== 'original';
+  // the look of shots, hits and kills: it follows the gun in your hands (rarity picks the tier, each status colour adds its element). Only the private cheat build can force another look.
+  let gunLookId = 'common';
+  const fxId = () => (CHEAT && view.fxPreset !== 'auto' ? view.fxPreset : gunLookId);
+  const fxOn = () => fx.art() && fxId() !== 'original';
   let shakeAmp = 0, shakeT = 0;
 
   /* ============ effects ============ */
@@ -260,19 +271,20 @@
     const m = new THREE.Mesh(tracerGeo, new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, fog: false, blending: THREE.AdditiveBlending, depthWrite: false }));
     m.visible = false; scene.add(m); tracers.push({ m, life: 0 });
   }
-  let tracerCursor = 0;
+  let tracerCursor = 0, shotN = 0;
   const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3();
   function addTracer(ex, ey, ez) {
     muzzle.getWorldPosition(tmpV);
     tmpV2.set(ex, ey, ez);
-    const t = tracers[tracerCursor++ % tracers.length], tr = FxPlan.tracer(fxOn() ? view.fxPreset : 'original');
+    shotN++;
+    const t = tracers[tracerCursor++ % tracers.length], tr = FxPlan.tracer(fxOn() ? fxId() : 'original', shotN);
     const len = tmpV.distanceTo(tmpV2);
     t.m.position.copy(tmpV).add(tmpV2).multiplyScalar(0.5);
     t.m.lookAt(tmpV2);
     t.m.scale.set(tr.width, tr.width, len);
     t.m.material.color.setHex(gunLook.skin().tracer || tr.color);
     t.m.visible = true; t.life = t.dur = tr.life; t.m.material.opacity = 0.9;
-    if (fxOn() && tr.trail) fx.trail(view.fxPreset, tmpV, tmpV2);
+    if (fxOn() && tr.trail) fx.trail(fxId(), tmpV, tmpV2, shotN);
   }
 
   /* ---- floating damage numbers ---- */
@@ -333,7 +345,7 @@
   }
 
   /* ============ input ============ */
-  const I = { mx: 0, mz: 0, lookX: 0, lookY: 0, touchX: 0, touchY: 0, fire: false, ads: false, sprint: false, slide: false, reload: false, pick: undefined, restart: false };
+  const I = { swap: false, pickup: false, mx: 0, mz: 0, lookX: 0, lookY: 0, touchX: 0, touchY: 0, fire: false, ads: false, sprint: false, slide: false, reload: false, pick: undefined, restart: false };
   const keys = {};
   const mouse = { fire: false, ads: false };
   const tch = { fire: false, ads: false, sprint: false, reload: false };
@@ -371,6 +383,9 @@
     keys[e.code] = true;
     if (e.code === 'KeyC' || e.code === 'ControlLeft') { if (running) I.slide = true; e.preventDefault(); }
     if (e.code === 'KeyR' && running) I.reload = true;
+    if (e.code === 'KeyG' && (running || gearMenu.isOpen)) toggleGear();                  // open or close the Gear menu
+    if (e.code === 'KeyE' && running) pressPickup();                                   // pick up the gun on the floor in front of you
+    if (e.code === 'KeyQ' && running) I.swap = true;                                     // swap to the gun in your other hand
     if (e.code === 'KeyM' && running) minimap.toggle();                                  // open or close the big map
     if (e.code === 'KeyF' && running) startInspect();   // F shows both sides, press again for the magazine
     if (running && e.code.startsWith('Digit') && +e.code.slice(5) >= 1 && +e.code.slice(5) <= 3) I.pick = +e.code.slice(5) - 1;   // level-up gift
@@ -462,6 +477,8 @@
   bSprint.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') return; tch.sprint = !tch.sprint; bSprint.classList.toggle('on', tch.sprint); e.preventDefault(); });
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) bReload.addEventListener(ev, () => { tch.reload = false; });
   bReload.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') return; I.reload = true; tch.reload = true; bReload.classList.add('on'); setTimeout(() => bReload.classList.remove('on'), 180); e.preventDefault(); });
+  const bSwap = $('bSwap');
+  bSwap.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') return; I.swap = true; bSwap.classList.add('on'); setTimeout(() => bSwap.classList.remove('on'), 180); e.preventDefault(); });
   bSlide.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') return; I.slide = true; bSlide.classList.add('on'); setTimeout(() => bSlide.classList.remove('on'), 180); e.preventDefault(); });
 
   function gatherInput() {
@@ -480,13 +497,25 @@
     const out = {
       mx, mz, lookX: I.lookX, lookY: I.lookY, touchX: I.touchX, touchY: I.touchY, padX: pr ? pr.padX : 0, padY: pr ? pr.padY : 0,
       fire: mouse.fire || tch.fire || !!(pr && pr.fire), ads: mouse.ads || tch.ads || !!(pr && pr.ads),
-      sprint: !!(keys.ShiftLeft || keys.ShiftRight) || tch.sprint || !!(pr && pr.sprint), slide: I.slide || !!(pr && pr.slide), reload: I.reload || !!(pr && pr.reload), pick: I.pick, pickClass: I.pickClass, shopClose: I.shopClose, restart: I.restart
+      sprint: !!(keys.ShiftLeft || keys.ShiftRight) || tch.sprint || !!(pr && pr.sprint), slide: I.slide || !!(pr && pr.slide), reload: I.reload || !!(pr && pr.reload), swap: I.swap || !!(pr && pr.swap), pickup: I.pickup, seeds: I.restart ? { map: rnd(), damage: rnd(), item: rnd() } : undefined, pick: I.pick, pickClass: I.pickClass, shopClose: I.shopClose, restart: I.restart
     };
-    I.lookX = I.lookY = I.touchX = I.touchY = 0; I.slide = false; I.reload = false; I.pick = undefined; I.pickClass = undefined; I.shopClose = false; I.restart = false;
+    I.lookX = I.lookY = I.touchX = I.touchY = 0; I.slide = false; I.reload = false; I.swap = false; I.pickup = false; I.pick = undefined; I.pickClass = undefined; I.shopClose = false; I.restart = false;
     return out;
   }
 
   /* ============ HUD, overlays, tuning panel ============ */
+  // the gun box above the ammo: the gun in your hands (coloured by rarity) and the one waiting in your other hand; tap it to swap
+  const elGun = $('gunBox'), floorCard = GunCard.create($, (x, y, z) => { const v = new THREE.Vector3(x, y, z).project(camera); return { x: (v.x * 0.5 + 0.5) * innerWidth, y: (-v.y * 0.5 + 0.5) * innerHeight, ok: v.z < 1 }; }, () => { I.pickup = true; }); let gunKey = '', gunHide = 0;
+  elGun.addEventListener('pointerdown', (e) => { I.swap = true; e.preventDefault(); e.stopPropagation(); });
+  function hudGuns(g) {
+    const key = g.id + g.rarity + g.card.dmg + (g.other ? g.other.id + g.other.rarity + g.other.card.dmg : '');
+    if (key === gunKey) return; gunKey = key;
+    elGun.classList.add('show'); clearTimeout(gunHide); gunHide = setTimeout(() => elGun.classList.remove('show'), 2000);   // pops up for two seconds when you take or swap a gun, then gets out of the way
+    $('bSwap').classList.toggle('off', !g.other);
+    const RW = RefereeWeapons, col = (r) => '#' + RW.RARITIES[r].color.toString(16).padStart(6, '0');
+    elGun.innerHTML = '<b style="color:' + col(g.rarity) + '">' + RW.GUNS[g.id].name + '</b>' + (g.status.length ? ' <i>' + g.status.join(' + ') + '</i>' : '') + (g.card.affixes.length ? '<span>' + g.card.affixes.map((a) => a.text).join(' · ') + '</span>' : '') +
+      (g.other ? '<span>swap (Q / Triangle): <u style="color:' + col(g.other.rarity) + '">' + RW.GUNS[g.other.id].name + '</u></span>' : '');
+  }
   const elAmmo = $('ammo'), elAmmoN = $('ammoN'), elAmmoM = $('ammoM'), elRl = $('rlFill'), elKills = $('kills'), elHpFill = $('hpFill'), elHurt = $('hurt'), elCross = $('cross'), elHit = $('hitmark');
   const overlay = $('start'), playBtn = $('play'), playLabel = $('playLabel'), diedEl = $('died');
   let lastKills = -1, hitT = 0, hitKill = false, diedT = 0;
@@ -517,7 +546,17 @@
   function padMenus() {
     const r = pad.now; if (!r) return;
     if (r.start) { if (running) setRunning(false); else begin(true); return; }
-    if (!running) { if (r.nav && !started) chooseClass(classSel + r.nav); if (r.confirm) begin(true); return; }
+    if (!running) {
+      if (r.nav && !started) chooseClass(classSel + r.nav);
+      if (r.navY && !started) bpFocusStart.move(r.navY);                                          // up and down walk over the blueprints, A taps the highlighted one
+      if (r.confirm) { if (!started && bpFocusStart.press('click')) return; begin(true); }
+      return;
+    }
+    for (const m of [gearMenu, stashMenu]) if (m.isOpen) {                                          // D-pad moves over the buttons, A presses, RB or Back leaves
+      if (r.gear || r.map) m.setOpen(false); else { if (r.nav) m.nav(r.nav); if (r.navY) m.nav(r.navY); if (r.confirm) m.press(); }
+      return;
+    }
+    if (r.gear) { toggleGear(); return; }
     if (minimap.isOpen) { if (r.map || r.confirm) minimap.setOpen(false); return; }               // the big map covers the screen: any pad press that is not a move closes it, so it can never trap a controller
     if (state.shop && r.map) { I.shopClose = true; return; }                                         // Back leaves the shop
     if (r.map) { minimap.toggle(); return; }
@@ -527,7 +566,8 @@
       const sel = hud.selected();
       if (r.confirm && sel) { if (sel.row === 'class') I.pickClass = sel.index; else I.pick = sel.index; }
     }
-    else if (state.over && r.confirm) I.restart = true;
+    else if (state.over) { if (r.navY) bpFocusOver.move(r.navY); if (r.confirm && !bpFocusOver.press('click')) I.restart = true; }   // up and down walk over the keep and pick buttons, A with none highlighted rises again
+    else if (r.confirm) pressPickup();                                                              // A picks up the gun at your feet, or opens the stash chest
   }
 
   // class picker on the start card (before the first run; a run keeps its class when you rise again)
@@ -539,6 +579,48 @@
     ref.setCfg({ classId: CLASS_IDS[classSel] }); ref.reset(); state = ref.snapshot();
   }
   classBtns.forEach((b, i) => b.addEventListener('click', () => chooseClass(i)));
+
+  // blueprints: the saved list (kept in this browser), which ones the next run starts with, and keeping stashed things when a run ends
+  const bpDesc = () => ({ WP: RefereeWeapons, GR: RefereeGear, cfg: ref.defaults, entry: (i) => ref.stashEntry(i) });
+  let bpLib = Blueprints.read(), bpPicked = Blueprints.readPicked().filter((i) => i < bpLib.length), bpKey = '';
+  const bpBox = $('bpBox'), bpOver = $('bpOver');
+  const bpLoad = () => ref.setLoadout(bpPicked.map((i) => bpLib[i]).filter(Boolean));
+  const bpFocusStart = MenuFocus.create(() => $('startLists'), '[data-bp],[data-load],[data-del]', true), bpFocusOver = MenuFocus.create(() => $('overLists'), '[data-keep],[data-bp],[data-load],[data-del]', true);
+  const drawStartBp = () => { bpBox.innerHTML = Blueprints.startHtml(bpLib, bpPicked, bpDesc()); bpFocusStart.apply(); };
+  function bpToggle(i, resetNow) {
+    bpPicked = RefereeStash.pickToggle(bpLib, bpPicked, i); Blueprints.savePicked(bpPicked); bpLoad();
+    if (resetNow) { ref.reset(); state = ref.snapshot(); } drawStartBp(); bpKey = '';
+  }
+  bpBox.addEventListener('click', (e) => { const b = e.target.closest('[data-bp]'); if (b) bpToggle(+b.dataset.bp, true); });
+  bpOver.addEventListener('click', (e) => {
+    const k = e.target.closest('[data-keep]'), b = e.target.closest('[data-bp]');
+    if (k) { const why = RefereeStash.add(bpLib, ref.stashEntry(+k.dataset.keep), RefereeWeapons.GUNS); if (!why) { Blueprints.save(bpLib); toast('Kept as a blueprint'); } else toast('Cannot keep: ' + why); bpKey = ''; drawStartBp(); }
+    if (b) bpToggle(+b.dataset.bp, false);
+  });
+  const drawOverBp = () => {
+    const key = state.over ? state.player.stash.items.map((x) => x.i).join() + '|' + bpLib.length + '|' + bpPicked.join() + '|' + Saves.all().length : '';
+    if (key === bpKey) return; const was = bpKey; bpKey = key;
+    bpOver.innerHTML = state.over ? Blueprints.overHtml(state.player.stash.items, bpLib, bpDesc(), RefereeStash) + (bpLib.length ? Blueprints.startHtml(bpLib, bpPicked, bpDesc()) : '') : '';
+    if (!was || !key) bpFocusOver.reset(); else bpFocusOver.apply();
+  };
+  // saves: written for you in each safe room; Continue goes back to the same map with brand new damage and item seeds
+  const rnd = () => (Math.floor(Math.random() * 0x7fffffff)) | 1, newLuck = () => ({ damage: rnd(), item: rnd() });
+  const svBox = $('svBox'), svOver = $('svOver');
+  const drawSaves = () => { const h = Saves.html(Saves.all()); svBox.innerHTML = h; svOver.innerHTML = Saves.all().length ? h : ''; bpFocusStart.apply(); bpKey = ''; };
+  function continueSave(id) {
+    const s = Saves.find(id); if (!s) return;
+    if (ref.loadData(s.data, newLuck())) { state = ref.snapshot(); if (!started) begin(true); toast('Back at your save with new luck'); }
+  }
+  const svClick = (e) => { const l = e.target.closest('[data-load]'), d = e.target.closest('[data-del]'); if (l) continueSave(l.dataset.load); if (d) { Saves.remove(d.dataset.del); drawSaves(); } };
+  svBox.addEventListener('click', svClick); svOver.addEventListener('click', svClick);
+  // saving happens only when you press Save game at the chest in a safe room (never on its own)
+  function saveHere() {
+    const d = ref.saveData(); if (!d) return 'finish picking your level-up first';
+    Saves.add(d, new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })); drawSaves();
+    return '✔ Saved: Floor ' + d.floor + ' · Wave ' + d.wave;
+  }
+  ref.setSeeds({ damage: rnd(), item: rnd() });                          // a fresh run: the map seed is already random, and so are the luck seeds
+  bpLoad(); drawStartBp(); drawSaves(); ref.reset();   // the first snapshot is taken further down
 
   const TUNE = [
     ['Movement', null],
@@ -581,7 +663,7 @@
   // touch button sizes and show/hide switches sit at the top of the panel (phones only); a hidden toggle button is switched off so it cannot stay stuck on
   const CHEAT = typeof CHEATS !== 'undefined' && CHEATS, noMenu = { sync() {} };   // the Effects and Gun menus exist only in the private cheat build
   const fxSet = !CHEAT ? noMenu : FxPicker.mount(panelBody, view, { save: () => saveTune(), art: fx.art() });
-  const skinSet = !CHEAT ? noMenu : GunSkinPicker.mount(panelBody, view, { save: () => saveTune(), set: (id) => gunLook.setSkin(id), inspect: (kind) => startInspect(kind), guns: GunList.LIST, setGun: (id) => setGun(id, true) });
+  const skinSet = !CHEAT ? noMenu : GunSkinPicker.mount(panelBody, view, { save: () => saveTune(), set: (id) => gunLook.setSkin(id), inspect: (kind) => startInspect(kind), guns: GunList.LIST.filter((g) => RefereeWeapons.GUNS[g.id]), setGun: (id) => { ref.equipGun(id, view.cheatRarity || 0); state = ref.snapshot(); }, extras: [{ label: 'Drop 5 random gear', fn: () => { for (const sl of ['head', 'chest', 'boots', 'charm', 'charm']) ref.giveGear(sl, 1 + Math.floor(Math.random() * 4)); state = ref.snapshot(); } }, { label: 'Drop 3 gun mods', fn: () => { for (let q = 1; q <= 3; q++) ref.giveMod(q); state = ref.snapshot(); } }, { label: 'Drop legendary gear', fn: () => { for (const sl of ['head', 'chest', 'boots', 'charm', 'charm']) ref.giveGear(sl, 4); state = ref.snapshot(); } }, { label: '+1000 gold', fn: () => { ref.giveGold(1000); state = ref.snapshot(); } }, { label: 'Safe room (wave 11)', fn: () => { ref.setCfg({ startWave: 11, startSafe: true }); ref.reset(); ref.setCfg({ startWave: startWaveFromLink, startSafe: safeFromLink }); state = ref.snapshot(); } }], setRarity: (r) => { ref.equipGun(ref.snapshot().player.gun.id, r); state = ref.snapshot(); } });
   gunChanged = () => skinSet.sync();
   const wallSet = WallSkin.mount(panelBody, view, WallSkin.create(texStone), { save: () => saveTune() });
   const touchSet = TouchLayout.mount(panelBody, view, { save: () => saveTune(), hid: (id) => {
@@ -615,8 +697,8 @@
   }
   function pick(cfg, tgt) { const o = {}; for (const k in sliderEls) if (sliderEls[k].tgt === tgt && k !== 'startWave') o[k] = cfg[k]; return o; }
   $('tuneReset').addEventListener('click', () => {
-    ref.setCfg(ref.defaults);
-    Object.assign(view, { pixelH: 300, brightness: 1, fogFar: 34, sound: 1, fxPreset: 'common', wallSkin: 'original', gunSkin: 'crimson' }, GUN_DEFAULTS, TouchLayout.DEFAULTS); touchSet.sync(); fxSet.sync(); wallSet.sync(); skinSet.sync();
+    ref.setCfg(Object.assign({}, ref.defaults, GAME_CFG));
+    Object.assign(view, { pixelH: 300, brightness: 1, fogFar: 34, sound: 1, fxPreset: 'auto', fxAuto: 1, wallSkin: 'original', gunSkin: 'crimson' }, GUN_DEFAULTS, TouchLayout.DEFAULTS); touchSet.sync(); fxSet.sync(); wallSet.sync(); skinSet.sync();
     for (const k in sliderEls) { const s = sliderEls[k]; s.inp.value = s.tgt === 'ref' ? ref.cfg[k] : view[k]; s.val.textContent = fmt(+s.inp.value, s.st); }
     scene.fog.far = view.fogFar; worldView.setFogFar(view.fogFar); resize(); saveTune();
   });
@@ -633,6 +715,26 @@
     if (panelOpen) { if (locked()) document.exitPointerLock(); mouse.fire = mouse.ads = false; }
     else if (started && !isTouch && !noLock) tryLock();
   }
+  // the Gear menu: the game pauses while it is open (it borrows the panel's pause flag)
+  function menuChange(v) {
+    if (v) { if (locked()) document.exitPointerLock(); mouse.fire = mouse.ads = false; panelOpen = true; }
+    else { panelOpen = false; if (started && !isTouch && !noLock) tryLock(); }
+  }
+  const gearMenu = GearMenu.create($, { state: () => state, act: (q) => { const why = q[0] === 'attach' ? ref.attachMod(+q[1], +q[2]) : q[0] === 'detach' ? ref.detachMod(+q[1], +q[2]) : ref.stashItem(q[1], +q[2]); state = ref.snapshot(); return why; }, onChange: (v) => {
+    if (v) { if (locked()) document.exitPointerLock(); mouse.fire = mouse.ads = false; panelOpen = true; }
+    else { panelOpen = false; if (started && !isTouch && !noLock) tryLock(); }
+  } });
+  const toggleGear = () => { if (!running || (panelOpen && !gearMenu.isOpen) || stashMenu.isOpen) return; gearMenu.toggle(state); };
+  // the stash chest in the safe room: press pick up next to it (when no gun, gear or mod lies in reach) or tap the hint
+  const stashMenu = GearMenu.create($, { state: () => state, act: (q) => { if (q[0] === 'save') return saveHere(); const why = ref.stashItem(q[1], +q[2]); state = ref.snapshot(); return why; }, onChange: menuChange }, 'stashMenu', StashMenu.html);
+  const stashHint = $('stashHint');
+  const openStash = () => { if (running && !panelOpen && state.player.stash.near) stashMenu.setOpen(true, state); };
+  stashHint.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); openStash(); });
+  function pressPickup() { const q = GunCard.nearest(state, 6); if (!(q && q.inReach) && state.player.stash.near) openStash(); else I.pickup = true; }
+  $('bGear').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); toggleGear(); });
+  // the Codex: opened from the start card (and so from pause too)
+  const codex = Codex.create($, () => ({ D: RefereeData, C: RefereeClasses, WP: RefereeWeapons, AF: RefereeAffixes, GR: RefereeGear, ST: RefereeStash, FX: RefereeGunFx.FX, T: CodexText, cfg: ref.defaults }));
+  $('codexBtn').addEventListener('click', () => codex.open());
   $('gear').addEventListener('click', togglePanel);
   $('panelClose').addEventListener('click', togglePanel);
   document.addEventListener('visibilitychange', () => { if (document.hidden && running) setRunning(false); });
@@ -657,12 +759,12 @@
     for (const e of events) {
       hud.event(e);
       if (e.type === 'shot') {
-        if (!e.extra) { flashT = 0.06; kickG = 1; kickDir = [Math.random() * 2 - 1, Math.random() * 2 - 1]; inspK = 0; sfx('shot'); ejectShell(); if (fxOn()) { muzzle.getWorldPosition(tmpV); camera.getWorldDirection(tmpV2); fx.play(view.fxPreset, 'muzzle', tmpV.x + tmpV2.x * 0.12, tmpV.y + tmpV2.y * 0.12, tmpV.z + tmpV2.z * 0.12); } }
+        if (!e.extra) { flashT = 0.06; kickG = 1; kickDir = [Math.random() * 2 - 1, Math.random() * 2 - 1]; inspK = 0; sfx('shot'); ejectShell(); if (fxOn()) { muzzle.getWorldPosition(tmpV); camera.getWorldDirection(tmpV2); fx.play(fxId(), 'muzzle', tmpV.x + tmpV2.x * 0.12, tmpV.y + tmpV2.y * 0.12, tmpV.z + tmpV2.z * 0.12); } }
         addTracer(e.ex, e.ey, e.ez);
-        if (e.hit === 'wall') { burst(e.ex, e.ey, e.ez, 5, [0xffb347, 0xff7a1a, 0x888078], 4, 0.35, 12, 0.7); if (fxOn()) fx.play(view.fxPreset, 'wall', e.ex, e.ey, e.ez); }
+        if (e.hit === 'wall') { burst(e.ex, e.ey, e.ez, 5, [0xffb347, 0xff7a1a, 0x888078], 4, 0.35, 12, 0.7); if (fxOn()) fx.play(fxId(), 'wall', e.ex, e.ey, e.ez); }
       } else if (e.type === 'hit') {
         burst(e.x, e.y, e.z, e.crit ? 9 : 5, [0xb01818, 0x701010, 0xe03030], 3.5, 0.4, 10, 0.8);
-        if (fxOn() && !e.splash) fx.play(view.fxPreset, 'flesh', e.x, e.y, e.z, { crit: e.crit });
+        if (fxOn() && !e.splash) fx.play(fxId(), 'flesh', e.x, e.y, e.z, { crit: e.crit });
         if (!e.splash) damageNumber(e.x, e.y + 0.2, e.z, e.dmg, e.crit);
         hitT = 0.14; hitKill = false; sfx(e.crit ? 'crit' : 'hit');
       } else if (e.type === 'kill') {
@@ -670,22 +772,29 @@
         const en = mons.get(e.id);
         if (en) { mons.delete(e.id); dropBadges(en); dying.push({ en, t: 0 }); }
         burst(e.x, 1.2 * e.scale, e.z, e.boss ? 40 : 24, [0xb01818, 0x701010, 0x3a0a0a, 0xff6a20], 5, 0.8, 11, e.boss ? 2 : 1.3);
-        if (fxOn()) { fx.play(view.fxPreset, 'kill', e.x, 1.2 * e.scale, e.z, { scale: e.scale, boss: e.boss }); bigShake(FxPlan.shake(view.fxPreset, 'kill') * (e.boss ? 1.6 : 1)); }
-      } else if (e.type === 'blast') { burst(e.x, e.y, e.z, 10, [0xff9a1c, 0xff4500, 0xffd060], 5, 0.4, 4, 1.1); sfx('blast'); if (fxOn()) { fx.play(view.fxPreset, 'blast', e.x, e.y, e.z, { r: e.r }); bigShake(FxPlan.shake(view.fxPreset, 'blast')); } }
+        if (fxOn()) { fx.play(fxId(), 'kill', e.x, 1.2 * e.scale, e.z, { scale: e.scale, boss: e.boss }); bigShake(FxPlan.shake(fxId(), 'kill') * (e.boss ? 1.6 : 1)); }
+      } else if (e.type === 'blast') { burst(e.x, e.y, e.z, 10, [0xff9a1c, 0xff4500, 0xffd060], 5, 0.4, 4, 1.1); sfx('blast'); if (fxOn()) { fx.play(fxId(), 'blast', e.x, e.y, e.z, { r: e.r }); bigShake(FxPlan.shake(fxId(), 'blast')); } }
       else if (e.type === 'playerHit') { sfx('hurt'); }
       else if (e.type === 'slide') { sfx('slide'); }
       else if (e.type === 'shoot') { sfx(e.proj === 'bolt' ? 'zap' : e.proj === 'spit' ? 'spit' : 'fireball'); }
       else if (e.type === 'projHit') { burst(e.x, e.y, e.z, e.proj === 'fire' ? 12 : 7, e.proj === 'spit' ? [0x9cff4a, 0x4fd02a, 0x2a6a18] : e.proj === 'bolt' ? [0xeaffff, 0x6fd8ff, 0xffffff] : [0xffe070, 0xff5a14, 0xc8260c], 4, 0.4, 6, 0.8); if (e.onPlayer) sfx('hurt'); }
-      else if (e.type === 'status') { const S = STATUS[e.kind]; statusPulse.set(e.id, { kind: e.kind, t: 0.4 }); burst(e.x, e.y + 0.3, e.z, 10, e.kind === 'poison' ? [0xb45cff, 0x7a2cc8, 0xe0b8ff] : e.kind === 'bleed' ? [0xe23a42, 0x8a1018] : [0xf0c860, 0xfff0b0], 3.5, 0.5, 2, 0.9); }
+      else if (e.type === 'status') { const S = STATUS[e.kind]; statusPulse.set(e.id, { kind: e.kind, t: 0.4 }); burst(e.x, e.y + 0.3, e.z, 10, S && S.burst ? S.burst : e.kind === 'poison' ? [0xb45cff, 0x7a2cc8, 0xe0b8ff] : e.kind === 'bleed' ? [0xe23a42, 0x8a1018] : [0xf0c860, 0xfff0b0], 3.5, 0.5, 2, 0.9); }
       else if (e.type === 'cloakStart') { sfx('cloak'); }
       else if (e.type === 'ultStart') { sfx('boss'); bigShake(0.12); }
       else if (e.type === 'skillLevel' || e.type === 'skillNew') { sfx('levelup'); }
       else if (e.type === 'ricochet') { addTracer(e.x1, e.y1, e.z1); burst(e.x1, e.y1, e.z1, 4, [0xffe070, 0xffb347], 3, 0.3, 8, 0.6); }
+      else if (e.type === 'arc') { for (let i = 0; i <= 6; i++) { const k = i / 6; burst(e.x1 + (e.x2 - e.x1) * k, e.y1 + (e.y2 - e.y1) * k + (Math.random() - 0.5) * 0.3, e.z1 + (e.z2 - e.z1) * k, 1, [0xffe82a, 0xfff6a0], 1.5, 0.25, 0, 0.5); } sfx('orb'); }
+      else if (e.type === 'radPulse') { burst(e.x, 0.6, e.z, 18, [0x5cff3a, 0xb8ff90, 0x2a9a1a], e.r * 1.6, 0.5, 0, 1); }
+      else if (e.type === 'freeze') { burst(e.x, 1, e.z, 16, [0xc8ecff, 0x7ac8ff, 0xffffff], 3, 0.6, 2, 0.9); }
       else if (e.type === 'plague') { burst(e.x, 1, e.z, 14, [0xb45cff, 0x7a2cc8, 0xe0b8ff], 4, 0.6, 3, 1); }
       else if (e.type === 'raise') { burst(e.x, 1, e.z, 14, [0x6fe08a, 0x2a6a40, 0xc8ffd8], 4, 0.7, -2, 1); sfx('orb'); }
       else if (e.type === 'eliteBlast') { burst(e.x, 1, e.z, 16, [0x9cff4a, 0xffe070, 0xff5a14], 6, 0.5, 4, 0.9); sfx('fireball'); }
       else if (e.type === 'orb') { sfx('orb'); }
       else if (e.type === 'pickup' || e.type === 'skill') { sfx('pickup'); }
+      else if (e.type === 'modPickup') { sfx('pickup'); toast(RefereeWeapons.RARITIES[e.rarity].name + ' gun mod in your bag (G to fit it)'); }
+      else if (e.type === 'bagFull') { toast('Mod bag is full (6) - fit or drop one first'); }
+      else if (e.type === 'gearPickup') { sfx('pickup'); toast(RefereeWeapons.RARITIES[e.rarity].name + ' ' + e.slot + ' on'); }
+      else if (e.type === 'gunPickup' || e.type === 'swap') { sfx('pickup'); equipK = 0; if (e.type === 'gunPickup') toast(RefereeWeapons.RARITIES[e.rarity].name + ' ' + RefereeWeapons.GUNS[e.id].name); }
       else if (e.type === 'levelUp') { sfx('levelup'); }
       else if (e.type === 'waveStart') { sfx(e.boss ? 'boss' : 'wave'); }
       else if (e.type === 'bossSummon') { sfx('boss'); }
@@ -705,14 +814,22 @@
   // the dead the Witch raised: the monster's own shape, tinted green and a little see-through
   // status effects, shown on the monster the way Crusader Tactics does: a coloured glow on the body and a badge over the head
   const STATUS = {
-    poison: { col: [0.36, 0.08, 0.55], css: '#b45cff', flag: 'poisoned' },
+    poison: { col: [0.36, 0.08, 0.55], css: '#b45cff', flag: 'poisoned', gx: 'toxic' },
     bleed: { col: [0.42, 0.03, 0.04], css: '#e23a42', flag: 'bleeding' },
-    hex: { col: [0.42, 0.34, 0.05], css: '#f0c860', flag: 'cursed' }
+    hex: { col: [0.42, 0.34, 0.05], css: '#f0c860', flag: 'cursed' },
+    // gun statuses (the gun's colour): the referee sends these under m.gx
+    burn: { col: [0.55, 0.2, 0.02], css: '#ff6a1a', gx: 'burning', burst: [0xff8a1c, 0xff4500, 0xffd060] },
+    chill: { col: [0.05, 0.25, 0.5], css: '#4aa8ff', gx: 'chilled', burst: [0x7ac8ff, 0xc8ecff, 0x3a88e0] },
+    shock: { col: [0.5, 0.45, 0.02], css: '#ffe82a', gx: 'shocked', burst: [0xffe82a, 0xfff6a0] },
+    rad: { col: [0.12, 0.5, 0.08], css: '#5cff3a', gx: 'irradiated', burst: [0x5cff3a, 0xb8ff90, 0x2a9a1a] },
+    wither: { col: [0.05, 0.02, 0.1], css: '#8a6aa8', gx: 'withered', burst: [0x3a2a52, 0x8a6aa8, 0x120818] },
+    smite: { col: [0.5, 0.5, 0.45], css: '#fff6d8', gx: 'smitten', burst: [0xfff6d8, 0xffffff, 0xffe8a0] }
   };
+  const hasStatus = (m, k) => !!((STATUS[k].flag && m[STATUS[k].flag]) || (STATUS[k].gx && m.gx && m.gx[STATUS[k].gx]));
   const statusPulse = new Map();                                                // monster id -> { kind, t } for the burst when a status first lands
   function statusGlow(m, t) {
     const o = [0, 0, 0], p = statusPulse.get(m.id), br = 0.7 + 0.3 * Math.sin(t * 7 + m.id);
-    for (const k in STATUS) if (m[STATUS[k].flag]) { const c = STATUS[k].col; o[0] += c[0] * br; o[1] += c[1] * br; o[2] += c[2] * br; }
+    for (const k in STATUS) if (hasStatus(m, k)) { const c = STATUS[k].col; o[0] += c[0] * br; o[1] += c[1] * br; o[2] += c[2] * br; }
     if (p) { const c = STATUS[p.kind].col, k = p.t / 0.4; o[0] += c[0] * 1.6 * k; o[1] += c[1] * 1.6 * k; o[2] += c[2] * 1.6 * k; }
     return o;
   }
@@ -725,6 +842,12 @@
     g.fillStyle = col; g.strokeStyle = col; g.lineWidth = 4; g.lineCap = 'round';
     if (kind === 'bleed') { g.beginPath(); g.moveTo(32, 12); g.bezierCurveTo(46, 30, 46, 46, 32, 50); g.bezierCurveTo(18, 46, 18, 30, 32, 12); g.fill(); }
     else if (kind === 'poison') { g.beginPath(); g.arc(32, 28, 14, 0, 7); g.fill(); g.fillRect(24, 36, 16, 12); g.fillStyle = '#10060c'; g.beginPath(); g.arc(26, 29, 4, 0, 7); g.arc(38, 29, 4, 0, 7); g.fill(); g.fillRect(30, 38, 4, 7); }
+    else if (kind === 'burn') { g.beginPath(); g.moveTo(32, 10); g.bezierCurveTo(48, 28, 46, 48, 32, 52); g.bezierCurveTo(18, 48, 16, 30, 28, 22); g.bezierCurveTo(28, 30, 34, 30, 32, 10); g.fill(); }
+    else if (kind === 'chill') { for (let i = 0; i < 3; i++) { const a = i * Math.PI / 3; g.beginPath(); g.moveTo(32 + Math.cos(a) * 19, 32 + Math.sin(a) * 19); g.lineTo(32 - Math.cos(a) * 19, 32 - Math.sin(a) * 19); g.stroke(); } }
+    else if (kind === 'shock') { g.beginPath(); g.moveTo(36, 10); g.lineTo(20, 35); g.lineTo(30, 35); g.lineTo(26, 54); g.lineTo(44, 27); g.lineTo(34, 27); g.closePath(); g.fill(); }
+    else if (kind === 'rad') { g.beginPath(); g.arc(32, 32, 5, 0, 7); g.fill(); for (let i = 0; i < 3; i++) { const a = i * 2 * Math.PI / 3 - Math.PI / 2; g.beginPath(); g.arc(32, 32, 18, a - 0.5, a + 0.5); g.stroke(); } }
+    else if (kind === 'wither') { g.beginPath(); g.arc(32, 32, 17, 0.7, 5.6); g.stroke(); g.beginPath(); g.arc(37, 29, 13, 0.9, 5.4); g.stroke(); }
+    else if (kind === 'smite') { g.beginPath(); g.arc(32, 32, 8, 0, 7); g.fill(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; g.beginPath(); g.moveTo(32 + Math.cos(a) * 13, 32 + Math.sin(a) * 13); g.lineTo(32 + Math.cos(a) * 21, 32 + Math.sin(a) * 21); g.stroke(); } }
     else { g.beginPath(); for (let i = 0; i < 5; i++) { const a = -Math.PI / 2 + i * 4 * Math.PI / 5; g.lineTo(32 + Math.cos(a) * 18, 33 + Math.sin(a) * 18); } g.closePath(); g.stroke(); g.beginPath(); g.arc(32, 33, 4, 0, 7); g.fill(); }
     return (badgeTex[kind] = new THREE.CanvasTexture(c));
   }
@@ -735,7 +858,7 @@
     return badgeTop[kind];
   }
   function statusBadges(en, m, st) {
-    const kinds = Object.keys(STATUS).filter((k) => m[STATUS[k].flag]);
+    const kinds = Object.keys(STATUS).filter((k) => hasStatus(m, k));
     if (!kinds.length && !en.badges) return;
     if (!en.badges) en.badges = {};
     const yaw = st.player.yaw, rx = Math.cos(yaw), rz = Math.sin(yaw), top = badgeHeight(m.kind) * m.scale + 0.45, sz = Math.max(0.5, m.scale * 0.42);
@@ -841,7 +964,7 @@
     const sp = p.sprintK, ad = p.adsT, sl = p.sliding ? 1 : 0;
     const rl = animateReload(p);
     const gs = view.gunScale;
-    gunHip.set(view.gunX, view.gunY, view.gunZ);
+    gunHip.set(view.gunX, view.gunY + (HIP_DOT.y - SIGHT.y) * gs, view.gunZ + (HIP_DOT.z - SIGHT.z) * gs);   // every gun rests with its sight where the rifle's sits, so short guns are not lost below the screen
     gunAds.set(0, -SIGHT.y * gs, -EYE_RELIEF - SIGHT.z * gs);   // puts the sight window dead centre
     const still = clamp(1 - planar, 0, 1) * (1 - sp) * (1 - sl);
     // hold Reload for 2 seconds with a full magazine: gun inspect (keyboard R, the touch Reload button, or the controller X button)
@@ -912,6 +1035,14 @@
     elHurt.style.opacity = clamp(p.hurt / 0.3, 0, 1) * 0.85 + (p.hp < p.maxHp * 0.3 ? 0.18 : 0);
     elCross.style.opacity = (1 - clamp(p.adsT * 1.8, 0, 1)) * (p.reloading ? 0.25 : 1);
     elAmmoN.textContent = p.ammo; elAmmoM.textContent = '/ ' + p.magSize;
+    const lk = p.gun.id + ':' + p.gun.rarity + ':' + p.gun.status.join();
+    if (lk !== lookKey) {
+      lookKey = lk;
+      if (p.gun.id !== curGun) { setGun(p.gun.id, true); equipK = 0; }
+      gunLookId = FxPlan.lookFor(p.gun.rarity, p.gun.status);                            // shots, hits and kills now look like this gun
+      view.gunSkin = GunSkins.forGun(baseSkin, p.gun.status, p.gun.rarity); gunLook.setSkin(view.gunSkin);   // a legendary wears both its statuses' colours
+    }
+    hudGuns(p.gun); floorCard.update(st);
     elAmmo.classList.toggle('low', p.ammo <= Math.ceil(p.magSize * 0.25));
     elAmmo.classList.toggle('rl', p.reloading);
     elRl.style.width = (p.reloading ? p.reloadK * 100 : 0) + '%';
@@ -940,6 +1071,8 @@
     } else {
       I.lookX = I.lookY = I.touchX = I.touchY = 0; I.slide = false; I.reload = false;
     }
+    stage('blueprints', drawOverBp);
+    stage('stashHint', () => { const near = running && !panelOpen && state.player.stash.near; stashHint.hidden = !near; });
     stage('floor', () => ensureFloor(state));
     stage('monsters', () => { syncMonsters(state, dt); syncThralls(state); });
     stage('view', () => updateView(state, running && !panelOpen ? dt : 0, now / 1000));

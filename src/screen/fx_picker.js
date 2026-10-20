@@ -7,11 +7,11 @@ const FxPicker = (function () {
     const wrap = document.createElement('div'); wrap.className = 'fxset';
     const h = document.createElement('h3'); h.textContent = 'Bullet and explosion effects'; wrap.appendChild(h);
     const note = document.createElement('p'); note.className = 'note';
-    note.textContent = hooks.art ? 'Pick a gun tier to preview its muzzle flash, bullet streak, hits, kills and explosions. Legendary and the elements are the full show.' : 'The effect art is not in this build, so only the plain effects show.';
+    note.textContent = hooks.art ? 'Auto follows the gun you hold (its rarity and status colours, the real game). Or pick a look to preview its muzzle flash, bullet streak, hits, kills and explosions. Legendary and the elements are the full show.' : 'The effect art is not in this build, so only the plain effects show.';
     wrap.appendChild(note);
     const grid = document.createElement('div'); grid.className = 'fxgrid'; wrap.appendChild(grid);
     const btns = [];
-    for (const p of plan.PRESETS) {
+    for (const p of [{ id: 'auto', label: 'Auto (by gun)' }].concat(plan.PRESETS)) {
       if (!hooks.art && p.id !== 'original') continue;
       const b = document.createElement('button'); b.type = 'button'; b.className = 'btn fxb'; b.textContent = p.label; b.dataset.fx = p.id;
       b.addEventListener('click', () => { view.fxPreset = p.id; sync(); hooks.save(); });

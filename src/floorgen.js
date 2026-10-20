@@ -167,7 +167,7 @@ const FloorGen = (function () {
       W, H, CELL, floor, safe: true, rows: g.map((r) => r.join('')), torches, rooms: [room], traps: [],
       start: { x: 13 * CELL, z: 18 * CELL, yaw: 0 },
       door: { cells: doorCells, nx: 0, nz: -1, x: 13 * CELL, z: 11 },
-      merchant: { x: 17.5 * CELL, z: 9.5 * CELL },
+      merchant: { x: 17.5 * CELL, z: 9.5 * CELL }, chest: { x: 14.5 * CELL, z: 9.5 * CELL },   // the stash chest stands a few steps from the merchant
       carpetLength: room.h * 2, doorRunner: []
     };
   }

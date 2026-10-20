@@ -6,7 +6,8 @@ from playwright.sync_api import sync_playwright
 HERE = os.path.dirname(os.path.abspath(__file__))
 STUB = open(os.path.join(HERE, 'smoke.py')).read().split('STUB = """')[1].split('"""')[0]
 BOT = open(os.path.join(HERE, 'smoke_loop.py')).read().split('BOT = """')[1].split('"""')[0]
-SITE = 'file://' + os.path.abspath(os.path.join(HERE, '..', 'site', 'index.html'))
+# the controller run pokes the Effects and Gun menus, which only the private cheat build has (node tools/build.js x --cheat)
+SITE = 'file://' + os.path.abspath(os.path.join(HERE, '..', 'cheat', 'index.html'))
 FAKE = """(()=>{ window.__pad = null;
   Object.defineProperty(navigator, 'getGamepads', { configurable: true, value: () => [window.__pad, null, null, null] });
   window.__setPad = (axes, held) => { window.__pad = { connected: true, id: 'Fake Xbox Controller', index: 0, mapping: 'standard', axes: axes || [0,0,0,0],

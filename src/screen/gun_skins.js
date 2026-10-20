@@ -24,7 +24,15 @@ const GunSkins = (function () {
     { id: 'hellfire', name: 'Hellfire', hue: 18, sat: 0.4, val: 0.4, metal: [0.8, 0.68, 0.7], glow: 36, glowVal: 1.25, trim: 32, mode: 'flow', shine: 60, spec: 0xff9a40, light: 0xff7a18, tracer: 0xff2418 },
     { id: 'prism', name: 'Prismatic', hue: 0, sat: 0.12, val: 1.5, metal: [1.25, 1.25, 1.4], glow: 0, mode: 'prism', shine: 90, spec: 0xffffff, light: 0xffffff },
   ];
-  const byId = (id) => SKINS.find((s) => s.id === id) || SKINS[0];
+  // a legendary carries two statuses: the plates and metal keep the first one's paint, the glow, light, tracer and glow behaviour take the second one's
+  const STATUS_SKIN = { radiation: 'radiation', poison: 'poison', electric: 'shock', fire: 'flame', ice: 'frost', dark: 'dark', light: 'light' };
+  function mix(a, b) {
+    const A = SKINS.find((s) => s.id === a) || SKINS[0], B = SKINS.find((s) => s.id === b) || SKINS[0];
+    return Object.assign({}, A, { id: 'mix:' + a + ':' + b, name: A.name + ' + ' + B.name, glow: B.glow !== null && B.glow !== undefined ? B.glow : A.glow, glowSat: B.glowSat, glowVal: B.glowVal, mode: B.mode, light: B.light, tracer: B.tracer || A.tracer, flame: B.flame || A.flame, embers: B.embers || A.embers });
+  }
+  const byId = (id) => (typeof id === 'string' && id.indexOf('mix:') === 0 ? mix(id.split(':')[1], id.split(':')[2]) : SKINS.find((s) => s.id === id) || SKINS[0]);
+  // which skin a gun wears: its own paint, or the two-colour mix when it is a legendary with two statuses
+  const forGun = (base, status, rarity) => (rarity >= 4 && status && status.length >= 2 && STATUS_SKIN[status[0]] && STATUS_SKIN[status[1]] ? 'mix:' + STATUS_SKIN[status[0]] + ':' + STATUS_SKIN[status[1]] : base);
 
   function rgb2hsv(r, g, b) {
     const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; let h = 0;
@@ -70,6 +78,6 @@ const GunSkins = (function () {
   }
   // how much fire to make: running (0..1.6 of walking pace) feeds it, standing still keeps a small flicker. Returns flames per second
   function flameRate(skin, speed) { return skin.flame ? 2 + 12 * Math.min(1.6, Math.max(0, speed)) : 0; }
-  return { SKINS, byId, recolor, glowAt, flowAt, flameRate, rgb2hsv, hsv2rgb };
+  return { SKINS, STATUS_SKIN, byId, forGun, recolor, glowAt, flowAt, flameRate, rgb2hsv, hsv2rgb };
 })();
 if (typeof module !== 'undefined') module.exports = GunSkins;

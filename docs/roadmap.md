@@ -2,7 +2,7 @@
 
 The plan for everything the game still needs, in phases. Rewritten with the owner on 2026-10-19 (it replaces the first 8-phase plan and borrows the way Crusader Tactics was built). **Work only on the current phase.**
 
-**Current phase: 4 — Classes, skills and level-ups** (status: first batch built for private testing: three classes; Phases 1, 2 and 3 were signed off by the owner on 2026-10-19)
+**Current phase: 6 — Loot, shops, saves and seeds** (status: first batch built for private testing: silver pistol start, gun drops, carry two guns; Phases 1 to 5 are signed off)
 
 ## How we build (every phase works this way)
 - **Every phase starts rough and ugly on purpose** (grey boxes, placeholder shapes, plain text menus) and is built out step by step. Nothing is pretty until its phase says so.
@@ -74,24 +74,27 @@ One feature at a time, each tested on the phone. The safe room and the shop floo
 - [x] Safe room after each boss: a calm hall with a merchant; the boss door leads in, its own far door leads on to the next floor. The merchant sells class skill levels and a full heal for gold. (Built, placeholder look.)
 - [x] Traps: spike patches (always up), flame vents (on a beat) and rising spikes; they hurt monsters too, and get more advanced and harder-hitting the deeper the floor. Monsters show as dots on the minimap. (Built; owner to judge.)
 - Weather (falling embers or ash in the halls, light on the phone) moved to Phase 9 with the key-gated doors (owner, 2026-10-20).
-- [ ] Merchant sells real gear once guns exist (Phase 6).
+- [x] Merchant sells real gear once guns exist (Phase 6): two guns on the shelf in each safe room (built 2026-10-20, not pushed).
 - **Check:** each feature adds tension without hurting phone performance.
 - **Gate:** per feature.
 
 ## Phase 6 — Loot, shops, saves and seeds
-- [ ] Guns drop from monsters and bosses (bosses best); rarity tiers with a 1% legendary; weapon affixes; consumables; relics or gun mods. Each gun has its own fire rate, damage, reload and animations.
+- [ ] Guns drop from monsters and bosses (bosses best); rarity tiers with a 1% legendary; weapon affixes; gun mods (rules below). Each gun has its own fire rate, damage, reload and animations.
+- [ ] **Gun mods (owner's rules, 2026-10-20; not built yet).** Mods are separate items you attach to a gun. (1) A mod has its own affixes, never the ordinary gun or gear ones: magazine size, fire rate, aim-down-sights speed and things of that nature. (2) Mods follow the same rarity rules as everything else: a common mod carries 1 affix, an uncommon mod 2, and so on up the same ladder. (3) A mod must match its gun: it can be at most one rarity above the gun and at most one below it. A common gun takes common or uncommon mods; an uncommon gun takes common, uncommon or rare; an epic (purple) gun takes only rare (blue) or better, never a common one; a legendary gun takes epic or legendary. (4) Mods drop on the same wave bands as guns, so a legendary mod can only turn up where legendary guns exist and you are never left holding a mod with nothing it can go on. (5) How many mod slots a gun has, and how mods are put on and taken off, are still to be decided with the owner.
 - [x] Grok's black neon-green revolver, built from the picture's own silhouette (src/models/revolver.js; model done 2026-10-20, owner liked the shape).
-- [ ] **The weapon system (owner, 2026-10-20).** Rules to build:
+- [~] **The weapon system (owner, 2026-10-20).** First batch built (not pushed): silver Service Pistol start, 20 guns drop by wave rarity (a boss always drops one a band higher), two carried guns, per-gun damage / fire rate / magazine / reload, damage rises with the drop's wave and its rarity. Status effects built (2026-10-20, not pushed; src/referee_gunfx.js). Legendary two-colour gun looks built. Still to do: Crusader Tactics effects and projectile art, rarity colours confirmed, the cap, per-gun reload animations. Rules:
+- [x] Gun affixes (owner, 2026-10-20, built, not pushed): counts by rarity as in Crusader Tactics (common 0-1, uncommon 1-2, rare 2-3, epic 3, legendary 3-4), ten plain lines plus six class-only lines (Gunslinger, Assassin, Witch) that only drop for the class you play, and a floor card showing a gun's numbers, status and affixes against your own gun.
+- [ ] **Next (owner, 2026-10-20), in order:** (DONE, built not pushed: gear drops head, chest, boots, two charms with piece-fitting affixes, Gear menu on the GEAR button / G / RB; merchant does not sell gear yet); merchant gear (DONE); the Codex first pages (DONE: how to play, classes, monsters, guns, rarities, status effects, affixes, gear, merchant; button on the start card; search; a test fails if something in the game has no entry) and each new system adds its page as it lands; Phase 8 stash: gear and guns can be put in a safe-room stash (not usable that run), at the run's end make them blueprints you start future runs with (limit 3 per type to begin with); solo stash unlocks after the wave 100 boss, multiplayer can stash from the start.
   - Everyone starts with the same plain silver handgun (the base weapon).
-  - You can hold two guns at once (to confirm with the owner: carry two and swap, or fire both together).
+  - You can hold two guns at once: carry two and swap (owner chose this, 2026-10-20). Built: Q, the controller's Y, or tapping the gun box swaps; walking over a gun takes it (it fills the free slot, or replaces the gun in your hands and that one drops at your feet).
   - Monsters drop guns. The rarity of drops follows the wave: waves 1-10 mostly common with a few uncommon (green); 11-20 mostly uncommon with a few rare (blue); 21-30 mostly rare with a few epic (purple); 31 and up mostly epic, with a chance of legendary. Rarity colours to confirm with the owner.
   - Gun types: pistol, SMG, shotgun, sniper, heavy machine gun, four versions of each (models done, see below). Each type reads at a glance by its shape, each version is distinct in shape detail, colour, glow and effects.
   - Status effects, shown by colour: green = radiation, purple = poison, yellow = electric, blue = ice, red = fire, black = dark magic, white = light magic. A normal gun carries one; only legendaries carry two (that is what makes them special).
   - Effects and projectiles come from the owner's Crusader Tactics packs (effects and projectile assets).
   - Damage keeps growing with the waves until the cap (the owner will pick the cap later).
   - Each gun has its own hands (hold) and reload; the hands follow the gun's anchors (done in screen.js).
-- [ ] Save slots: save often, delete saves, go back to a save after death.
-- [ ] Three seeds (map, damage, loot) so a bad roll never locks a save; all randomness through the referee's seeded random.
+- [x] Save slots: saved only by pressing Save game at the chest in a safe room, no autosave (newest 8), delete saves, go back to a save from the start or game over card.
+- [x] Three seeds: the map seed is kept in a save; the damage and item seeds are rolled fresh every time you enter, all through the referee's seeded random.
 - **Check:** a save is never a dead end, and drops feel earned.
 - **Gate:** each gun feels different and the owner likes using it.
 
@@ -106,6 +109,8 @@ One feature at a time, each tested on the phone. The safe room and the shop floo
 - **Gate:** owner signs off the stash.
 
 ## Phase 9 — Feel, polish, controller, PC and release
+- [ ] **Consumables (owner, 2026-10-20):** moved here from Phase 6.
+- [ ] **Damage cap (owner, 2026-10-20):** guns gain damage every wave they drop; decide the cap here, once the numbers can be tested properly. Moved from Phase 6.
 - [ ] The rest of the Crusader Tactics monster roster (Orc Brute, Shadow Assassin, Dark Knight, Golden Drake and more): placeholders first, then Grok's art one monster at a time. Moved here from Phase 3.
 - [ ] Feel pass: movement, shooting, spread and recoil, monster speed and damage, wave and floor pacing, XP speed; this is where the TUNE panel numbers get locked.
 - [ ] Key-gated doors, moved here from Phase 5 (owner, 2026-10-20). Plan: a few rooms per floor (one on floors 1 to 3, two from floor 4) are shut by a heavy door; one glowing key-carrying monster on the floor drops the key; walking into the door with the key opens it and uses the key up; locked doors show as gold bars on the minimap and the key carrier as a gold dot. Until Phase 6 gives real loot, a locked room holds a pile of gold and a full heal; after it, the real chests and guns.
@@ -122,3 +127,8 @@ One feature at a time, each tested on the phone. The safe room and the shop floo
 - Win condition and the ending (decided later, after everything else).
 - Splitting `src/screen.js` into more modules when it is next touched (no monolith rule in `CLAUDE.md`).
 - Grok's `assets/models/gun/gun_rifle_v1.glb` and the `.glb` loader: only if Grok delivers real `.glb` files and the owner signs them off.
+
+
+## Stash and blueprints: built as a first demo (2026-10-20)
+- Built: 6-place run stash in safe rooms (Gear menu), blueprints saved in the browser (3 per gun type / gear place / mods), pick blueprints on the start or game over card, runs start with them. Gun mods are built too (see Phase 6 rules).
+- Still to do later: solo unlock after the wave-100 boss, multiplayer stash from the start, bigger endgame stash, blueprint trading rules.

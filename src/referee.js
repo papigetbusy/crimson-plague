@@ -9,7 +9,7 @@
 
    step(dt, input) -> { state, events }
      input:  { mx, mz, lookX, lookY, touchX, touchY, padX, padY,
-               fire, ads, sprint, slide, reload }
+               fire, ads, sprint, slide, reload, swap }
                (padX / padY: the controller's right stick, -1..1, already past its dead zone)
      state:  everything the screen needs to draw one frame
      events: one-shot things that happened this step
@@ -24,6 +24,10 @@ const Referee = (function () {
   const lerp = (a, b, t) => a + (b - a) * t;
   const D = typeof RefereeData !== 'undefined' ? RefereeData : require('./referee_data.js');   // monster kinds, skills, wave plan
   const CL = typeof RefereeClass !== 'undefined' ? RefereeClass : require('./referee_class.js');   // the Gunslinger, Assassin and Witch rules
+  const ST = typeof RefereeStash !== 'undefined' ? RefereeStash : require('./referee_stash.js');         // the run stash and blueprints
+  const WP = typeof RefereeWeapons !== 'undefined' ? RefereeWeapons : require('./referee_weapons.js');   // the 20 guns, rarities and drops
+  const GR = typeof RefereeGear !== 'undefined' ? RefereeGear : require('./referee_gear.js');             // armor pieces and charms
+  const GX = typeof RefereeGunFx !== 'undefined' ? RefereeGunFx : require('./referee_gunfx.js');         // what a gun's status colour does to a monster
   const SH = typeof RefereeShots !== 'undefined' ? RefereeShots : require('./referee_shots.js');   // monster projectiles
 const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js');              // the floors: rooms and winding corridors from a seed
 
@@ -73,6 +77,14 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     reloadTime: 2.1,
     reloadEmptyExtra: 0.45,
     recoilKick: 0.012,
+    startGun: 'rifle',        // the gun a run starts with: the plain rifle (all-ones baseline) here; the game screen starts you with 'pistol_service'
+    manualGuns: false,        // true = guns and gear on the floor are only taken when you press pick up (the game does this so a good gun is never swapped away by accident); tests keep the old walk-over
+    gunReach: 2.6,            // how close you must be to take a gun or piece of gear with pick up
+    stashReach: 3,            // how close you stand to the stash chest to use it
+    stashOpen: false,         // can you put things in the safe-room stash? off here so tests stay steady; the game screen turns it on (later: only after the wave 100 boss when playing alone)
+    modDrops: false,          // do monsters drop gun mods? off here so tests stay steady; the game screen turns it on
+    gearDrops: false,         // do monsters drop armor and charms? off here so tests stay steady; the game screen turns it on
+    gunDrops: false,          // do monsters drop guns? off here so tests stay steady; the game screen turns it on
     // monsters (base = the horned fiend; every kind multiplies these, see referee_data.js)
     monsterCount: 6,          // how many may be alive in wave 1; one more each wave, up to the cap in referee_data.js
     startWave: 1,
@@ -91,8 +103,10 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
   // (hit spheres now live with each monster kind, in referee_data.js)
   const MONSTER_RADIUS = 0.5;
 
-  function create(seed) {
-    const seed0 = seed || 1337, rng = makeRng(seed0);
+  // seed = the MAP seed (floors, traps, fog): a save keeps it. luck = { damage, item }: the dice for fights and for drops, which a save does NOT keep (they are rolled fresh every time you enter)
+  function create(seed, luck) {
+    let seed0 = seed || 1337, rng = makeRng(luck && luck.damage ? luck.damage | 1 : seed0);
+    const SEEDS = { map: seed0, damage: luck && luck.damage ? luck.damage | 1 : seed0, item: luck && luck.item ? luck.item | 1 : ((seed0 ^ 0x5bd1e995) | 1) };
     const cfg = Object.assign({}, DEFAULT_CFG);
 
     /* ---------- the floor you are on (a new one is generated when you go through the door) ---------- */
@@ -206,6 +220,9 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       ammo: cfg.magSize, reloading: false, reloadT: 0, reloadDur: 0, reloadEmpty: false
     };
     let monsters = [], orbs = [], pickups = [], coins = [], spawnQ = [];
+    let rngW = makeRng(SEEDS.item);                     // its own dice for gun drops, so drops never change what the main dice roll
+    const GEAR = { worn: [null, null, null, null, null] };   // head, chest, boots and two charms (see referee_gear.js)
+    const W = { slots: [null, null], held: 0, mods: [] };         // the two guns you carry, and which one is in your hands (the held gun's ammo lives in P.ammo)
     let nextId = 1, kills = 0, deaths = 0, time = 0, spawnTimer = 0.4, events = [];
 
     /* ---------------- the run: waves, xp, level-ups, skills ---------------- */
@@ -214,21 +231,33 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     const skillOf = (id) => D.SKILLS.find((s) => s.id === id);
     const stackOf = (id) => R.stacks[id] || 0;
     function computeMods() {
-      const per = (id) => skillOf(id).per * stackOf(id);
+      const per = (id) => skillOf(id).per * stackOf(id), gt = GR.total(GEAR.worn);       // level-up skills plus everything you wear
       return {
-        dmg: 1 + per('dmg'), rate: 1 + per('rate'), speed: 1 + per('speed'), multi: per('multi'), hp: per('hp'), steal: per('steal'),
-        reloadMul: Math.max(0.25, 1 - per('reload')), blast: per('blast'), magnet: 1 + per('magnet'), regen: per('regen'), mag: per('mag')
+        dmg: (1 + per('dmg')) * (1 + gt.dmg), rate: (1 + per('rate')) * (1 + gt.rate), speed: (1 + per('speed')) * (1 + gt.speed), multi: per('multi'), hp: per('hp') + gt.hp, steal: per('steal') + gt.leech,
+        reloadMul: Math.max(0.25, (1 - per('reload')) * (1 - Math.min(0.6, gt.reload))), blast: per('blast'), magnet: (1 + per('magnet')) * (1 + gt.magnet), regen: per('regen') + gt.regen, mag: per('mag'),
+        vit: gt.vit, def: gt.def, crit: gt.crit, critDmg: gt.critdmg
       };
     }
-    const maxHp = () => cfg.playerHp + M.hp;
-    const maxMag = () => cfg.magSize + M.mag;
+    const maxHp = () => Math.round((cfg.playerHp + M.hp) * (1 + M.vit));
+    const gunStats = () => WP.stats(W.slots[W.held], cfg);
+    const maxMag = () => Math.max(1, Math.round(gunStats().mag * (1 + M.mag / cfg.magSize)));      // Deep Magazine adds its share of the gun's magazine
 
     function newRun() {
       R.wave = cfg.startWave; R.phase = 'intermission'; R.timer = L.firstDelay; R.level = 1; R.xp = 0;
       R.stacks = {}; R.choices = null; R.classChoices = null; R.pending = 0; R.fogOn = false; R.fogK = 0; R.frenzy = 0; R.over = null; R.time = 0; R.hold = null; R.gold = 0; R.safe = false; R.shop = null; R.shopShut = false;
       kit.reset(cfg.classId);
+      W.slots = [WP.make(cfg.startGun, 0, 1), null]; W.held = 0; W.mods = []; R.stash = []; GEAR.worn = [null, null, null, null, null]; applyLoadout();
       grantStartKit();
       M = computeMods();
+    }
+    // blueprints chosen on the start card: they join the run as fresh items (a gun replaces the starting pistol)
+    let loadout = [];
+    function applyLoadout() {
+      const copy = (e) => JSON.parse(JSON.stringify(e.item)); let g = 0;
+      for (const e of loadout) {
+        if (e.kind === 'gun' && g < 1) { const it = copy(e); it.ammo = WP.stats(it, cfg).mag; W.slots[g++] = it; }
+        else if (e.kind === 'gear') { const it = copy(e), at = GR.WEAR.indexOf(it.slot); if (at >= 0 && !GEAR.worn[at]) GEAR.worn[at] = it; }   // one piece of each place: the first charm place only
+      }
     }
     // starting a run on a later wave (the #wave=N test link) hands out the upgrades you would have earned, picked at random, so you are not too weak
     function grantStartKit() {
@@ -366,8 +395,20 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       const gv = Math.max(1, Math.round(k.xp * L.goldPerXp * (1 + L.goldWave * (R.wave - 1)) * (m.elite.length ? L.goldElite : 1)));
       coins.push({ id: nextId++, x: m.x, z: m.z, v: gv, life: L.coinLife });
       const r = rng();
+      if (cfg.gunDrops && (k.boss || rngW() < (m.elite.length ? WP.DROP.eliteChance : WP.DROP.chance))) dropGun(m.x, m.z, k.boss ? 10 : 0);   // a boss always leaves a gun, a rarity band better
+      if (cfg.gearDrops && (k.boss || rngW() < (m.elite.length ? GR.DROP.eliteChance : GR.DROP.chance))) dropGear(m.x, m.z, k.boss ? 10 : 0);
+      if (cfg.modDrops && (k.boss || rngW() < (m.elite.length ? WP.MD.DROP.eliteChance : WP.MD.DROP.chance))) dropMod(m.x, m.z);
       if (k.boss || r < L.healChance) pickups.push({ id: nextId++, kind: 'heal', x: m.x, z: m.z, life: L.pickupLife });
       else if (r < L.healChance + L.frenzyChance) pickups.push({ id: nextId++, kind: 'frenzy', x: m.x, z: m.z, life: L.pickupLife });
+    }
+    function dropGear(x, z, extra, item) {
+      pickups.push({ id: nextId++, kind: 'gear', x, z, life: WP.DROP.life, noPick: 0, gear: item || GR.roll(Math.min(4, WP.rarityFor(R.wave + (extra || 0), rngW)), R.wave, rngW, cfg.classId) });
+    }
+    function dropMod(x, z, item) {
+      pickups.push({ id: nextId++, kind: 'mod', x, z, life: WP.DROP.life, noPick: 0, mod: item || WP.MD.make(Math.min(4, WP.rarityFor(R.wave, rngW)), R.wave, rngW) });
+    }
+    function dropGun(x, z, extra, item) {
+      pickups.push({ id: nextId++, kind: 'gun', x, z, life: WP.DROP.life, noPick: 0, item: item || WP.roll(R.wave, rngW, extra, cfg.classId) });
     }
     function killMonster(m) {
       const k = D.KINDS[m.kind];
@@ -400,6 +441,8 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       for (const [x, z] of M0.door.cells) G[z][x] = 'd';
       doorOpen = true; R.safe = true; R.hold = 'door'; R.phase = 'intermission'; R.shop = null; R.shopShut = false; R.fogOn = false;
       R.stock = kit.choices(R.level) || [];
+      R.gearStock = cfg.gearDrops ? [GR.roll(Math.min(4, WP.rarityFor(R.wave, rngW)), R.wave, rngW, cfg.classId), GR.roll(Math.min(4, WP.rarityFor(R.wave + WP.SHOP.betterBand, rngW)), R.wave, rngW, cfg.classId)] : [];   // the merchant's armor and charms, for your class; the second is a rarity band better
+      R.gunStock = cfg.gunDrops ? [WP.roll(R.wave, rngW, 0, cfg.classId), WP.roll(R.wave, rngW, WP.SHOP.betterBand, cfg.classId)] : [];     // the merchant's guns; the second is a rarity band better
       P.x = M0.start.x; P.z = M0.start.z; P.yaw = M0.start.yaw; P.vx = P.vz = 0; P.sliding = false; P.slideT = 0; P.invuln = 1.5;
       reveal(P);
       events.push({ type: 'safeRoom', floor: floorNo });
@@ -411,14 +454,30 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       R.gold -= skillPrice(sid); kit.pick(sid); R.stock[slot] = null;
       events.push({ type: 'bought', what: sid });
     }
+    // the supplies row: Mend, then the guns still on the shelf, then Leave
+    const supplyList = () => [{ kind: 'mend' }].concat((R.gunStock || []).map((g, k) => (g ? { kind: 'gun', slot: k, item: g } : null)).filter(Boolean), (R.gearStock || []).map((g, k) => (g ? { kind: 'gear', slot: k, item: g } : null)).filter(Boolean), [{ kind: 'leave' }]);
     function shopSupply(i) {
-      if (i === 1) { R.shop = null; R.shopShut = true; return; }                 // Leave
-      if (i === 0 && R.gold >= L.shopHeal && P.hp < maxHp()) { R.gold -= L.shopHeal; P.hp = maxHp(); events.push({ type: 'bought', what: 'mend' }); }
+      const e = supplyList()[i]; if (!e) return;
+      if (e.kind === 'leave') { R.shop = null; R.shopShut = true; return; }
+      if (e.kind === 'mend' && R.gold >= L.shopHeal && P.hp < maxHp()) { R.gold -= L.shopHeal; P.hp = maxHp(); events.push({ type: 'bought', what: 'mend' }); }
+      if (e.kind === 'gear' && R.gold >= gearPrice(e.item)) { R.gold -= gearPrice(e.item); R.gearStock[e.slot] = null; wearBought(e.item); events.push({ type: 'bought', what: e.item.slot }); }
+      if (e.kind === 'gun' && R.gold >= WP.price(e.item)) { R.gold -= WP.price(e.item); R.gunStock[e.slot] = null; takeGun({ item: e.item, life: 1 }); events.push({ type: 'bought', what: e.item.id }); }
     }
+    const gearPrice = (item) => WP.price({ rarity: item.rarity, wave: item.wave });
+    const gearCard = (item, k) => {
+      const v = GR.view(item, GEAR.worn), pr = gearPrice(item), bits = [v.slot[0].toUpperCase() + v.slot.slice(1)];
+      if (v.def > 0) bits.push('Def ' + v.def + '%'); if (v.hp > 0) bits.push('+' + v.hp + ' hp');
+      for (const a of v.affixes) bits.push((a.cls ? '★ ' : '') + a.text);
+      return { id: 'gear' + k + item.slot + item.rarity, name: v.rarityName + ' ' + v.name, desc: bits.join('  ·  ') + (v.vs === 'worse' ? '  ·  worse than yours' : ''), price: pr, afford: R.gold >= pr, color: '#' + v.color.toString(16).padStart(6, '0'), rarity: item.rarity };
+    };
+    const gunCard = (item, k) => {
+      const st = WP.stats(item, cfg), r = WP.RARITIES[item.rarity], pr = WP.price(item);
+      return { id: 'gun' + k + item.id + item.rarity, name: r.name + ' ' + WP.GUNS[item.id].name, desc: (item.status.length ? item.status.join(' + ') + '  ·  ' : '') + (item.affixes && item.affixes.length ? item.affixes.length + ' affix' + (item.affixes.length > 1 ? 'es' : '') + '  ·  ' : '') + Math.round(st.dmg) + ' dmg  ·  ' + st.rate.toFixed(1) + '/s  ·  ' + st.mag + ' rounds', price: pr, afford: R.gold >= pr, color: '#' + r.color.toString(16).padStart(6, '0'), rarity: item.rarity };
+    };
     function nextFloor() {
       for (const o of orbs) gainXp(o.v);
       monsters = []; orbs = []; pickups = []; coins = []; spawnQ = []; mshots.clear();
-      R.safe = false; R.shop = null; R.stock = null;
+      R.safe = false; R.shop = null; R.stock = null; R.gunStock = null; R.gearStock = null;
       loadFloor(floorNo + 1);
       P.x = M0.start.x; P.z = M0.start.z; P.yaw = M0.start.yaw; P.vx = P.vz = 0; P.sliding = false; P.slideT = 0; P.invuln = 1.5;
       R.hold = null; R.phase = 'intermission'; R.timer = L.intermission; spawnTimer = 0.4;
@@ -427,15 +486,16 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     }
     function damageMonster(m, dmg, crit, x, y, z, splash, quiet) {
       if (m.hp <= 0) return;
-      dmg *= kit.takenMul(m);                               // a hexed monster takes extra
+      dmg *= kit.takenMul(m) * gfx.takenMul(m);                               // a hexed monster takes extra
       m.hp -= dmg;
       if (!quiet) { m.flash = 0.12; if (!splash) m.stun = 0.08; events.push({ type: 'hit', id: m.id, dmg: Math.round(dmg), crit, x, y, z, splash: !!splash }); }
-      if (M.steal > 0) P.hp = Math.min(maxHp(), P.hp + dmg * M.steal);
+      const steal = M.steal + gunStats().leech; if (steal > 0) P.hp = Math.min(maxHp(), P.hp + dmg * steal);
       if (m.hp <= 0) killMonster(m);
     }
 
     function hurtPlayer(d, id) {
       if (P.invuln > 0 || R.over || P.sliding) return;   // a slide is untouchable from start to finish
+      d *= 1 - M.def;                                    // armor blocks a share of every hit
       P.hp -= d; P.hurt = 0.3; P.sinceHit = 0;
       events.push({ type: 'playerHit', dmg: d, id });
       if (P.hp <= 0) {
@@ -451,16 +511,101 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     });
 
     const kit = CL.create({
-      rng, P, monsters: () => monsters, damage: (m, d, c, x, y, z, sp, q) => damageMonster(m, d, c, x, y, z, sp, q),
-      heal: (v) => { P.hp = Math.min(maxHp(), P.hp + v); }, maxHp: () => maxHp(), baseDmg: () => cfg.damage * M.dmg, isBoss: (m) => !!D.KINDS[m.kind].boss,
+      rng: () => rng(), P, monsters: () => monsters, damage: (m, d, c, x, y, z, sp, q) => damageMonster(m, d, c, x, y, z, sp, q),
+      heal: (v) => { P.hp = Math.min(maxHp(), P.hp + v); }, maxHp: () => maxHp(), baseDmg: () => gunStats().dmg * M.dmg, isBoss: (m) => !!D.KINDS[m.kind].boss,
       event: (e) => events.push(e), tryMove: (o, dx, dz, r) => tryMove(o, dx, dz, r), nextId: () => nextId++
     });
+
+    const gfx = GX.create({
+      monsters: () => monsters, damage: (m, d, c, x, y, z, sp, q) => damageMonster(m, d, c, x, y, z, sp, q),
+      heal: (v) => { P.hp = Math.min(maxHp(), P.hp + v); }, event: (e) => events.push(e)
+    });
+
+    /* ---------------- the two guns you carry ---------------- */
+    // walking over a gun: it goes in your free hand-slot and you hold it; with both slots full it replaces the gun in your hands, and that one drops at your feet
+    function takeGun(p) {
+      const it = p.item; it.ammo = WP.stats(it, cfg).mag;
+      p.life = -1;
+      const other = 1 - W.held;
+      if (!W.slots[other]) {
+        W.slots[W.held].ammo = P.ammo; W.held = other; W.slots[other] = it;
+      } else {
+        dropGun(P.x, P.z, 0, W.slots[W.held]); pickups[pickups.length - 1].noPick = WP.DROP.noPick;
+        W.slots[W.held] = it;
+      }
+      P.ammo = it.ammo; P.reloading = false; P.reloadT = 0; P.fireCd = 0.3;
+      events.push({ type: 'gunPickup', id: it.id, rarity: it.rarity });
+    }
+    // walking over gear: it goes on if the place is empty or it beats what you wear there (the old piece drops at your feet); worse gear stays on the floor
+    function takeGear(p) {
+      const at = GR.place(GEAR.worn, p.gear); if (at < 0) return;
+      p.life = -1; wearAt(p.gear, at);
+    }
+    function wearAt(item, at) {
+      const old = GEAR.worn[at]; GEAR.worn[at] = item;
+      if (old) { dropGear(P.x, P.z, 0, old); pickups[pickups.length - 1].noPick = WP.DROP.noPick; }
+      const hpBefore = maxHp(); M = computeMods(); P.hp = Math.min(maxHp(), P.hp + Math.max(0, maxHp() - hpBefore));   // new health comes in full
+      events.push({ type: 'gearPickup', slot: item.slot, rarity: item.rarity });
+    }
+    // something you bought goes on even when it is not better (the shop card warns you): into the empty place, else over your weakest piece of that kind
+    function wearBought(item) {
+      let at = GR.place(GEAR.worn, item);
+      if (at < 0) at = GR.WEAR.map((w, i) => (w === item.slot ? i : -1)).filter((i) => i >= 0).sort((a, b) => GR.score(GEAR.worn[a]) - GR.score(GEAR.worn[b]))[0];
+      wearAt(item, at);
+    }
+    // pick up: take the nearest gun or piece of gear lying within reach (with manualGuns on, only this press picks things up, so nothing is ever taken by accident; hearts and flames are still automatic)
+    function pickUpGun() {
+      let best = null, bd = cfg.gunReach;
+      for (const q of pickups) { if ((q.kind !== 'gun' && q.kind !== 'gear' && q.kind !== 'mod') || q.noPick > 0 || q.life <= 0) continue; const d = Math.hypot(P.x - q.x, P.z - q.z); if (d < bd) { bd = d; best = q; } }
+      if (!best) return;
+      if (best.kind === 'gun') takeGun(best); else if (best.kind === 'mod') takeMod(best); else { best.life = -1; wearBought(best.gear); }   // a piece you picked up on purpose goes on, even over a better one
+    }
+    // a mod goes into the bag (six places); with a full bag it stays on the floor
+    function takeMod(p) {
+      if (W.mods.length >= WP.MD.BAG) { events.push({ type: 'bagFull' }); return; }
+      p.life = -1; W.mods.push(p.mod); events.push({ type: 'modPickup', rarity: p.mod.rarity });
+    }
+    // bolt a mod from the bag onto the gun in a hand (0 or 1), or take one off and back into the bag. Returns '' when it worked, else the reason.
+    function attachMod(bag, hand) {
+      const gun = W.slots[hand], mod = W.mods[bag], why = WP.MD.why(gun, mod); if (why) return why;
+      W.mods.splice(bag, 1); (gun.mods = gun.mods || []).push(mod); if (hand === W.held) P.ammo = Math.min(P.ammo, maxMag()); return '';
+    }
+    function detachMod(hand, at) {
+      const gun = W.slots[hand]; if (!gun || !gun.mods || !gun.mods[at]) return 'nothing there';
+      if (W.mods.length >= WP.MD.BAG) return 'bag full';
+      W.mods.push(gun.mods.splice(at, 1)[0]); if (hand === W.held) P.ammo = Math.min(P.ammo, maxMag()); return '';
+    }
+    // put something away in the safe-room stash (kind 'gun' = a hand 0/1, 'gear' = a worn place 0-4, 'mod' = a bag place). Returns '' when done, else the reason.
+    function stashItem(kind, at) {
+      if (!cfg.stashOpen) return 'the stash is not open yet';
+      if (!nearChest()) return 'stand next to the stash chest in the safe room';
+      if (R.stash.length >= ST.RULES.stashSize) return 'the stash is full';
+      let item = null;
+      if (kind === 'gun') {
+        if (!W.slots[at]) return 'nothing there'; if (!W.slots[1 - at]) return 'keep at least one gun';
+        if (at === W.held) swapGun();
+        item = W.slots[at]; W.slots[at] = null; delete item.ammo;
+      } else if (kind === 'gear') {
+        if (!GEAR.worn[at]) return 'nothing there'; item = GEAR.worn[at]; GEAR.worn[at] = null; M = computeMods(); P.hp = Math.min(P.hp, maxHp());
+      } else if (kind === 'mod') {
+        if (!W.mods[at]) return 'nothing there'; item = W.mods.splice(at, 1)[0];
+      } else return 'unknown item';
+      R.stash.push({ kind, item }); return '';
+    }
+    const nearChest = () => !!(R.safe && M0.chest && Math.hypot(P.x - M0.chest.x, P.z - M0.chest.z) < cfg.stashReach);
+    const stashView = () => ({ near: nearChest(), open: !!cfg.stashOpen && nearChest(), chest: R.safe && M0.chest ? { x: M0.chest.x, z: M0.chest.z } : null, size: ST.RULES.stashSize, items: R.stash.map((e, i) => ({ i, kind: e.kind, card: e.kind === 'gun' ? WP.view(e.item, cfg) : e.kind === 'gear' ? GR.view(e.item, null) : WP.modView(e.item) })) });
+    function swapGun() {
+      const other = 1 - W.held; if (!W.slots[other]) return;
+      W.slots[W.held].ammo = P.ammo; W.held = other; P.ammo = W.slots[other].ammo;
+      P.reloading = false; P.reloadT = 0; P.fireCd = 0.35;
+      events.push({ type: 'swap', id: W.slots[W.held].id, rarity: W.slots[W.held].rarity });
+    }
 
     /* ---------------- reload ---------------- */
     function startReload() {
       if (P.reloading || P.ammo >= maxMag()) return;
       P.reloading = true; P.reloadT = 0; P.reloadEmpty = P.ammo <= 0;
-      P.reloadDur = (cfg.reloadTime + (P.reloadEmpty ? cfg.reloadEmptyExtra : 0)) * M.reloadMul * kit.reloadMul(); kit.onReload();
+      P.reloadDur = (gunStats().reload + (P.reloadEmpty ? cfg.reloadEmptyExtra : 0)) * M.reloadMul * kit.reloadMul(); kit.onReload();
       events.push({ type: 'reloadStart', dur: P.reloadDur, empty: P.reloadEmpty });
     }
 
@@ -485,14 +630,15 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     function shoot() {
       const pe = clamp(P.pitch + P.kick, -1.5, 1.5);
       const speed = Math.hypot(P.vx, P.vz);
-      let s0 = lerp(cfg.spread, cfg.spreadAds, P.adsT) * (1 + speed / cfg.walkSpeed * 0.5);
+      const GS = gunStats();
+      let s0 = lerp(cfg.spread, cfg.spreadAds, P.adsT) * GS.spread * (1 + speed / cfg.walkSpeed * 0.5);
       if (P.sliding) s0 *= 0.8;
       const sy = Math.sin(P.yaw), cy = Math.cos(P.yaw), sp = Math.sin(pe), cp = Math.cos(pe);
       const fx = sy * cp, fy = sp, fz = -cy * cp;
       const rx = cy, rz = sy;                              // right
       const ux = -sy * sp, uy = cp, uz = cy * sp;          // up
       const ex = P.x, ey = P.eye, ez = P.z;
-      const vol = kit.beginShot(), bullets = 1 + M.multi + vol.extra, dmgOne = cfg.damage * M.dmg * (R.frenzy > 0 ? L.frenzyDmg : 1);
+      const vol = kit.beginShot(), bullets = GS.pellets + M.multi + vol.extra, dmgOne = GS.dmg * M.dmg * (R.frenzy > 0 ? L.frenzyDmg : 1);
       for (let b = 0; b < bullets; b++) {
         const s = s0 + (b > 0 ? 0.02 : 0);
         const a = rng() * Math.PI * 2, rr = Math.sqrt(rng()) * s;
@@ -515,10 +661,11 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
           ex: endx, ey: endy, ez: endz, hit: bestM ? 'monster' : (bestT >= cfg.range - 0.2 ? 'none' : 'wall')
         });
         if (bestM) {
-          const crit = kit.rollCrit(vol.force); if (crit) events.push({ type: 'crit' });
-          const dmg = dmgOne * (bestHead ? cfg.headMul : 1) * (crit ? kit.critMul() : 1);
+          const crit = kit.rollCrit(vol.force) || (GS.crit + M.crit > 0 && rngW() < GS.crit + M.crit); if (crit) events.push({ type: 'crit' });
+          const dmg = dmgOne * (bestHead ? cfg.headMul * (1 + GS.head) : 1) * (crit ? kit.critMul() + GS.critDmg + M.critDmg : 1);
           damageMonster(bestM, dmg, bestHead || crit, endx, endy, endz, false);
           kit.onHit(bestM, dmg, crit, endx, endy, endz);
+          gfx.hit(bestM, dmg, W.slots[W.held]);
           if (M.blast > 0) {
             events.push({ type: 'blast', x: endx, y: endy, z: endz, r: L.blastRadius });
             for (const o of monsters.slice()) if (o !== bestM && Math.hypot(o.x - endx, o.z - endz) < L.blastRadius + 0.5 * o.scale) damageMonster(o, dmg * M.blast, false, o.x, 1.2 * o.scale, o.z, true);
@@ -552,7 +699,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       if (!clear) return false;
       if (m.shT <= 0) { m.state = 'cast'; m.shW = S.wind; return true; }
       if (S.keep && dist < S.keep) {                      // too close: back away while it waits to throw again
-        const sp = m.spd0 * m.spd * 0.6; m.shMx = -dx / dist * sp; m.shMz = -dz / dist * sp; m.state = 'chase'; m.yawT = Math.atan2(dx, -dz);
+        const sp = m.spd0 * m.spd * gfx.slowOf(m) * 0.6; m.shMx = -dx / dist * sp; m.shMz = -dz / dist * sp; m.state = 'chase'; m.yawT = Math.atan2(dx, -dz);
         return true;
       }
       if (S.keep && dist < S.range) { m.state = 'chase'; m.yawT = Math.atan2(dx, -dz); return true; }   // in range with a clear shot: hold still and wait for the throw
@@ -584,7 +731,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
         if (m.wT <= 0) { m.state = 'charge'; m.cT = k.charge.dur; m.cdx = dx / dist; m.cdz = dz / dist; }
       } else if (m.state === 'charge') {
         m.cT -= dt;
-        const sp = m.spd0 * m.spd * k.charge.mult;
+        const sp = m.spd0 * m.spd * gfx.slowOf(m) * k.charge.mult;
         mvx = m.cdx * sp; mvz = m.cdz * sp; m.yawT = Math.atan2(m.cdx, -m.cdz);
         if (dist < reach) { hurtPlayer(m.dmg * k.charge.hit, m.id); m.cT = 0; }
         if (m.cT <= 0) { m.state = 'chase'; m.chT = k.charge.every; }
@@ -610,7 +757,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
             const d = flowDir(m.x, m.z);
             if (d) { dirx = d[0]; dirz = d[1]; } else { dirx = dx / dist; dirz = dz / dist; }
           }
-          const sp = m.spd0 * m.spd * (m.stun > 0 ? 0.25 : 1);
+          const sp = m.spd0 * m.spd * gfx.slowOf(m) * (m.stun > 0 ? 0.25 : 1);
           mvx = dirx * sp; mvz = dirz * sp;
           m.yawT = los ? Math.atan2(dx, -dz) : Math.atan2(dirx, -dirz);
         }
@@ -671,8 +818,11 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       coins = coins.filter((c) => c.life > 0);
       const reachPick = L.pickupRadius * (1 + (M.magnet - 1) * 0.5);
       for (const p of pickups) {
-        p.life -= dt;
+        p.life -= dt; if (p.noPick > 0) p.noPick -= dt;
         if (Math.hypot(P.x - p.x, P.z - p.z) < reachPick) {
+          if (p.kind === 'gun') { if (p.noPick > 0 || cfg.manualGuns) continue; takeGun(p); continue; }
+          if (p.kind === 'gear') { if (p.noPick > 0 || cfg.manualGuns) continue; takeGear(p); continue; }
+          if (p.kind === 'mod') { if (p.noPick > 0 || cfg.manualGuns) continue; takeMod(p); continue; }
           p.life = -1;
           if (p.kind === 'heal') P.hp = Math.min(maxHp(), P.hp + L.healAmount); else R.frenzy = L.frenzyTime;
           events.push({ type: 'pickup', kind: p.kind });
@@ -699,7 +849,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       events = [];
       inp = inp || {};
       const p = P;
-      if (R.over) { if (inp.restart) restartRun(); return { state: snapshot(), events }; }
+      if (R.over) { if (inp.restart) { if (inp.seeds) setSeeds(inp.seeds); restartRun(); } return { state: snapshot(), events }; }
       if (R.safe && M0.merchant) {                          // walk up to the merchant and the shop opens; step away and it can open again
         const md = Math.hypot(P.x - M0.merchant.x, P.z - M0.merchant.z);
         if (R.shop) {
@@ -735,7 +885,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       p.sprinting = !!inp.sprint && mz > 0.25 && !ads && !p.sliding;
       const CM = kit.mods();                                       // the class bonuses (and a running ultimate)
       let top = (p.sprinting ? cfg.sprintSpeed : cfg.walkSpeed) * M.speed * CM.speed;
-      if (ads) top *= cfg.adsSpeedMul;
+      if (ads) top *= Math.min(1, cfg.adsSpeedMul * (1 + gunStats().adsMove));
 
       p.slideCd -= dt;
       if (inp.slide && !p.sliding && p.slideCd <= 0) {
@@ -764,7 +914,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       if (p.sliding && (mv.bx || mv.bz)) p.slideT = Math.min(p.slideT, 0.05);
 
       p.eye += ((p.sliding ? cfg.eyeSlide : cfg.eyeStand) - p.eye) * Math.min(1, dt * 16);
-      const ar = dt / cfg.adsTime;
+      const ar = dt / (cfg.adsTime / (1 + gunStats().ads));
       p.adsT += clamp((ads ? 1 : 0) - p.adsT, -ar, ar);
       p.sprintK += ((p.sprinting ? 1 : 0) - p.sprintK) * Math.min(1, dt * 7);
       p.kick -= p.kick * Math.min(1, dt * 9);
@@ -775,6 +925,8 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
 
       // reload, then fire
       if (p.ammo > maxMag()) p.ammo = maxMag();
+      if (inp.swap) swapGun();
+      if (inp.pickup && !R.over) pickUpGun();
       if (inp.reload) startReload();
       if (p.reloading) {
         p.reloadT += dt;
@@ -782,7 +934,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       }
       p.fireCd -= dt;
       if (p.fireCd < 0 && !inp.fire) p.fireCd = 0;
-      const interval = 1 / (cfg.fireRate * M.rate * CM.rate * (R.frenzy > 0 ? L.frenzyRate : 1));
+      const interval = 1 / (gunStats().rate * M.rate * CM.rate * (R.frenzy > 0 ? L.frenzyRate : 1));
       let shots = 0;
       if (inp.fire && !p.reloading && p.ammo <= 0) startReload();
       while (inp.fire && !p.reloading && p.ammo > 0 && p.fireCd <= 0 && shots < 3) { shoot(); p.fireCd += interval; shots++; }
@@ -792,7 +944,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       const pc = clamp(Math.floor(p.z / CELL), 0, GH - 1) * GW + clamp(Math.floor(p.x / CELL), 0, GW - 1);
       if (pc !== flowCell || flowTimer <= 0) { buildFlow(p.x, p.z); flowTimer = 0.4; }
       for (const m of monsters.slice()) if (!R.over) updateMonster(m, dt);
-      mshots.update(dt); kit.update(dt);
+      mshots.update(dt); kit.update(dt); gfx.update(dt);
       if (R.phase === 'fight') {
         spawnTimer -= dt;
         if (spawnTimer <= 0 && spawnQ.length && monsters.length < aliveMax()) {
@@ -829,13 +981,15 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
           vx: p.vx, vz: p.vz, speed: Math.hypot(p.vx, p.vz),
           hp: p.hp, maxHp: maxHp(), hurt: p.hurt, kick: p.kick,
           ammo: p.ammo, magSize: maxMag(), reloading: p.reloading,
+          stash: stashView(), gear: gearView(), mods: W.mods.map((m) => WP.modView(m, W.slots[W.held])),
+          gun: { id: W.slots[W.held].id, rarity: W.slots[W.held].rarity, name: WP.GUNS[W.slots[W.held].id].name, status: W.slots[W.held].status, held: W.held, card: WP.view(W.slots[W.held], cfg), other: W.slots[1 - W.held] ? { card: WP.view(W.slots[1 - W.held], cfg), id: W.slots[1 - W.held].id, rarity: W.slots[1 - W.held].rarity, ammo: W.slots[1 - W.held].ammo } : null },
           reloadK: p.reloading ? clamp(p.reloadT / p.reloadDur, 0, 1) : 0,
           reloadEmpty: p.reloadEmpty, reloadDur: p.reloadDur
         },
         monsters: monsters.map((m) => ({
           id: m.id, kind: m.kind, x: m.x, z: m.z, yaw: m.yaw, hp: m.hp, maxHp: m.maxHp,
           flash: m.flash, state: m.state, phase: m.phase, scale: m.scale, elite: m.elite,
-          enraged: !!m.enraged, poisoned: !!(m.fx && m.fx.poison), bleeding: !!(m.fx && m.fx.bleed), cursed: !!(m.fx && m.fx.hexT > 0),
+          enraged: !!m.enraged, poisoned: !!(m.fx && m.fx.poison), bleeding: !!(m.fx && m.fx.bleed), cursed: !!(m.fx && m.fx.hexT > 0), gx: gfx.view(m),
           atkK: m.state === 'attack' ? clamp(1 - m.atk / D.KINDS[m.kind].wind, 0, 1) : 0,              // 0 to 1 as a melee blow winds up; resets when it lands (the screen raises the weapon with it)
           castK: m.state === 'cast' ? clamp(1 - m.shW / D.KINDS[m.kind].shoot.wind, 0, 1) : 0           // the same for a ranged monster rearing back to throw
         })),
@@ -846,7 +1000,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
         safe: R.safe, merchant: R.safe && M0.merchant ? { x: M0.merchant.x, z: M0.merchant.z } : null,
         shop: R.shop ? {
           skills: R.stock.map((sid, i) => sid ? Object.assign(kit.card(sid, R.level), { price: skillPrice(sid), afford: R.gold >= skillPrice(sid), slot: i }) : null).filter(Boolean),
-          supplies: [{ id: 'mend', name: 'Mend', desc: 'Heal to full health', price: L.shopHeal, afford: R.gold >= L.shopHeal && P.hp < maxHp() }, { id: 'leave', name: 'Leave', desc: 'Back to the room', price: 0, afford: true }]
+          supplies: supplyList().map((e) => e.kind === 'mend' ? { id: 'mend', name: 'Mend', desc: 'Heal to full health', price: L.shopHeal, afford: R.gold >= L.shopHeal && P.hp < maxHp() } : e.kind === 'leave' ? { id: 'leave', name: 'Leave', desc: 'Back to the room', price: 0, afford: true } : e.kind === 'gear' ? gearCard(e.item, e.slot) : gunCard(e.item, e.slot))
         } : null,
         compass: boss && boss.state === 'guard' ? { x: boss.x, z: boss.z } : null,      // points at the boss from the moment he spawns until the fight with him starts
         explored,
@@ -856,7 +1010,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
         bossBar: boss ? { name: D.KINDS[boss.kind].name, hp: boss.hp, maxHp: boss.maxHp, state: boss.state } : null,
         level: { n: R.level, xp: R.xp, need: D.xpNeed(R.level) },
         orbs: orbs.map((o) => ({ id: o.id, x: o.x, z: o.z, v: o.v })),
-        pickups: pickups.map((q) => ({ id: q.id, kind: q.kind, x: q.x, z: q.z, life: q.life })),
+        pickups: pickups.map((q) => ({ id: q.id, kind: q.kind, x: q.x, z: q.z, life: q.life, gun: q.item ? WP.view(q.item, cfg) : undefined, inReach: (q.kind === 'gun' || q.kind === 'gear' || q.kind === 'mod') && q.noPick <= 0 && Math.hypot(P.x - q.x, P.z - q.z) < cfg.gunReach, gear: q.gear ? GR.view(q.gear, GEAR.worn) : undefined, mod: q.mod ? WP.modView(q.mod, W.slots[W.held]) : undefined })),
         classChoices: R.classChoices ? R.classChoices.map((id) => kit.card(id, R.level)) : null,
         cls: kit.view(R.level),
         choices: R.choices ? R.choices.map((id) => { const s = skillOf(id); return { id, name: s.name, desc: s.desc, stack: stackOf(id), max: s.max }; }) : null,
@@ -875,14 +1029,50 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     function clearWave() { spawnQ = []; for (const m of monsters.slice()) killMonster(m); }   // tests: the wave is over right now
     function giveGold(v) { R.gold += v; }                                               // tests: some gold right now
     function giveXp(v) { gainXp(v); }                                                  // tests: some experience right now
+    function giveGun(id, rarity, wave) { dropGun(P.x, P.z, 0, WP.make(id, rarity, wave || R.wave, rngW, cfg.classId)); }   // tests: a gun lies at your feet
+    function equipGun(id, rarity) {                                                     // cheat build and tests: the gun in your hands becomes this one, full magazine
+      const it = WP.make(id, rarity || 0, R.wave, rngW, cfg.classId); it.ammo = WP.stats(it, cfg).mag; W.slots[W.held] = it; P.ammo = maxMag(); P.reloading = false; P.reloadT = 0; P.fireCd = 0.3;
+    }
+    function gearView() { const t = GR.total(GEAR.worn); return { worn: GEAR.worn.map((it, i) => it ? GR.view(it, null) : { slot: GR.WEAR[i], empty: true }), def: Math.round(t.def * 1000) / 10, hp: Math.round(t.hp), vit: Math.round(t.vit * 100), regen: Math.round(t.regen * 10) / 10, speed: Math.round(t.speed * 100), magnet: Math.round(t.magnet * 100), dmg: Math.round(t.dmg * 100), rate: Math.round(t.rate * 100), crit: Math.round(t.crit * 1000) / 10, critdmg: Math.round(t.critdmg * 100), leech: Math.round(t.leech * 1000) / 10, reload: Math.round(t.reload * 100) }; }
+    function giveGear(slot, rarity, wave) { dropGear(P.x, P.z, 0, GR.make(slot, rarity, wave || R.wave, rngW, cfg.classId)); }   // tests: a piece of gear lies at your feet
+    function wearGear(item, at) { GEAR.worn[at === undefined ? GR.WEAR.indexOf(item.slot) : at] = item; M = computeMods(); P.hp = Math.min(P.hp, maxHp()); }   // tests: wear exactly this piece
+    function equipItem(item) { const it = Object.assign({}, item); it.ammo = WP.stats(it, cfg).mag; W.slots[W.held] = it; P.ammo = maxMag(); P.reloading = false; P.reloadT = 0; P.fireCd = 0; }   // tests: hold exactly this gun item (with the affixes it carries)
+    function giveMod(rarity, wave) { dropMod(P.x, P.z, WP.MD.make(rarity, wave || R.wave, rngW)); }   // tests: a mod lies at your feet
+    function addMod(item) { W.mods.push(item); }                                       // tests: this exact mod goes straight in the bag
+    function setLoadout(list) { loadout = (list || []).map((e) => JSON.parse(JSON.stringify(e))); }   // blueprints for the next run (applied on reset)
+    function stashEntry(i) { return R.stash[i] ? JSON.parse(JSON.stringify(R.stash[i])) : null; }   // a copy of a stashed entry, for making a blueprint
     function setHp(v) { P.hp = v; }                                                    // tests: set the player's health
     function giveSkill(id) { kit.pick(id); }                                           // tests: hand the player a class skill
     function monsterFx(i) { return monsters[i] && monsters[i].fx; }                     // tests: statuses on a monster
+    // the three seeds: map (floors and fog), damage (fight dice) and item (drops and the merchant's stock). Any of them can be replaced; the run restarts on the next reset.
+    function setSeeds(s) {
+      if (s.map) { seed0 = SEEDS.map = s.map | 1; }
+      if (s.damage) { SEEDS.damage = s.damage | 1; rng = makeRng(SEEDS.damage); }
+      if (s.item) { SEEDS.item = s.item | 1; rngW = makeRng(SEEDS.item); }
+    }
+    // a save, written in a safe room (null anywhere else, or while a level-up is waiting): everything that makes the run yours, plus the MAP seed. It never holds the damage or item seeds.
+    function saveData() {
+      if (!R.safe || R.over || R.choices || R.classChoices || R.pending) return null;
+      const held = W.slots[W.held]; if (held) held.ammo = P.ammo;
+      return JSON.parse(JSON.stringify({ v: 1, mapSeed: SEEDS.map, classId: cfg.classId, wave: R.wave, floor: floorNo, level: R.level, xp: R.xp, stacks: R.stacks, gold: R.gold, hp: P.hp, kills, time: R.time,
+        kit: kit.save(), guns: W.slots, held: W.held, mods: W.mods, gear: GEAR.worn, stash: R.stash }));
+    }
+    // go back to a save: the same map seed, so the same floors; fresh damage and item seeds (pass them in), so the luck is new. The merchant's stock is rolled again too.
+    function loadData(d, luck) {
+      if (!d || d.v !== 1) return false;
+      setSeeds({ map: d.mapSeed, damage: luck && luck.damage, item: luck && luck.item });
+      cfg.classId = d.classId; restartRun(); const c = (x) => JSON.parse(JSON.stringify(x));
+      R.wave = d.wave; R.level = d.level; R.xp = d.xp; R.stacks = c(d.stacks); R.time = d.time; kills = d.kills; kit.load(d.kit);
+      W.slots = c(d.guns); W.held = d.held; W.mods = c(d.mods); GEAR.worn = c(d.gear); R.stash = c(d.stash);
+      M = computeMods(); loadFloor(d.floor); enterSafe(); R.gold = d.gold;
+      P.hp = Math.min(d.hp, maxHp()); const g = W.slots[W.held]; P.ammo = g && g.ammo !== undefined ? g.ammo : maxMag();
+      events.push({ type: 'loaded' }); return true;
+    }
     function reset() { deaths = 0; restartRun(); events = []; }
 
     newRun(); startFloor(); placePlayer();
     // first state, so the screen can draw before the first step
-    return { get map() { return M0; }, cfg, setCfg, place, spawnAt, spawnElite, clearWave, giveSkill, giveGold, giveXp, setHp, monsterFx, step, snapshot, reset, kinds: D.KINDS, defaults: Object.assign({}, DEFAULT_CFG) };
+    return { get map() { return M0; }, cfg, setCfg, place, spawnAt, spawnElite, clearWave, giveSkill, giveGold, giveXp, setHp, giveGun, equipGun, equipItem, giveGear, wearGear, seeds: () => Object.assign({}, SEEDS), setSeeds, saveData, loadData, giveMod, addMod, attachMod, detachMod, stashItem, setLoadout, stashEntry, monsterFx, step, snapshot, reset, kinds: D.KINDS, defaults: Object.assign({}, DEFAULT_CFG) };
   }
 
   return { create };

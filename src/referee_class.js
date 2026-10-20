@@ -196,7 +196,10 @@ const RefereeClass = (function () {
         thralls: thralls.map((t) => ({ id: t.id, kind: t.kind, x: t.x, z: t.z, yaw: t.yaw, scale: t.scale, k: t.life / t.maxLife }))
       };
     }
-    return { reset, choices, pick, card, grantKit, mods, cloaked, critChance, rollCrit, critMul, slideStart, beginShot, onReload, reloadMul, takenMul, onHit, onKill, update, view, lvl, get id() { return id; }, get def() { return def; } };
+    // saving: the skill levels and how used they are (the rest of a class is worked out from these)
+    const save = () => ({ owned: Object.assign({}, owned), use: Object.assign({}, use) });
+    const load = (d) => { owned = Object.assign({}, d.owned); use = Object.assign({}, d.use); };
+    return { save, load, reset, choices, pick, card, grantKit, mods, cloaked, critChance, rollCrit, critMul, slideStart, beginShot, onReload, reloadMul, takenMul, onHit, onKill, update, view, lvl, get id() { return id; }, get def() { return def; } };
   }
   return { create };
 })();

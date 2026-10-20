@@ -42,6 +42,22 @@ jobs:
         run: node tests/revolver.test.js
       - name: Gun catalog checks (20 guns)
         run: node tests/guns.test.js
+      - name: Weapon checks (pistol start, two guns, rarity, drops)
+        run: node tests/weapons.test.js
+      - name: Gun affix checks (counts by rarity, class-only lines, floor card)
+        run: node tests/affixes.test.js
+      - name: Gear checks (armor, charms, drops, Gear menu)
+        run: node tests/gear.test.js
+      - name: Codex checks (everything explained, search)
+        run: node tests/codex.test.js
+      - name: Gun mod checks (lines, fit rules, mod places, bag)
+        run: node tests/mods.test.js
+      - name: Stash and blueprint checks
+        run: node tests/stash.test.js
+      - name: Seeds and saves checks
+        run: node tests/saves.test.js
+      - name: Gun status effect checks
+        run: node tests/gunfx.test.js
       - name: Hall look tests
         run: node tests/world.test.js
       - name: Floor tests

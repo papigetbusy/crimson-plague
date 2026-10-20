@@ -23,6 +23,18 @@ t('Every animation any preset asks for is on the list of sheets to pack', (() =>
 t('Frame picking stays inside the animation and runs from the first frame to the last', Plan.frameIndex(10, 0, 1) === 0 && Plan.frameIndex(10, 0.99, 1) === 9 && Plan.frameIndex(10, 5, 1) === 9 && Plan.frameIndex(10, -1, 1) === 0);
 t('Muzzle flashes stay small enough not to fill the screen (under 0.7 of a world unit)', ids.every((i) => Plan.plan(i, 'muzzle', {}).every((e) => e.size < 0.7)));
 
+// ---- shots follow the gun you hold
+const RW = require('../src/referee_weapons.js');
+t('Every gun status colour has an element, so no gun is left without its look', RW.STATUSES.every((st) => Plan.STATUS_EL[st] && Plan.ELEMENTS[Plan.STATUS_EL[st]]));
+t('The look of a gun is its rarity tier plus its status element: a common gun with ice is ice-blue common, an epic fire gun is epic fire', Plan.lookFor(0, ['ice']) === 'common:ice' && Plan.lookFor(3, ['fire']) === 'epic:fire' && Plan.lookFor(2, []) === 'rare');
+t('Uncommon guns use the common tier, rare uses rare, epic epic, legendary legendary', ['common', 'common', 'rare', 'epic', 'legendary'].every((tier, r) => Plan.presetOf(Plan.lookFor(r, [])).tier === tier));
+t('A legendary with two statuses plays both elements\' extras on a kill', (() => { const one = Plan.plan('legendary:fire', 'kill', { scale: 1 }).length, two = Plan.plan('legendary:fire+ice', 'kill', { scale: 1 }).length; return two > one; })());
+t('A two-colour gun alternates its bullet streak between its colours, and a one-colour gun keeps one', (() => { const a = Plan.tracer('legendary:fire+ice', 0).color, b = Plan.tracer('legendary:fire+ice', 1).color, c = Plan.tracer('rare:fire', 0).color, d = Plan.tracer('rare:fire', 1).color; return a !== b && c === d; })());
+t('Each of the seven colours gives a different bullet streak colour', (() => { const cols = RW.STATUSES.map((st) => Plan.tracer('rare:' + Plan.STATUS_EL[st], 0).color); return new Set(cols).size === 7; })());
+t('Poison is purple and radiation is green, as chosen', Plan.ELEMENTS.toxin.tint === '#c04cff' && Plan.ELEMENTS.plague.tint === '#7cff5a');
+t('A made-up gun look falls back to Common instead of breaking', Plan.plan('epic:nonsense', 'kill', { scale: 1 }).length === Plan.plan('epic', 'kill', { scale: 1 }).length && Plan.plan('bogus:fire', 'kill', { scale: 1 }).length === Plan.plan('common', 'kill', { scale: 1 }).length);
+t('Every gun in the game has a working look for every rarity', Object.keys(RW.GUNS).every((id) => [0, 1, 2, 3, 4].every((r) => ['muzzle', 'wall', 'flesh', 'kill', 'blast'].every((k) => Plan.plan(Plan.lookFor(r, RW.make(id, r, 5, () => 0.5).status), k, { scale: 1 }).length > 0))));
+
 // ---- the sprite pool, with a fake drawing library (no GPU needed) ----
 const fs = require('fs'), path = require('path');
 const packed = fs.existsSync(path.join(__dirname, '..', 'src', 'screen', 'fx_data.js'));
