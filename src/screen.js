@@ -519,7 +519,7 @@
     ['Gun forward', 'view', 'gunZ', -1.1, -0.3, 0.01],
     ['Gun size', 'view', 'gunScale', 0.5, 1.6, 0.05],
     ['Run', null],
-    ['Start wave (next new run)', 'ref', 'startWave', 1, 30, 1],
+    ['Start wave (next new run)', 'ref', 'startWave', 1, 60, 1],
     ['Monsters', null],
     ['Alive in wave 1 (+1 each wave)', 'ref', 'monsterCount', 1, 16, 1],
     ['Size', 'ref', 'monsterScale', 0.6, 2.2, 0.05],
