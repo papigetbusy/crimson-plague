@@ -3,7 +3,7 @@
    Monsters get tougher and more numerous with the number of players, a downed friend is revived by a teammate standing close, and the run ends when everyone is down. */
 const RefereeCoop = (function () {
   const RULES = {
-    maxPlayers: 3,
+    maxPlayers: 4,
     hpPerExtra: 0.7,         // each extra player adds this much to every monster's health (x1, x1.7, x2.4)
     countPerExtra: 0.5,      // and this much to how many monsters come (x1, x1.5, x2)
     reviveTime: 4,           // seconds a teammate must stand next to you to bring you back up

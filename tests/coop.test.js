@@ -1,4 +1,4 @@
-// Co-op checks: three players (a host and two friends) in one game, played over an in-memory link. Plain sentences. Run: node tests/coop.test.js
+// Co-op checks: up to four players in one game, played over an in-memory link. Plain sentences. Run: node tests/coop.test.js
 const Referee = require('../src/referee.js'), CoopLink = require('../src/coop_link.js'), RC = require('../src/referee_coop.js');
 let bad = 0;
 const t = (name, ok) => { console.log((ok ? 'ok   ' : 'FAIL ') + name); if (!ok) bad++; };
@@ -32,7 +32,7 @@ const sees = (g, i) => snap(g.guests[i].ref);
 // ---- joining
 {
   const g = game(3);
-  t('A friend who joins is counted, and a fourth player is turned away', (() => { const ok = g.host.remoteJoin('x', 'Extra'); return snap(g.host).coop.n === 3 && ok === false; })());
+  t('A friend who joins is counted, and a fifth player is turned away', (() => { const g4 = game(4); const ok = g4.host.remoteJoin('x', 'Extra'); return snap(g4.host).coop.n === 4 && ok === false && game(3).host.remoteJoin('y', 'Four') === true; })());
   g.run(1);
   t('Each friend sees the other two players, the host and the other friend', sees(g, 0).coop.peers.length === 2 && sees(g, 1).coop.peers.length === 2 && snap(g.host).coop.peers.length === 2);
   t('A friend who walks is seen to walk on the host', (() => { const q = g.guests[0]; q.inp = { mz: 1 }; const x0 = snap(g.host).coop.peers.find((p) => p.key === 'g1').z; g.run(1); const z1 = snap(g.host).coop.peers.find((p) => p.key === 'g1').z; q.inp = {}; return Math.abs(z1 - x0) > 1; })());

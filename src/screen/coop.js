@@ -51,7 +51,7 @@ const Coop = (function () {
       ref.setCfg({ coop: true, guest: true, selfKey: 'pending', selfName: myName() }); ref.reset();
       mode = 'guest'; went = false; code = c;
       link = CoopLink.guest(ref, (m) => net && net.send(m), myName(), (m) => {
-        if (m.t === 'welcome') { if (!m.ok) { fail('That room is full (3 players at most).'); return; } ref.setCfg({ selfKey: m.key }); }
+        if (m.t === 'welcome') { if (!m.ok) { fail('That room is full (4 players at most).'); return; } ref.setCfg({ selfKey: m.key }); }
         if (m.t === 'go') { went = true; hooks.toast('The host has started - enter the hall!'); }
         show();
       });

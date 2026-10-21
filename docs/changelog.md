@@ -1,4 +1,5 @@
 # Changelog (newest first, one plain line each)
+- 2026-10-21: A room now holds four players (you and three friends); monsters scale up for the fourth player and the fourth assassin gets its own colour.
 - 2026-10-21: Fixed picking up guns: the gun from your hands now drops beside you (with the ammo it had) instead of under the gun you reached for, and with several guns on the floor pick up takes the one you are looking at, so you can carry two.
 - 2026-10-21: Friends' hands now hold only the gun they really carry (the plain stand-in of their gun type); the pistols, glowing hands and witch staff are gone. Assassins come in three colours (shadow black, blood red, deep teal), one per player slot.
 - 2026-10-21: Friends are now drawn as the class they picked (Gunslinger: wide hat and long coat with two pistols; Assassin: hood, mask and glowing white hands; Witch: tall pointed hat, robe and a green orb staff), placeholders until Grok's models arrive; and the start card now fits a sideways phone (page width fixed, compact layout, scrolls if the room panel is open).
