@@ -1,4 +1,5 @@
 # Changelog (newest first, one plain line each)
+- 2026-10-21: A room now holds five players (you and four friends); monsters scale up for the extra players and the fifth assassin gets its own colour. The lobby now shows "N of 5 players" and the host button says up to 5.
 - 2026-10-21: A room now holds four players (you and three friends); monsters scale up for the fourth player and the fourth assassin gets its own colour.
 - 2026-10-21: Fixed picking up guns: the gun from your hands now drops beside you (with the ammo it had) instead of under the gun you reached for, and with several guns on the floor pick up takes the one you are looking at, so you can carry two.
 - 2026-10-21: Friends' hands now hold only the gun they really carry (the plain stand-in of their gun type); the pistols, glowing hands and witch staff are gone. Assassins come in three colours (shadow black, blood red, deep teal), one per player slot.

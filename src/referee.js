@@ -1213,7 +1213,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
         explored,
         fog: { k: R.fogK, mul: 1 + (L.fogMul - 1) * R.fogK },      // how thick the fog is, and the fraction of the normal view distance you can see
         shots: cfg.guest ? (R.netShots || []) : mshots.view(),
-        coop: { on: !!cfg.coop, n: coopN(), down: !!R.down, reviveK: reviveK(), key: SELF.key, peers: cfg.guest ? (R.others || []) : Array.from(peers.values()).map(peerSnap) },
+        coop: { on: !!cfg.coop, n: coopN(), max: RC.RULES.maxPlayers, down: !!R.down, reviveK: reviveK(), key: SELF.key, peers: cfg.guest ? (R.others || []) : Array.from(peers.values()).map(peerSnap) },
         wave: { n: R.wave, phase: R.phase, timer: Math.max(0, R.timer), left: cfg.guest ? (R.netLeft || 0) : spawnQ.length + monsters.length, boss: R.phase === 'fight' ? !!boss || spawnQ.some((kd) => D.KINDS[kd].boss) : R.wave % L.bossEvery === 0 },
         bossBar: boss ? { name: D.KINDS[boss.kind].name, hp: boss.hp, maxHp: boss.maxHp, state: boss.state } : null,
         level: { n: R.level, xp: R.xp, need: D.xpNeed(R.level) },

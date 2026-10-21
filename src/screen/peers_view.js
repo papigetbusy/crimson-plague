@@ -19,7 +19,7 @@ const PeersView = (function () {
       t.tex.needsUpdate = true;
     }
     // the three classes, as simple blocky placeholders in the Crusader Tactics spirit (hat and coat, hooded and masked, pointed hat and robe); Grok's models replace them later
-    const ASSASSIN_TONES = [[0x1a1a22, 0x2a2a34], [0x4a0f18, 0x6a1a24], [0x14343a, 0x1f4a52], [0x3a2a5a, 0x57407e]];     // four assassins, four colours: shadow black, blood red, deep teal, dusk purple
+    const ASSASSIN_TONES = [[0x1a1a22, 0x2a2a34], [0x4a0f18, 0x6a1a24], [0x14343a, 0x1f4a52], [0x3a2a5a, 0x57407e], [0x4a3a14, 0x6e5a22]];     // five assassins, five colours: shadow black, blood red, deep teal, dusk purple, old gold
     const LOOKS = {
       gunslinger(body, M, col) {
         const coat = M(0x6a2a1e), dark = M(0x1e1612), skin = M(0xd9b38c), gold = M(0xcfa54a), hat = M(0x3a2414);

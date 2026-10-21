@@ -13,12 +13,12 @@ const Coop = (function () {
     function show() {
       menu.hidden = mode !== 'off'; leaveBtn.hidden = mode === 'off';
       if (mode === 'host') {
-        const names = ref.snapshot().coop.peers.map((p) => p.name);
-        say(code ? 'ROOM CODE  ' + code + (names.length ? '  -  joined: ' + names.join(', ') : '  -  waiting for friends (up to 2)') + (went ? '' : '. Press ENTER THE HALL when everyone is in.') : 'Opening a room...');
+        const cs = ref.snapshot().coop, names = cs.peers.map((p) => p.name);
+        say(code ? 'ROOM CODE  ' + code + '  -  ' + (names.length + 1) + ' of ' + cs.max + ' players' + (names.length ? ' (joined: ' + names.join(', ') + ')' : ', waiting for friends') + (went ? '' : '. Press ENTER THE HALL when everyone is in.') : 'Opening a room...');
         hooks.playLabel('ENTER THE HALL', false);
       } else if (mode === 'guest') {
         const ready = link && link.ready;
-        say(ready ? 'Joined room ' + code + '. ' + (went ? 'The host has started!' : 'Waiting for the host to start...') : 'Joining room ' + code + '...');
+        say(ready ? 'Joined room ' + code + ' (up to ' + ref.snapshot().coop.max + ' players). ' + (went ? 'The host has started!' : 'Waiting for the host to start...') : 'Joining room ' + code + '...');
         hooks.playLabel(!ready ? 'JOINING...' : went ? 'THE HOST STARTED - ENTER' : 'WAITING FOR THE HOST', !ready || !went);
       } else hooks.playLabel('ENTER THE HALL', false);
     }
@@ -51,7 +51,7 @@ const Coop = (function () {
       ref.setCfg({ coop: true, guest: true, selfKey: 'pending', selfName: myName() }); ref.reset();
       mode = 'guest'; went = false; code = c;
       link = CoopLink.guest(ref, (m) => net && net.send(m), myName(), (m) => {
-        if (m.t === 'welcome') { if (!m.ok) { fail('That room is full (4 players at most).'); return; } ref.setCfg({ selfKey: m.key }); }
+        if (m.t === 'welcome') { if (!m.ok) { fail('That room is full (5 players at most).'); return; } ref.setCfg({ selfKey: m.key }); }
         if (m.t === 'go') { went = true; hooks.toast('The host has started - enter the hall!'); }
         show();
       });
