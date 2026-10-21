@@ -33,7 +33,7 @@ const RefereeCoop = (function () {
     return out;
   }
   // the events a friend's game needs to hear about (everything else is that player's own business)
-  const WORLD_EVENTS = ['kill', 'spawn', 'shoot', 'projHit', 'bossWake', 'bossEnrage', 'bossSummon', 'bossDive', 'bossDrain', 'bossBlink', 'bossNova', 'bossBreath', 'bossSlam', 'waveStart', 'waveClear', 'eliteBlast', 'remoteHurt', 'dead'];
+  const WORLD_EVENTS = ['kill', 'spawn', 'shoot', 'peerShot', 'projHit', 'bossWake', 'bossEnrage', 'bossSummon', 'bossDive', 'bossDrain', 'bossBlink', 'bossNova', 'bossBreath', 'bossSlam', 'waveStart', 'waveClear', 'eliteBlast', 'remoteHurt', 'dead'];
   const worldEvents = (events) => events.filter((e) => WORLD_EVENTS.indexOf(e.type) >= 0);
   const r2 = (v) => Math.round(v * 100) / 100;
   // one monster as it travels over the net: just what a friend's screen and aim need

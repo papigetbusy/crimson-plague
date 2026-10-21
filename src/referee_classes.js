@@ -12,7 +12,7 @@ const RefereeClasses = (function () {
       name: 'Gunslinger', blurb: 'Fast guns, lots of bullets', start: { rate: 1.15 }, startText: '+15% fire rate',
       skills: [
         { id: 'fan', name: 'Fan the Hammer', desc: 'Every few shots fire a 3-bullet burst', stat: (v) => 'every ' + v.every + 'th shot fires ' + v.extra + ' extra bullets', useStep: 14, v: (n) => ({ every: Math.max(3, 7 - n), extra: 2 }) },
-        { id: 'quickdraw', name: 'Quickdraw', desc: 'After a kill your next reload is instant', stat: (v) => 'instant reload after a kill, ready every ' + v.cd + 's', useStep: 10, v: (n) => ({ cd: Math.max(2, 8 - n) }) },
+        { id: 'quickdraw', name: 'Quickdraw', desc: 'Slide, then your next reload is faster', stat: (v) => 'the reload after a slide is ' + Math.round((1 - v.mul) * 100) + '% faster, within ' + v.win + 's', useStep: 10, v: (n) => ({ mul: Math.max(0.45, 0.8 - 0.07 * n), win: 3 + 0.5 * Math.min(n, 4) }) },
         { id: 'ricochet', name: 'Ricochet', desc: 'Bullets bounce to a nearby monster', stat: (v) => v.bounces + (v.bounces > 1 ? ' bounces' : ' bounce') + ' at ' + Math.round(v.frac * 100) + '% damage', useStep: 20, v: (n) => ({ frac: 0.4 + 0.1 * n, bounces: n >= 4 ? 2 : 1, range: 8 }) },
         { id: 'deadeye', name: 'Dead Eye', desc: 'Crit chance: hits for double damage', stat: (v) => Math.round(v.crit * 100) + '% crit chance', useStep: 25, v: (n) => ({ crit: 0.1 + 0.04 * n }) }
       ],

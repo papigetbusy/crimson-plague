@@ -88,6 +88,7 @@
     return new THREE.CanvasTexture(c);
   })();
   const worldView = WorldView.create(THREE, scene, T, glowTex);
+  const locksView = LocksView.create(THREE, scene, T, glowTex);   // the gold gates, the boss door's sign and puzzle, the hidden sockets
   let loadedFloor = -1;
   const goldLit = new THREE.MeshLambertMaterial({ map: texGold, emissive: 0x3a2a0a });   // the gun's gold trim (the world's own gold lives in world_view.js)
 
@@ -239,6 +240,7 @@
   const loot = LootView.create(THREE, scene, glowTex);       // XP orbs and pickups
   const bossFx = BossFx.create(THREE, scene);               // floor warnings for the boss attacks
   const peersView = PeersView.create(THREE, scene);         // the friends you play with
+  let coopKey = 'host';                                      // which player you are (set every frame), so your own bullets are not drawn twice
   const partyHud = PartyHud.create($);                      // their health, and the message while you are down
   const trapView = TrapView.create(THREE, scene, glowTex);   // spike patches, flame vents, rising spikes
   const fx = FxSprites.create(THREE, camera, scene);          // sprite explosions, sparks and lightning (look presets, see fx_plan.js)
@@ -276,18 +278,28 @@
   }
   let tracerCursor = 0, shotN = 0;
   const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3();
-  function addTracer(ex, ey, ez) {
-    muzzle.getWorldPosition(tmpV);
+  // from/look are for a friend's bullet: the start of the streak (their muzzle) and their gun's look; yours starts at your own muzzle with your own look
+  function addTracer(ex, ey, ez, from, look) {
+    if (from) tmpV.set(from[0], from[1], from[2]); else muzzle.getWorldPosition(tmpV);
     tmpV2.set(ex, ey, ez);
     shotN++;
-    const t = tracers[tracerCursor++ % tracers.length], tr = FxPlan.tracer(fxOn() ? fxId() : 'original', shotN);
+    const lk = look || fxId(), on = look ? fx.art() && look !== 'original' : fxOn();
+    const t = tracers[tracerCursor++ % tracers.length], tr = FxPlan.tracer(on ? lk : 'original', shotN);
     const len = tmpV.distanceTo(tmpV2);
     t.m.position.copy(tmpV).add(tmpV2).multiplyScalar(0.5);
     t.m.lookAt(tmpV2);
     t.m.scale.set(tr.width, tr.width, len);
-    t.m.material.color.setHex(gunLook.skin().tracer || tr.color);
+    t.m.material.color.setHex((look ? 0 : gunLook.skin().tracer) || tr.color);
     t.m.visible = true; t.life = t.dur = tr.life; t.m.material.opacity = 0.9;
-    if (fxOn() && tr.trail) fx.trail(fxId(), tmpV, tmpV2, shotN);
+    if (on && tr.trail) fx.trail(lk, tmpV, tmpV2, shotN);
+  }
+  // a friend's bullet (the host sends everyone's): the streak from their gun, a flash at the muzzle, and what it hit
+  function friendShot(e) {
+    const m = peersView.muzzleOf(e.key), look = FxPlan.lookFor(e.r, e.s), from = m || [e.ox, e.oy - 0.2, e.oz];
+    addTracer(e.ex, e.ey, e.ez, from, look);
+    if (fx.art() && look !== 'original') fx.play(look, 'muzzle', from[0], from[1], from[2]);
+    if (e.hit === 1) { burst(e.ex, e.ey, e.ez, 5, [0xffb347, 0xff7a1a, 0x888078], 4, 0.35, 12, 0.7); if (fx.art() && look !== 'original') fx.play(look, 'wall', e.ex, e.ey, e.ez); }
+    else if (e.hit === 2) { burst(e.ex, e.ey, e.ez, 4, [0xb01818, 0x701010, 0xe03030], 3.5, 0.4, 10, 0.8); if (fx.art() && look !== 'original') fx.play(look, 'flesh', e.ex, e.ey, e.ez, {}); }
   }
 
   /* ---- floating damage numbers ---- */
@@ -348,7 +360,7 @@
   }
 
   /* ============ input ============ */
-  const I = { swap: false, pickup: false, mx: 0, mz: 0, lookX: 0, lookY: 0, touchX: 0, touchY: 0, fire: false, ads: false, sprint: false, slide: false, reload: false, pick: undefined, restart: false };
+  const I = { swap: false, pickup: false, mx: 0, mz: 0, lookX: 0, lookY: 0, touchX: 0, touchY: 0, fire: false, ads: false, sprint: false, slide: false, jump: false, reload: false, pick: undefined, restart: false };
   const keys = {};
   const mouse = { fire: false, ads: false };
   const tch = { fire: false, ads: false, sprint: false, reload: false };
@@ -400,9 +412,11 @@
   document.addEventListener('keydown', (e) => {
     keys[e.code] = true;
     if (e.code === 'KeyC' || e.code === 'ControlLeft') { if (running) I.slide = true; e.preventDefault(); }
+    if (e.code === 'Space' && running && !e.repeat) I.jump = true;
     if (e.code === 'KeyR' && running) I.reload = true;
     if (e.code === 'KeyG' && (running || gearMenu.isOpen)) toggleGear();                  // open or close the Gear menu
     if (e.code === 'KeyE' && running) pressPickup();                                   // pick up the gun on the floor in front of you
+    if (e.code === 'KeyZ' && running) I.lockUse = 1;                                    // at the Scale: take gold back off the pan
     if (e.code === 'KeyQ' && running) I.swap = true;                                     // swap to the gun in your other hand
     if (e.code === 'KeyM' && running) minimap.toggle();                                  // open or close the big map
     if (e.code === 'KeyF' && running) startInspect();   // F shows both sides, press again for the magazine
@@ -513,6 +527,7 @@
   bReload.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') return; I.reload = true; tch.reload = true; bReload.classList.add('on'); setTimeout(() => bReload.classList.remove('on'), 180); e.preventDefault(); });
   const bSwap = $('bSwap');
   bSwap.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') return; I.swap = true; bSwap.classList.add('on'); setTimeout(() => bSwap.classList.remove('on'), 180); e.preventDefault(); });
+  const bJump = $('bJump'); bJump.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') return; I.jump = true; bJump.classList.add('on'); setTimeout(() => bJump.classList.remove('on'), 180); e.preventDefault(); });
   bSlide.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') return; I.slide = true; bSlide.classList.add('on'); setTimeout(() => bSlide.classList.remove('on'), 180); e.preventDefault(); });
 
   function gatherInput() {
@@ -531,9 +546,9 @@
     const out = {
       mx, mz, lookX: I.lookX, lookY: I.lookY, touchX: I.touchX, touchY: I.touchY, padX: pr ? pr.padX : 0, padY: pr ? pr.padY : 0,
       fire: mouse.fire || tch.fire || !!(pr && pr.fire), ads: mouse.ads || tch.ads || !!(pr && pr.ads),
-      sprint: !!(keys.ShiftLeft || keys.ShiftRight) || tch.sprint || !!(pr && pr.sprint), slide: I.slide || !!(pr && pr.slide), reload: I.reload || !!(pr && pr.reload), swap: I.swap || !!(pr && pr.swap), pickup: I.pickup, seeds: I.restart ? { map: rnd(), damage: rnd(), item: rnd() } : undefined, pick: I.pick, pickClass: I.pickClass, shopClose: I.shopClose, restart: I.restart
+      sprint: !!(keys.ShiftLeft || keys.ShiftRight) || tch.sprint || !!(pr && pr.sprint), slide: I.slide || !!(pr && pr.slide), jump: I.jump || !!(pr && pr.jump), reload: I.reload || !!(pr && pr.reload), swap: I.swap || !!(pr && pr.swap), pickup: I.pickup, lockUse: I.lockUse !== undefined ? I.lockUse : pr && pr.lockUse, seeds: I.restart ? { map: rnd(), damage: rnd(), item: rnd() } : undefined, pick: I.pick, pickClass: I.pickClass, shopClose: I.shopClose, restart: I.restart
     };
-    I.lookX = I.lookY = I.touchX = I.touchY = 0; I.slide = false; I.reload = false; I.swap = false; I.pickup = false; I.pick = undefined; I.pickClass = undefined; I.shopClose = false; I.restart = false;
+    I.lookX = I.lookY = I.touchX = I.touchY = 0; I.slide = false; I.jump = false; I.reload = false; I.swap = false; I.pickup = false; I.lockUse = undefined; I.pick = undefined; I.pickClass = undefined; I.shopClose = false; I.restart = false;
     return out;
   }
 
@@ -766,7 +781,20 @@
   const stashHint = $('stashHint');
   const openStash = () => { if (running && !panelOpen && state.player.stash.near) stashMenu.setOpen(true, state); };
   stashHint.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); openStash(); });
-  function pressPickup() { const q = GunCard.nearest(state, 6); if (!(q && q.inReach) && state.player.stash.near) openStash(); else I.pickup = true; }
+  // the little box that shows up when you stand at a gold gate or the boss door's puzzle: what it is, and the buttons (the keys E and Z, LB and D-pad down, or a tap)
+  const lockBox = $('lockBox'), lockTxt = $('lockTxt'), lockB = [$('lockB0'), $('lockB1')]; let lockKey = '', wasSealed = false;
+  lockB.forEach((b, i) => b.addEventListener('pointerdown', (e) => { I.lockUse = i; e.preventDefault(); }));
+  function lockHud(lk) {
+    const n = lk && lk.near;
+    if (lk && lk.sealed !== wasSealed) { wasSealed = lk.sealed; if (wasSealed) toast('The boss door is sealed: solve the puzzle beside it'); }
+    if (!n) { if (lockKey) { lockKey = ''; lockBox.classList.remove('show'); } return; }
+    const key = n.text + '|' + n.actions.map((a) => a.label + a.afford).join();
+    if (key === lockKey) return;
+    lockKey = key; lockTxt.textContent = n.text;
+    lockB.forEach((b, i) => { const a = n.actions[i]; b.hidden = !a; if (a) { b.textContent = a.label + (isTouch ? '' : i === 0 ? '  [E]' : '  [Z]'); b.classList.toggle('no', !a.afford); } });
+    lockBox.classList.add('show');
+  }
+  function pressPickup() { if (state.locks && state.locks.near) { I.lockUse = 0; return; } const q = GunCard.nearest(state, 6); if (!(q && q.inReach) && state.player.stash.near) openStash(); else I.pickup = true; }
   $('bGear').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); toggleGear(); });
   // the Codex: opened from the start card (and so from pause too)
   const codex = Codex.create($, () => ({ D: RefereeData, C: RefereeClasses, WP: RefereeWeapons, AF: RefereeAffixes, GR: RefereeGear, ST: RefereeStash, FX: RefereeGunFx.FX, T: CodexText, cfg: ref.defaults }));
@@ -798,6 +826,8 @@
         if (!e.extra) { flashT = 0.06; kickG = 1; kickDir = [Math.random() * 2 - 1, Math.random() * 2 - 1]; inspK = 0; sfx('shot'); ejectShell(); if (fxOn()) { muzzle.getWorldPosition(tmpV); camera.getWorldDirection(tmpV2); fx.play(fxId(), 'muzzle', tmpV.x + tmpV2.x * 0.12, tmpV.y + tmpV2.y * 0.12, tmpV.z + tmpV2.z * 0.12); } }
         addTracer(e.ex, e.ey, e.ez);
         if (e.hit === 'wall') { burst(e.ex, e.ey, e.ez, 5, [0xffb347, 0xff7a1a, 0x888078], 4, 0.35, 12, 0.7); if (fxOn()) fx.play(fxId(), 'wall', e.ex, e.ey, e.ez); }
+      } else if (e.type === 'peerShot') {
+        if (e.key !== coopKey) friendShot(e);
       } else if (e.type === 'hit') {
         burst(e.x, e.y, e.z, e.crit ? 9 : 5, [0xb01818, 0x701010, 0xe03030], 3.5, 0.4, 10, 0.8);
         if (fxOn() && !e.splash) fx.play(fxId(), 'flesh', e.x, e.y, e.z, { crit: e.crit });
@@ -812,6 +842,13 @@
       } else if (e.type === 'blast') { burst(e.x, e.y, e.z, 10, [0xff9a1c, 0xff4500, 0xffd060], 5, 0.4, 4, 1.1); sfx('blast'); if (fxOn()) { fx.play(fxId(), 'blast', e.x, e.y, e.z, { r: e.r }); bigShake(FxPlan.shake(fxId(), 'blast')); } }
       else if (e.type === 'playerHit') { sfx('hurt'); }
       else if (e.type === 'slide') { sfx('slide'); }
+      else if (e.type === 'jump') { sfx('slide'); }
+      else if (e.type === 'gateOpen') { sfx('levelup'); toast(e.key ? 'Key used: gate unlocked' : 'Gate unlocked'); }
+      else if (e.type === 'keyTaken') { sfx('levelup'); toast('You took the Keeper\'s key: find the key gate'); }
+      else if (e.type === 'keeperWake') { sfx('hurt'); toast('The Key Keeper wakes!'); }
+      else if (e.type === 'lockSolved') { sfx('levelup'); toast('Puzzle solved: the boss door can open'); }
+      else if (e.type === 'socket') { sfx('orb'); toast('Gold socket hit'); }
+      else if (e.type === 'panAdd' || e.type === 'panTake' || e.type === 'spin') { sfx('pickup'); }
       else if (e.type === 'shoot') { sfx(e.proj === 'bolt' ? 'zap' : e.proj === 'spit' ? 'spit' : 'fireball'); }
       else if (e.type === 'projHit') { burst(e.x, e.y, e.z, e.proj === 'fire' ? 12 : 7, e.proj === 'spit' ? [0x9cff4a, 0x4fd02a, 0x2a6a18] : e.proj === 'bolt' ? [0xeaffff, 0x6fd8ff, 0xffffff] : [0xffe070, 0xff5a14, 0xc8260c], 4, 0.4, 6, 0.8); if (e.onPlayer) sfx('hurt'); }
       else if (e.type === 'status') { const S = STATUS[e.kind]; statusPulse.set(e.id, { kind: e.kind, t: 0.4 }); burst(e.x, e.y + 0.3, e.z, 10, S && S.burst ? S.burst : e.kind === 'poison' ? [0xb45cff, 0x7a2cc8, 0xe0b8ff] : e.kind === 'bleed' ? [0xe23a42, 0x8a1018] : [0xf0c860, 0xfff0b0], 3.5, 0.5, 2, 0.9); }
@@ -846,7 +883,7 @@
     }
   }
 
-  const ELITE_GLOW = { armored: [0.12, 0.2, 0.38], swift: [0.4, 0.34, 0.02], brutal: [0.42, 0.06, 0.03], volatile: [0.1, 0.42, 0.06] };   // look only
+  const ELITE_GLOW = { armored: [0.12, 0.2, 0.38], swift: [0.4, 0.34, 0.02], brutal: [0.42, 0.06, 0.03], volatile: [0.1, 0.42, 0.06], keeper: [0.5, 0.38, 0.04] };   // look only
   function eliteGlow(list, t) {
     if (!list || !list.length) return [0, 0, 0];
     const k = 0.75 + 0.25 * Math.sin(t * 5), n = list.length, o = [0, 0, 0];
@@ -1049,6 +1086,7 @@
     const fl = 1 + 0.035 * Math.sin(time * 17) + 0.025 * Math.sin(time * 31 + 1.3), fb = flashT / 0.06;
     const br = view.brightness * fl;
     worldView.update(time, camera.position, dt, br, fb, st.door.open);
+    locksView.sync(st.locks, ref.map, time, dt); lockHud(st.locks);
     scene.fog.far = view.fogFar * st.fog.mul; fogGlow.intensity = 1.7 * st.fog.k;   // a fog wave shrinks the view, and your gun lights a small circle around you
 
     // particles, tracers, damage numbers
@@ -1095,12 +1133,19 @@
     diedT = Math.max(0, diedT - dt); diedEl.style.opacity = clamp(diedT / 0.6, 0, 1);
     shotsView.update(st.shots, st.t);
     hud.update(st, dt); minimap.update(st, dt); compass.update(st); loot.update(st, time); trapView.update(st, ref.map, time); bossFx.update(st, time);
-    peersView.update(st.coop.peers, dt); partyHud.update(st);
+    coopKey = st.coop.key; peersView.update(st.coop.peers, dt); partyHud.update(st);
   }
 
   /* ============ main loop ============ */
   let state = ref.snapshot(), frameErr = '';
-  function ensureFloor(st) { if (st.floorId !== loadedFloor) { worldView.load(ref.map, view.fogFar); loadedFloor = st.floorId; } }   // a new floor (or a new run) is baked and drawn here
+  const wallSets = WallSets.create(T);
+  function ensureFloor(st) {
+    if (st.floorId !== loadedFloor) {
+      const set = WallSets.forFloor(st.floor);                                    // every floor wears the next wall set (6 looks, then round again)
+      wallSets.apply(set.id); scene.background.setRGB(set.fog[0] / 255, set.fog[1] / 255, set.fog[2] / 255); scene.fog.color.copy(scene.background); worldView.setFlame(set.flame[0], set.flame[1]);
+      worldView.load(ref.map, view.fogFar); loadedFloor = st.floorId;
+    }
+  }   // a new floor (or a new run) is baked and drawn here
   ensureFloor(state);
   chooseClass(0);
   function frame(now) {
@@ -1112,7 +1157,7 @@
     if (running && !panelOpen) {
       stage('rules', () => { const out = ref.step(dt, gatherInput()); state = out.state; stage('events', () => handleEvents(out.events)); coop.tick(dt, out.events); });
     } else {
-      I.lookX = I.lookY = I.touchX = I.touchY = 0; I.slide = false; I.reload = false;
+      I.lookX = I.lookY = I.touchX = I.touchY = 0; I.slide = false; I.jump = false; I.reload = false;
     }
     stage('menuPointer', menuPointer);
     stage('blueprints', drawOverBp);

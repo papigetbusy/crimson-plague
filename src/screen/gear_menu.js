@@ -5,7 +5,7 @@ const GearMenu = (function () {
   const sign = (v, unit) => (v > 0 ? '+' + v + unit : '');
   function totals(g) {
     const bits = [g.def > 0 ? 'Defense ' + g.def + '%' : '', sign(g.hp, ' health'), sign(g.vit, '% max health'), g.regen > 0 ? '+' + g.regen + ' health/s' : '', sign(g.speed, '% speed'), sign(g.magnet, '% pickup range'),
-      sign(g.dmg, '% damage'), sign(g.rate, '% fire rate'), sign(g.crit, '% crit'), sign(g.critdmg, '% crit damage'), sign(g.leech, '% leech'), sign(g.reload, '% faster reload')];
+      sign(g.dmg, '% damage'), sign(g.rate, '% fire rate'), sign(g.crit, '% crit'), sign(g.critdmg, '% crit damage'), sign(g.leech, ' life on kill'), sign(g.reload, '% faster reload')];
     const out = bits.filter(Boolean);
     return out.length ? out.join(' · ') : 'Nothing worn yet. Armor and charms drop from monsters.';
   }

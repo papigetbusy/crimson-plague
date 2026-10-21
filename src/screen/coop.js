@@ -9,6 +9,25 @@ const Coop = (function () {
     const NAME_KEY = 'crimsonplague.name';
     try { nameIn.value = localStorage.getItem(NAME_KEY) || ('Player' + (10 + Math.floor(Math.random() * 90))); } catch (e) { nameIn.value = 'Player' + (10 + Math.floor(Math.random() * 90)); }
     const myName = () => { const n = nameIn.value.replace(/[<>&]/g, '').trim().slice(0, 12) || 'Player'; try { localStorage.setItem(NAME_KEY, n); } catch (e) { /* not saved */ } return n; };
+    // the look you play with: saved if you picked one before, otherwise a random one of the seven; tap a swatch to choose
+    const SKIN_KEY = 'crimsonplague.skin', skinsEl = $('coopSkins');
+    let skin = ''; try { skin = localStorage.getItem(SKIN_KEY) || ''; } catch (e) { /* not saved */ }
+    if (!SkinsLook.valid(skin)) skin = SkinsLook.random();
+    const skinBtns = [];
+    function chooseSkin(id, save) {
+      skin = id; ref.setCfg({ selfSkin: id });
+      if (save) { try { localStorage.setItem(SKIN_KEY, id); } catch (e) { /* not saved */ } }
+      for (const [sid, b] of skinBtns) b.classList.toggle('sel', sid === id);
+      const nm = $('coopSkinName'); if (nm) nm.textContent = 'Your look: ' + SkinsLook.LIST.find((s) => s.id === id).name;
+    }
+    for (const s of SkinsLook.LIST) {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'skinBtn'; b.title = s.name + ': ' + s.blurb; b.setAttribute('aria-label', s.name);
+      b.style.setProperty('--tone', s.tone); b.style.setProperty('--glow', s.glow);
+      b.addEventListener('click', () => chooseSkin(s.id, true)); skinsEl.appendChild(b); skinBtns.push([s.id, b]);
+    }
+    const dice = document.createElement('button'); dice.type = 'button'; dice.className = 'skinDice'; dice.textContent = 'Random'; dice.addEventListener('click', () => chooseSkin(SkinsLook.random(), false)); skinsEl.appendChild(dice);
+    const nameLine = document.createElement('div'); nameLine.id = 'coopSkinName'; skinsEl.appendChild(nameLine);
+    chooseSkin(skin, false);
     const say = (t) => { info.textContent = t; };
     function show() {
       menu.hidden = mode !== 'off'; leaveBtn.hidden = mode === 'off';
@@ -32,7 +51,7 @@ const Coop = (function () {
     function fail(text) { hooks.toast(text); off(text); }
     function startHost() {
       if (!NetPeer.available()) { say('Playing with friends needs the internet link library, and it did not load. Check your connection and reload.'); return; }
-      ref.setCfg({ coop: true, guest: false, selfKey: 'host', selfName: myName() }); ref.reset();
+      ref.setCfg({ coop: true, guest: false, selfKey: 'host', selfName: myName(), selfSkin: skin }); ref.reset();
       mode = 'host'; went = false; code = '';
       link = CoopLink.host(ref, (key, msg) => net && net.send(key, msg));
       net = NetPeer.host({
@@ -48,7 +67,7 @@ const Coop = (function () {
       const c = NetPeer.clean(codeIn.value);
       if (c.length !== 5) { say('Type the 5 letter room code your friend gave you.'); return; }
       if (!NetPeer.available()) { say('Playing with friends needs the internet link library, and it did not load. Check your connection and reload.'); return; }
-      ref.setCfg({ coop: true, guest: true, selfKey: 'pending', selfName: myName() }); ref.reset();
+      ref.setCfg({ coop: true, guest: true, selfKey: 'pending', selfName: myName(), selfSkin: skin }); ref.reset();
       mode = 'guest'; went = false; code = c;
       link = CoopLink.guest(ref, (m) => net && net.send(m), myName(), (m) => {
         if (m.t === 'welcome') { if (!m.ok) { fail('That room is full (5 players at most).'); return; } ref.setCfg({ selfKey: m.key }); }
@@ -63,7 +82,7 @@ const Coop = (function () {
       });
       show();
     }
-    btn.addEventListener('click', () => { panel.hidden = !panel.hidden; });
+    btn.addEventListener('click', () => { panel.hidden = !panel.hidden; if (!panel.hidden) { try { panel.scrollIntoView({ block: 'end' }); } catch (e) { /* older browsers: the card still scrolls by hand */ } } });
     hostBtn.addEventListener('click', startHost);
     joinBtn.addEventListener('click', startJoin);
     codeIn.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') startJoin(); });

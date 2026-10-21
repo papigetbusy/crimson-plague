@@ -68,6 +68,7 @@ const WorldBake = (function () {
       addFace(key, [x0, y1, z1], [dx, 0, 0], [0, 0, -dz], 1, 1, [0, 1, 0]);
       addFace(key, [x0, y0, z0], [dx, 0, 0], [0, 0, dz], 1, 1, [0, -1, 0]);
     }
+    const VREP = Math.max(3, Math.round(3 * WALL_H / 5.5));          // the wall texture repeats up the taller walls instead of stretching
     const KIND = { '#': 'stone', 'B': 'stone', 'W': 'panel', 'P': 'pillar' };
     // the floor tile set for a cell: worn beside the carpet, otherwise a plain, cracked or warm-stained set mixed by position
     function floorKey(cx, cz) {
@@ -81,8 +82,9 @@ const WorldBake = (function () {
         const a = nx ? [plane + nx * d0, plane + nx * d1] : [mid - half, mid + half], b = nz ? [plane + nz * d0, plane + nz * d1] : [mid - half, mid + half];
         addBox(key, Math.min(a[0], a[1]), y0, Math.min(b[0], b[1]), Math.max(a[0], a[1]), y1, Math.max(b[0], b[1]));
       };
-      slab('cloth', 0.78, 0.04, 0.14, 0.8, WALL_H - 1.0);
-      slab('gold', 0.92, 0.0, 0.2, WALL_H - 1.0, WALL_H - 0.84);
+      const top = Math.min(WALL_H - 1.0, 8.6);                         // banners hang from a rod no higher than 8.6, so they stay banners when the roof is high
+      slab('cloth', 0.78, 0.04, 0.14, 0.8, top);
+      slab('gold', 0.92, 0.0, 0.2, top, top + 0.16);
     }
     for (let cz = 0; cz < GH; cz++) for (let cx = 0; cx < GW; cx++) {
       const ch = rows[cz][cx], x0 = cx * CELL, x1 = x0 + CELL, z0 = cz * CELL, z1 = z0 + CELL;
@@ -103,10 +105,10 @@ const WorldBake = (function () {
         if (!solidC(cx, cz + 1)) hangBanner(0, 1, z1, x0 + CELL / 2);
         if (!solidC(cx, cz - 1)) hangBanner(0, -1, z0, x0 + CELL / 2);
       }
-      if (!solidC(cx + 1, cz)) addFace(key, [x1, 0, z1], [0, 0, -CELL], [0, WALL_H, 0], 2, 3, [1, 0, 0]);
-      if (!solidC(cx - 1, cz)) addFace(key, [x0, 0, z0], [0, 0, CELL], [0, WALL_H, 0], 2, 3, [-1, 0, 0]);
-      if (!solidC(cx, cz + 1)) addFace(key, [x0, 0, z1], [CELL, 0, 0], [0, WALL_H, 0], 2, 3, [0, 0, 1]);
-      if (!solidC(cx, cz - 1)) addFace(key, [x1, 0, z0], [-CELL, 0, 0], [0, WALL_H, 0], 2, 3, [0, 0, -1]);
+      if (!solidC(cx + 1, cz)) addFace(key, [x1, 0, z1], [0, 0, -CELL], [0, WALL_H, 0], 2, VREP, [1, 0, 0]);
+      if (!solidC(cx - 1, cz)) addFace(key, [x0, 0, z0], [0, 0, CELL], [0, WALL_H, 0], 2, VREP, [-1, 0, 0]);
+      if (!solidC(cx, cz + 1)) addFace(key, [x0, 0, z1], [CELL, 0, 0], [0, WALL_H, 0], 2, VREP, [0, 0, 1]);
+      if (!solidC(cx, cz - 1)) addFace(key, [x1, 0, z0], [-CELL, 0, 0], [0, WALL_H, 0], 2, VREP, [0, 0, -1]);
       if (ch === 'P') {
         addBox('gold', x0 - 0.14, 0, z0 - 0.14, x1 + 0.14, 0.38, z1 + 0.14);
         addBox('gold', x0 - 0.14, WALL_H - 0.7, z0 - 0.14, x1 + 0.14, WALL_H - 0.3, z1 + 0.14);

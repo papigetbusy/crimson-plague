@@ -55,8 +55,11 @@ t('A shot at a monster registers a hit (the test setup works)', base1.hits.lengt
 t('A damage affix really makes the gun hit harder', shootAt(Object.assign({}, plain, { affixes: [{ id: 'power', stat: 'dmg', v: 1 }] })).hits[0].dmg > base1.hits[0].dmg * 1.9);
 t('A crit chance affix of 100% makes every shot a crit, doubling the damage', (() => { const c = shootAt(Object.assign({}, plain, { affixes: [{ id: 'keen', stat: 'crit', v: 1 }] })); return c.ev.some((e) => e.type === 'crit') && c.hits[0].dmg > base1.hits[0].dmg * 1.9; })());
 t('A crit damage affix makes crits hit harder still', (() => { const mk2 = (v) => shootAt(Object.assign({}, plain, { affixes: [{ id: 'keen', stat: 'crit', v: 1 }, { id: 'ruin', stat: 'critdmg', v: v }] })).hits[0].dmg; return mk2(1) > mk2(0) * 1.4; })());
-t('A leech affix heals you from the damage you deal', shootAt(Object.assign({}, plain, { affixes: [{ id: 'leech', stat: 'leech', v: 0.5 }] }), 50).hp > 50);
-t('Without a leech affix a hit does not heal you', shootAt(plain, 50).hp <= 50);
+const killer = { id: 'power', stat: 'dmg', v: 1e7 };      // a shot that kills what it hits
+t('A leech affix heals a flat amount of life when you kill a monster', Math.round(shootAt(Object.assign({}, plain, { affixes: [killer, { id: 'leech', stat: 'leech', v: 3 }] }), 50).hp) === 53);
+t('A leech affix does not heal you from a hit that does not kill', shootAt(Object.assign({}, plain, { affixes: [{ id: 'leech', stat: 'leech', v: 3 }] }), 50).hp <= 50);
+t('Without a leech affix a kill does not heal you', Math.round(shootAt(Object.assign({}, plain, { affixes: [killer] }), 50).hp) === 50);
+t('A leech line reads as life on kill, a flat number', A.describe({ id: 'leech', stat: 'leech', v: 2 }).text === '+2 life on kill');
 
 // ---- the floor card (screen helper, pure html)
 const Card = require('../src/screen/gun_card.js');

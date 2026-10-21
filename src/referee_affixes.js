@@ -6,7 +6,7 @@ const RefereeAffixes = (function () {
   // count per rarity [min, max]
   const COUNT = [[0, 1], [1, 2], [2, 3], [3, 3], [3, 4]];
   const SCALE = { perRarity: 0.25, spread: 0.4 };         // value = base * (1 + 0.25 per rarity step) * (0.8 to 1.2)
-  // stat meanings: dmg, rate, mag (percent more), reload, spread (percent less), crit (chance added), critdmg (added to the crit multiplier), head (more headshot damage), leech (share of damage healed), status (stronger status effects)
+  // stat meanings: dmg, rate, mag (percent more), reload, spread (percent less), crit (chance added), critdmg (added to the crit multiplier), head (more headshot damage), leech (life healed per kill, a flat number), status (stronger status effects)
   const LIST = [
     { id: 'power',    name: 'Power',          stat: 'dmg',     base: 0.08, text: 'more damage' },
     { id: 'tempo',    name: 'Tempo',          stat: 'rate',    base: 0.06, text: 'faster fire rate' },
@@ -16,14 +16,14 @@ const RefereeAffixes = (function () {
     { id: 'keen',     name: 'Keen Eye',       stat: 'crit',    base: 0.04, text: 'crit chance', flat: true },
     { id: 'ruin',     name: 'Ruin',           stat: 'critdmg', base: 0.10, text: 'crit damage' },
     { id: 'marksman', name: 'Marksman',       stat: 'head',    base: 0.10, text: 'headshot damage' },
-    { id: 'leech',    name: 'Leech',          stat: 'leech',   base: 0.015, text: 'of damage healed', flat: true },
+    { id: 'leech',    name: 'Leech',          stat: 'leech',   base: 1, text: 'life on kill', unit: '' },
     { id: 'venom',    name: 'Potent Element', stat: 'status',  base: 0.10, text: 'stronger status effect' },
     // class-only lines: bigger than the plain ones, and they only drop for that class
     { id: 'fan',      name: 'Fan the Hammer', stat: 'rate',    base: 0.14, text: 'faster fire rate',  cls: 'gunslinger' },
     { id: 'deadcalm', name: 'Dead Calm',      stat: 'crit',    base: 0.08, text: 'crit chance',       cls: 'gunslinger', flat: true },
     { id: 'edge',     name: "Killer's Edge",  stat: 'critdmg', base: 0.25, text: 'crit damage',       cls: 'assassin' },
     { id: 'throat',   name: 'Throat Cutter',  stat: 'head',    base: 0.25, text: 'headshot damage',   cls: 'assassin' },
-    { id: 'bloodpact',name: 'Blood Pact',     stat: 'leech',   base: 0.035, text: 'of damage healed', cls: 'witch', flat: true },
+    { id: 'bloodpact',name: 'Blood Pact',     stat: 'leech',   base: 2, text: 'life on kill', cls: 'witch', unit: '' },
     { id: 'hex',      name: 'Hex Power',      stat: 'status',  base: 0.25, text: 'stronger status effect', cls: 'witch' }
   ];
   const BY_ID = {}; for (const a of LIST) BY_ID[a.id] = a;
@@ -44,7 +44,7 @@ const RefereeAffixes = (function () {
   const sum = (item, stat) => (item.affixes || []).reduce((s, a) => s + (a.stat === stat ? a.v : 0), 0);
   const pct = (v, flat) => (flat && v < 0.1 ? (v * 100).toFixed(1) : String(Math.round(v * 100))) + '%';
   // the line to show the player: "+12% bigger magazine" and which class it belongs to
-  function describe(a) { const d = BY_ID[a.id]; return { name: d.name, text: '+' + pct(a.v, d.flat) + ' ' + d.text, cls: d.cls || '' }; }
+  function describe(a) { const d = BY_ID[a.id]; return { name: d.name, text: '+' + (d.unit === '' ? (Math.round(a.v * 10) / 10) : pct(a.v, d.flat)) + ' ' + d.text, cls: d.cls || '' }; }
   return { LIST, BY_ID, COUNT, CLASSES, pool, roll, sum, describe };
 })();
 if (typeof module !== 'undefined') module.exports = RefereeAffixes;

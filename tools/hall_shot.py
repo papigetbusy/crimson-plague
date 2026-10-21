@@ -8,16 +8,16 @@ HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(HERE)
 OUT = sys.argv[1]; os.makedirs(OUT, exist_ok=True)
 PRESETS = {                     # x, z, yaw (deg, 0 = facing the hall), pitch (deg)
     'corridor': (21, 56.6, 0, 0), 'hall': (21, 20, 0, 0), 'torch': (21, 40, 90, 0),
-    'banner': (21, 30, -90, 0), 'ceiling': (21, 36, 0, 40), 'carpet': (21, 14, 180, -10),
+    'banner': (21, 30, -90, 0), 'ceiling': (21, 36, 0, 40), 'carpet': (21, 14, 180, -10), 'tall': (21, 36, 0, 12),
 }
 views = sys.argv[2:] or list(PRESETS)
 dump = os.path.join(OUT, 'hall.json'); subprocess.check_call(['node', os.path.join(HERE, 'hall_shot.js'), dump] + (['safe'] if os.environ.get('SAFE') else []))
 read = lambda p: open(os.path.join(ROOT, 'src', p)).read()
 PAGE = """<canvas id=c width=650 height=300 style='width:1300px;height:600px;image-rendering:pixelated'></canvas><script>
 const THREE = { CanvasTexture: function (c) { this.image = c; }, NearestFilter: 1, RepeatWrapping: 2 };
-""" + read('screen/world_tex.js') + """
-const D = @@DATA@@, FOG = [12 / 255, 4 / 255, 6 / 255], FOGFAR = 34, VIEWS = @@VIEWS@@;
-const T = WorldTex.create(THREE), gl = document.getElementById('c').getContext('webgl', { preserveDrawingBuffer: true, antialias: false });
+""" + read('screen/world_tex.js') + read('screen/wall_materials.js') + read('screen/wall_sets.js') + read('screen/locks_view.js') + """
+const SETID = '@@SET@@', SETINFO = WallSets.LIST.find((x) => x.id === SETID) || WallSets.LIST[0], D = @@DATA@@, FOG = SETINFO.fog.map((v) => v / 255), FOGFAR = 34, VIEWS = @@VIEWS@@;
+const T = WorldTex.create(THREE); WallSets.create(T).apply(SETID); const gl = document.getElementById('c').getContext('webgl', { preserveDrawingBuffer: true, antialias: false });
 const sh = (t, s) => { const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw gl.getShaderInfoLog(o); return o; };
 const pr = gl.createProgram();
 gl.attachShader(pr, sh(gl.VERTEX_SHADER, 'attribute vec3 p;attribute vec2 u;attribute vec3 c;uniform mat4 m;uniform mat4 v;varying vec2 vu;varying vec3 vc;varying float d;void main(){vec4 q=v*vec4(p,1.);d=-q.z;vu=u;vc=c;gl_Position=m*vec4(p,1.);}'));
@@ -45,6 +45,36 @@ for (const t of (D.traps || [])) {
   for (let ix = 0; ix < t.w * 2; ix++) for (let iz = 0; iz < t.h * 2; iz++) { const cx = x0 + (ix + .5) * 1, cz = z0 + (iz + .5) * 1, hh = t.kind === 'pulse' ? .3 : .62; props.push([cx - .07, .05, cz - .07, cx + .07, .05 + hh, cz + .07, (ix + iz) % 3 === 0 ? [.7, .12, .16] : [.66, .66, .72]]); }
 }
 const fl = []; for (const [x, y, z, s] of flames) { fl.push([x - .1 * s, y, z - .1 * s, x + .1 * s, y + .34 * s, z + .1 * s, [1, .54, .15]], [x - .055 * s, y + .02 * s, z - .055 * s, x + .055 * s, y + .24 * s, z + .055 * s, [1, .86, .48]]); }
+
+// the gold gates, the boss door's sign and puzzle and the sockets: the game's own LocksView runs on a tiny stand-in for THREE that just remembers boxes, painted signs and glows
+if (D.locks) {
+  class O3 { constructor() { this.children = []; this.position = { x: 0, y: 0, z: 0, set(x, y, z) { this.x = x; this.y = y; this.z = z; } }; this.rotation = { x: 0, y: 0, z: 0 }; this.scale = { x: 1, y: 1, z: 1, setScalar(s) { this.x = this.y = this.z = s; } }; this.visible = true; } add(o) { this.children.push(o); return this; } }
+  const mat = class { constructor(o) { Object.assign(this, o || {}); this.color = this.color === undefined ? undefined : { v: this.color, setHex(h) { this.v = h; } }; } };
+  const FT = { Group: O3, Mesh: class extends O3 { constructor(g, m) { super(); this.geometry = g; this.material = m; } }, Sprite: class extends O3 { constructor(m) { super(); this.material = m; this.isSprite = true; } },
+    BoxGeometry: class { constructor(w, h, d) { this.w = w; this.h = h; this.d = d; this.box = true; } }, PlaneGeometry: class { constructor(w, h) { this.w = w; this.h = h; } },
+    MeshLambertMaterial: mat, MeshBasicMaterial: mat, SpriteMaterial: mat, CanvasTexture: THREE.CanvasTexture, NearestFilter: 1, AdditiveBlending: 2 };
+  const sc = { children: [], add(o) { this.children.push(o); }, remove(o) { this.children = this.children.filter((q) => q !== o); } };
+  const lv = LocksView.create(FT, sc, T, null); lv.sync(D.locks, { id: D.mapId, WALL_H: D.wallH }, 0, 5);
+  const hex = (h) => [((h >> 16) & 255) / 255, ((h >> 8) & 255) / 255, (h & 255) / 255];
+  const lpos = [], luv = [], lcol = [], planes = [], glows = [];
+  const walk = (o, tr) => {
+    const P = o.position, ry = tr.ry + o.rotation.y;
+    const nt = { x: tr.x + tr.c * P.x + tr.s * P.z, y: tr.y + P.y, z: tr.z - tr.s * P.x + tr.c * P.z, ry }, cc = Math.cos(ry), ss = Math.sin(ry); nt.c = cc; nt.s = ss;
+    if (o.visible === false) return;
+    if (o.geometry && o.geometry.box) {
+      const g = o.geometry, quarter = Math.round(nt.ry / (Math.PI / 2)) % 2 !== 0, w = quarter ? g.d : g.w, d = quarter ? g.w : g.d, m = o.material;
+      const col = m.color ? hex(m.color.v) : (m.map === T.texGold ? [.8, .6, .2] : [.2, .17, .2]);
+      lboxes.push([nt.x - w / 2, nt.y - g.h / 2, nt.z - d / 2, nt.x + w / 2, nt.y + g.h / 2, nt.z + d / 2, col]);
+    } else if (o.geometry && o.material && o.material.map) {
+      const w = o.geometry.w / 2, h = o.geometry.h / 2; planes.push({ img: o.material.map.image, q: [[-w, -h, 0, 0, 0], [w, -h, 0, 1, 0], [w, h, 0, 1, 1], [-w, h, 0, 0, 1]].map(([x, y, z, u, v]) => [nt.x + cc * x + ss * z, nt.y + y, nt.z - ss * x + cc * z, u, 1 - v]) });
+    } else if (o.isSprite) glows.push([nt.x, nt.y, nt.z, o.scale.x]);
+    for (const k of o.children) walk(k, nt);
+  };
+  const lboxes = []; for (const o of sc.children) walk(o, { x: 0, y: 0, z: 0, c: 1, s: 0, ry: 0 });
+  for (const b of lboxes) props.push(b);
+  window.lockPlanes = planes.map((pl) => { const pos = [], uv = []; for (const i of [0, 1, 2, 0, 2, 3]) { pos.push(pl.q[i][0], pl.q[i][1], pl.q[i][2]); uv.push(pl.q[i][3], pl.q[i][4]); } return { t: tex(pl.img), p: buf(pos), u: buf(uv), c: buf(pos.map(() => 1)), n: 6 }; });
+  for (const g of glows) flames.push([g[0], g[1], g[2], 2]);
+}
 const propsDraw = boxes(props), flameDraw = boxes(fl);
 const mul = (a, b) => { const o = new Array(16).fill(0); for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) for (let k = 0; k < 4; k++) o[j * 4 + i] += a[k * 4 + i] * b[j * 4 + k]; return o; };
 function shot(V) {
@@ -60,16 +90,33 @@ function shot(V) {
   gl.uniform3fv(gl.getUniformLocation(pr, 'fog'), FOG); gl.uniform1f(gl.getUniformLocation(pr, 'far'), FOGFAR);
   const L = (n) => gl.getAttribLocation(pr, n), bind = (d, tx, nofog) => { gl.uniform1f(gl.getUniformLocation(pr, 'nofog'), nofog ? 1 : 0); gl.bindTexture(gl.TEXTURE_2D, tx); for (const [nm, b, s] of [['p', d.p, 3], ['u', d.u, 2], ['c', d.c, 3]]) { gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.enableVertexAttribArray(L(nm)); gl.vertexAttribPointer(L(nm), s, gl.FLOAT, false, 0, 0); } gl.drawArrays(gl.TRIANGLES, 0, d.n); };
   for (const d of draws) bind(d, d.t, false);
-  bind(propsDraw, white, false); bind(flameDraw, white, true);
+  bind(propsDraw, white, false); for (const d of window.lockPlanes || []) bind(d, d.t, false); bind(flameDraw, white, true);
   // glow sprites, additive, no depth write
   const sp2 = [], su = [], sc = []; for (const [fx, fy, fz, s] of flames) { const r = (s > 1 ? 1.6 : 1.05); for (const [qx, qy, ux, uy] of [[-1, -1, 0, 0], [1, -1, 1, 0], [1, 1, 1, 1], [-1, -1, 0, 0], [1, 1, 1, 1], [-1, 1, 0, 1]]) { const cx = fx + (right[0] * qx + up[0] * qy) * r, cyy = fy + .15 + (right[1] * qx + up[1] * qy) * r, czz = fz + (right[2] * qx + up[2] * qy) * r; sp2.push(cx, cyy, czz); su.push(ux, uy); sc.push(1, 1, 1); } }
   const g = { p: buf(sp2), u: buf(su), c: buf(sc), n: sp2.length / 3 }; gl.depthMask(false); gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE); bind(g, glowT, true); gl.disable(gl.BLEND); gl.depthMask(true);
 }
 window.shot = shot; window.VIEWS = VIEWS;
 </script>""" 
+LOOK = {}
+def lookat(name, ox, oz, nx, nz, back, up=1.7):
+    import math
+    x, z = ox + nx * back, oz + nz * back
+    LOOK[name] = (x, z, math.degrees(math.atan2(-nx, nz)), 0)
+lk = json.load(open(dump)).get('locks')
+if lk:
+    if lk['gates']:
+        g = lk['gates'][0]; lookat('gate', g['x'], g['z'], -g['nx'], -g['nz'], 7)
+    b = lk['boss']
+    if b:
+        s0, st0 = b['sign'], b['station']
+        lookat('sign', s0['x'], s0['z'], s0['nx'], s0['nz'], 6); lookat('station', st0['x'], st0['z'], st0['nx'], st0['nz'], 6)
+        lookat('both', (s0['x'] + st0['x']) / 2, (s0['z'] + st0['z']) / 2, s0['nx'], s0['nz'], 11)
+        if b['sockets']:
+            k = b['sockets'][0]; lookat('socket', k['x'], k['z'], k['nx'], k['nz'], 6)
+PRESETS.update(LOOK)
 views_json = json.dumps({v: (PRESETS[v] if v in PRESETS else [float(x) for x in v.split(',')]) for v in views})
 with open(dump) as f: data = f.read()
-html = PAGE.replace('@@DATA@@', data).replace('@@VIEWS@@', views_json)
+html = PAGE.replace('@@DATA@@', data).replace('@@VIEWS@@', views_json).replace('@@SET@@', os.environ.get('WALLSET', 'crypt'))
 with sync_playwright() as p:
     b = p.chromium.launch(args=['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'])
     pg = b.new_page(viewport={'width': 1300, 'height': 600}); errs = []

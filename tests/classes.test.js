@@ -14,6 +14,7 @@ function mk(cls, skills, cfg, seed) {
 }
 function run(g, sec, inp) { const ev = []; let st = null; for (let i = 0; i < sec * 60; i++) { const o = g.ref.step(1 / 60, inp || {}); ev.push(...o.events); st = o.state; } return { ev, st }; }
 const ahead = (g, d) => ({ x: g.m.start.x, z: g.m.start.z - d });   // yaw 0 faces -z
+const fire = (g, sec) => run(g, sec, { fire: true });
 function target(g, kind, d) { const a = ahead(g, d); g.ref.spawnAt(kind, a.x, a.z); }
 // kill n goblins one after another (huge damage makes each shot a kill)
 function kill(g, n) { g.ref.setCfg({ damage: 1e6 }); for (let i = 0; i < n; i++) { target(g, 'fiend', 5); run(g, 0.25, { fire: true }); } g.ref.setCfg({ damage: 14 }); }
@@ -57,9 +58,22 @@ function kill(g, n) { g.ref.setCfg({ damage: 1e6 }); for (let i = 0; i < n; i++)
   const f = mk('gunslinger', ['fan']);
   const r = run(f, 3, { fire: true });
   t('Fan the Hammer adds extra bullets every few shots', r.ev.filter((e) => e.type === 'shot' && e.extra).length >= 4);
-  const q = mk('gunslinger', ['quickdraw']); q.ref.setCfg({ magSize: 30 }); q.ref.reset(); q.ref.giveSkill('quickdraw'); q.ref.place(q.m.start.x, q.m.start.z, 0); run(q, 1.7, {});
-  kill(q, 1); const rl = run(q, 0.6, { reload: true });
-  t('After a kill with Quickdraw the next reload is instant', rl.ev.some((e) => e.type === 'reloadStart' && e.dur < 0.1) || q.ref.snapshot().player.ammo === 30);
+  const rl1 = (g, inp) => run(g, 0.2, inp).ev.find((e) => e.type === 'reloadStart');
+  const q = mk('gunslinger', ['quickdraw'], { magSize: 30 }); fire(q, 0.3); const plainRl = rl1(q, { reload: true }); run(q, 4, {});
+  fire(q, 0.3); run(q, 0.3, { mz: 1 }); run(q, 0.05, { mz: 1, slide: true }); const fastRl = rl1(q, { reload: true });
+  t('After a slide, Quickdraw makes the next reload faster but not instant', !!plainRl && !!fastRl && fastRl.dur < plainRl.dur * 0.9 && fastRl.dur > plainRl.dur * 0.3);
+  const q2 = mk('gunslinger', ['quickdraw'], { magSize: 30 }); fire(q2, 0.3); run(q2, 4, {});
+  t('A reload with no slide before it is a normal reload', run(q2, 0.2, { reload: true }).ev.find((e) => e.type === 'reloadStart').dur > fastRl.dur);
+  t('Killing a monster no longer gives an instant reload', (() => { const k = mk('gunslinger', ['quickdraw'], { magSize: 30 }); fire(k, 0.3); kill(k, 1); const e = run(k, 0.2, { reload: true }).ev.find((x) => x.type === 'reloadStart'); return e && e.dur > 0.3; })());
+  { // Bullet Storm must never leave you stuck in a reload: the 30th kill comes with the very last bullet
+    const b = mk('gunslinger', ['bulletstorm'], { magSize: 1000 }); kill(b, 29);
+    b.ref.setCfg({ magSize: 1, damage: 1e6 }); target(b, 'fiend', 5);
+    const last = run(b, 0.25, { fire: true });
+    t('The thirtieth kill with the last bullet still starts Bullet Storm', last.ev.some((e) => e.type === 'ultStart'));
+    const storm = run(b, 0.4, { fire: true });
+    t('Bullet Storm fires without stopping to reload, even when the last bullet was just spent', storm.ev.filter((e) => e.type === 'shot').length >= 3 && !storm.ev.some((e) => e.type === 'reloadStart'));
+    t('Reload does nothing while Bullet Storm runs', !run(b, 0.2, { reload: true }).ev.some((e) => e.type === 'reloadStart'));
+  }
   const d = mk('gunslinger', ['deadeye']); target(d, 'golem', 6); d.ref.setCfg({ damage: 2 });
   t('Dead Eye makes some hits crit', run(d, 3, { fire: true }).ev.filter((e) => e.type === 'crit').length > 3);
   const n = mk('gunslinger', []); target(n, 'golem', 6);

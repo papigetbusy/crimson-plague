@@ -45,6 +45,30 @@ const sees = (g, i) => snap(g.guests[i].ref);
   t('The host sees which class each friend picked', cl(snap(g.host), 'g1') === 'witch' && cl(snap(g.host), 'g2') === 'assassin');
   t('A friend sees the host and the other friend as the classes they picked', cl(sees(g, 0), 'host') === 'gunslinger' && cl(sees(g, 0), 'g2') === 'assassin' && cl(sees(g, 1), 'g1') === 'witch');
 }
+// ---- skins and bullets travel between players
+{
+  const g = game(3); g.host.setCfg({ selfSkin: 'crimson' }); g.guests[0].ref.setCfg({ selfSkin: 'frost' }); g.guests[1].ref.setCfg({ selfSkin: 'void', classId: 'witch' }); g.run(0.5);
+  const sk = (s, k) => s.coop.peers.find((p) => p.key === k).skin;
+  t('The host sees the skin each friend picked', sk(snap(g.host), 'g1') === 'frost' && sk(snap(g.host), 'g2') === 'void');
+  t('A friend sees the host and the other friend in the skins they picked', sk(sees(g, 0), 'host') === 'crimson' && sk(sees(g, 0), 'g2') === 'void' && sk(sees(g, 1), 'g1') === 'frost');
+  t('A skin name that is junk is cleaned and cannot break anything', (() => { const h = game(2); h.host.remoteState('g1', { x: 1, z: 1, yaw: 0, eye: 1.7, hp: 10, mhp: 10, gun: 'pistol_service', gr: 0, skn: '<b>Frost!!</b>' }); return /^[a-z]*$/.test(snap(h.host).coop.peers[0].skin); })());
+  t('A friend sees which gun the others hold, with its status colours', (() => { const q = g.guests[1].ref; q.giveGun && 1; return Array.isArray(sees(g, 0).coop.peers.find((p) => p.key === 'g2').gs); })());
+}
+{
+  const g = game(3); g.run(0.5);
+  const seen = { host: [], g1: [], g2: [] };
+  const grab = () => { seen.host.push(...g.last.events); g.guests.forEach((q) => seen[q.key].push(...q.out.events)); };
+  g.guests[0].inp = { fire: true }; g.run(0.8, {}, grab); g.guests[0].inp = {};
+  const by = (list, key) => list.filter((e) => e.type === 'peerShot' && e.key === key);
+  t('A friend\'s bullets reach the host, marked with the friend and the gun they came from', by(seen.host, 'g1').length >= 3 && by(seen.host, 'g1').every((e) => typeof e.g === 'string' && e.g.length > 0 && Number.isFinite(e.ex)));
+  t('A friend\'s bullets reach the other friend too', by(seen.g2, 'g1').length >= 3);
+  t('A friend does not get their own bullets sent back as someone else\'s', by(seen.g1, 'g1').length === 0);
+  seen.host.length = seen.g1.length = seen.g2.length = 0;
+  g.run(0.8, { fire: true }, grab);
+  t('The host\'s bullets reach both friends', by(seen.g1, 'host').length >= 3 && by(seen.g2, 'host').length >= 3);
+  t('A bullet carries where it started and where it ended', (() => { const e = by(seen.g1, 'host')[0]; return [e.ox, e.oy, e.oz, e.ex, e.ey, e.ez].every(Number.isFinite) && e.hit >= 0 && e.hit <= 2; })());
+  t('Rubbish bullets from a friend are ignored', (() => { const h = game(2); h.run(0.2); h.host.remoteShots('g1', [{ ox: 'x', oy: 1, oz: 1, ex: 1, ey: 1, ez: 1 }, { ox: NaN, oy: 1, oz: 1, ex: 1, ey: 1, ez: 1 }]); const o = h.host.step(1 / 60, {}); return !o.events.some((e) => e.type === 'peerShot'); })());
+}
 // ---- monsters scale with the number of friends
 {
   const solo = Referee.create(77); solo.setCfg(Object.assign({}, BASE)); solo.reset(); solo.spawnAt('fiend', 5, 5);
@@ -151,7 +175,7 @@ const sees = (g, i) => snap(g.guests[i].ref);
 }
 // ---- through the boss door together
 {
-  const g = game(3, { cfg: { startWave: 10, bossKind: 'demon', bossRandom: false } }); g.run(1);
+  const g = game(3, { cfg: { locks: false, startWave: 10, bossKind: 'demon', bossRandom: false } }); g.run(1);
   g.run(6, null, () => snap(g.host).monsters.some((m) => m.kind === 'demon'));
   g.run(0.3);
   t('Friends see the boss the host fights', sees(g, 0).monsters.some((m) => m.kind === 'demon') && !!sees(g, 1).bossBar);
@@ -164,6 +188,19 @@ const sees = (g, i) => snap(g.guests[i].ref);
   const d2 = g.host.map.door, c2 = d2.cells[0];
   g.host.place((c2[0] + 0.5) * 2, (c2[1] + 0.5) * 2, 0); g.run(0.5);
   t('Through the next door everybody is on the next floor', !snap(g.host).safe && snap(g.host).floor === 2 && sees(g, 0).floor === 2 && sees(g, 1).floor === 2 && !sees(g, 0).safe);
+}
+// ---- gold gates and the boss door puzzle, together
+{
+  const g = game(3, { cfg: { startWave: 1 } }); g.run(1);
+  const gate = g.host.map.gates[0], f = g.guests[0].ref, f2 = g.guests[1].ref;
+  const stand = (ref) => ref.place(gate.x - gate.nx * 3, gate.z - gate.nz * 3, Math.atan2(gate.nx, -gate.nz));
+  stand(f); g.run(0.3); f.giveGold(100); g.host.giveGold(100); const hostGold = snap(g.host).gold;
+  g.guests[0].inp = { lockUse: 0 }; g.run(1 / 60); g.guests[0].inp = {}; g.run(0.4);
+  t('A friend can pay a gate toll with their own gold, and the gate opens for the host', snap(g.host).locks.gates[0].open && snap(f).locks.gates[0].open);
+  t('The toll comes out of the friend\'s gold, not the host\'s', Math.round(snap(f).gold) <= 20 && snap(g.host).gold >= hostGold);
+  t('The other friend sees the gate open too, and can walk through it', sees(g, 1).locks.gates[0].open);
+  t('A gate paid for by the host opens on every friend\'s screen', (() => { const h = game(2, { cfg: { startWave: 1 } }); h.run(1); const gt = h.host.map.gates[0]; h.host.place(gt.x - gt.nx * 3, gt.z - gt.nz * 3, Math.atan2(gt.nx, -gt.nz)); h.host.giveGold(200); h.run(0.3, { lockUse: 0 }); h.run(0.4); return snap(h.host).locks.gates[0].open && sees(h, 0).locks.gates[0].open; })());
+  t('A friend can not trick the host with a nonsense lock message', (() => { const h = game(2, { cfg: { startWave: 1 } }); h.run(1); let ok = true; try { h.hostLink.onMessage('g1', { t: 'st', s: h.guests[0].ref.selfState(), d: [], sh: [], lk: [{ k: 'toll', i: 99 }, { k: 'pan', d: 1 }, null, { k: 5 }, { k: 'sock', i: 'x' }, 7] }); h.run(0.2); } catch (e) { ok = false; } return ok && snap(h.host).locks.gates.every((q) => !q.open); })());
 }
 // ---- random play never throws or stalls
 {

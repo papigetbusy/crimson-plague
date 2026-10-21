@@ -95,7 +95,7 @@ const Hud = (function () {
       if (cl && cl.ult) { setText('un', el.ultName, cl.ult.name + (cl.ult.active ? ' ACTIVE' : '')); el.ultFill.style.width = (Math.min(1, cl.ult.k) * 100).toFixed(1) + '%'; el.ultBox.classList.toggle('on', cl.ult.active); }
       el.frenzy.hidden = !(st.frenzy > 0);
       if (st.frenzy > 0) setText('fz', el.frenzy, 'BLOODLUST ' + Math.ceil(st.frenzy));
-      setText('gd', el.gold, st.gold + ' G');
+      setText('gd', el.gold, st.gold + ' G' + (st.locks && st.locks.keys > 0 ? '  KEY x' + st.locks.keys : ''));
       showShop(st.shop);
       showCards(st.shop ? st.shop.supplies : st.choices, st.shop ? (st.shop.skills.length ? st.shop.skills : null) : st.classChoices);
       el.over.hidden = !st.over;

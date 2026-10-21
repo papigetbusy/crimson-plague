@@ -90,7 +90,7 @@ const killOne = (r, kind) => { r.spawnAt(kind || 'fiend', r.map.start.x, r.map.s
 }
 // ---- the merchant sells guns
 {
-  const open = (drops) => { const ref = Referee.create(5); ref.setCfg({ startWave: 1, playerHp: 1e7, regen: 0, classId: 'gunslinger', startGun: 'pistol_service', gunDrops: drops }); ref.reset(); const m = ref.map;
+  const open = (drops) => { const ref = Referee.create(5); ref.setCfg({ locks: false, startWave: 1, playerHp: 1e7, regen: 0, classId: 'gunslinger', startGun: 'pistol_service', gunDrops: drops }); ref.reset(); const m = ref.map;
     ref.spawnAt('demon', m.start.x + 10, m.start.z); ref.clearWave(); ref.place(m.door.x, m.door.z, 0); go(ref, 2);
     for (let i = 0; i < 30 && (ref.snapshot().choices || ref.snapshot().classChoices); i++) ref.step(1 / 60, { pick: 0, pickClass: 0 });
     const mer = ref.snapshot().merchant; ref.place(mer.x, mer.z + 2, 0); go(ref, 0.5); return ref; };

@@ -1,14 +1,14 @@
 // Floor generator checks (src/floorgen.js): plain sentences. Run: node tests/floor.test.js
-const FloorGen = require('../src/floorgen.js');
+global.FloorGenGates = require('../src/floorgen_gates.js'); const FloorGen = require('../src/floorgen.js');
 let bad = 0;
 const t = (name, ok) => { console.log((ok ? 'ok   ' : 'FAIL ') + name); if (!ok) bad++; };
 const mk = (seed) => { let a = seed >>> 0; return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let x = Math.imul(a ^ (a >>> 15), 1 | a); x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x; return ((x ^ (x >>> 14)) >>> 0) / 4294967296; }; };
 const walk = (c) => c === '.' || c === 'c';
 function flood(f, sx, sz) {
-  const seen = new Set([sz * f.W + sx]), q = [[sx, sz]];
+  const seen = new Set([sz * f.W + sx]), q = [[sx, sz]], gate = new Set(f.gates.flatMap((g) => g.cells.map(([a, b]) => b * f.W + a)));   // the locked gates count as open here: every part of the floor can be reached once they are paid for
   for (let i = 0; i < q.length; i++) for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
     const x = q[i][0] + dx, z = q[i][1] + dz;
-    if (x < 0 || z < 0 || x >= f.W || z >= f.H || seen.has(z * f.W + x) || !walk(f.rows[z][x])) continue;
+    if (x < 0 || z < 0 || x >= f.W || z >= f.H || seen.has(z * f.W + x) || !(walk(f.rows[z][x]) || gate.has(z * f.W + x))) continue;
     seen.add(z * f.W + x); q.push([x, z]);
   }
   return seen;
@@ -29,4 +29,14 @@ t('Carpet is short: a runner through your spawn room and one leading up to the d
 t('Pillars never block the carpet and never touch a wall', all.every(({ f }) => { for (let z = 1; z < f.H - 1; z++) for (let x = 1; x < f.W - 1; x++) if (f.rows[z][x] === 'P') for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (!(dx === 0 && dz === 0) && !walk(f.rows[z + dz][x + dx]) && f.rows[z + dz][x + dx] !== 'P') return false; return true; }));
 t('Torches stand beside open floor, are at least 4 units apart, and the corner rooms have braziers', all.every(({ f }) => f.torches.length > 10 && f.torches.every((tc) => walk(f.rows[Math.floor(tc.z / 2)][Math.floor(tc.x / 2)])) && f.torches.some((tc) => tc.kind === 'brazier')));
 t('Floors have plenty of rooms, and the biggest floors have more rooms than floor 1', all.every(({ f }) => f.rooms.length >= 8) && SEEDS.every((sd) => all.find((x) => x.s === sd && x.n === 12).f.rooms.length > all.find((x) => x.s === sd && x.n === 1).f.rooms.length));
-console.log(bad ? bad + ' failed' : 'all ok'); process.exit(bad ? 1 : 0);
+console.log(bad ? bad + ' failed' : 'all ok'); // ---- locked gates
+const openOthers = (f, keep) => { const g = new Set(f.gates.filter((q, i) => i !== keep).flatMap((q) => q.cells.map(([a, b]) => b * f.W + a))); return g; };   // every gate except one stays shut
+const reachShut = (f, others) => { const seen = new Set([Math.floor(f.start.z / 2) * f.W + Math.floor(f.start.x / 2)]), q = [...seen]; for (let i = 0; i < q.length; i++) { const x = q[i] % f.W, z = (q[i] / f.W) | 0; for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, nz = z + dz, n = nz * f.W + nx; if (seen.has(n) || nx < 0 || nz < 0 || nx >= f.W || nz >= f.H || !(walk(f.rows[nz][nx]) || others.has(n))) continue; seen.add(n); q.push(n); } } return seen; };
+t('Every floor has at least one locked gate, and no more than three', all.every(({ f }) => f.gates.length >= 1 && f.gates.length <= 3));
+t('The first two floors have one gate, floors 3 to 5 up to two, and later floors up to three', all.every(({ n, f }) => f.gates.length <= FloorGenGates.countFor(n)) && FloorGenGates.countFor(1) === 1 && FloorGenGates.countFor(4) === 2 && FloorGenGates.countFor(9) === 3);
+t('A gate is three cells wide, marked as a door in the rows, and sits across a corridor', all.every(({ f }) => f.gates.every((g) => g.cells.length === 3 && g.cells.every(([x, z]) => f.rows[z][x] === 'D') && Math.abs(g.nx) + Math.abs(g.nz) === 1)));
+t('With any one gate shut (and the others open) you can not walk from your spawn to the boss door: every gate really cuts the way', all.every(({ f }) => f.gates.every((g, i) => { const seen = reachShut(f, openOthers(f, i)); return f.door.cells.every(([x, z]) => !seen.has((z + f.door.nz) * f.W + x + f.door.nx)); })));
+t('Gates keep their distance from each other and from your spawn room', all.every(({ f }) => f.gates.every((g, i) => f.gates.every((h, j) => i === j || Math.hypot(g.x - h.x, g.z - h.z) >= FloorGenGates.GAP * 2) && Math.hypot(g.x - f.start.x, g.z - f.start.z) >= 10)));
+t('The same seed puts the gates in the same places', JSON.stringify(FloorGen.generate(4, mk(5)).gates) === JSON.stringify(FloorGen.generate(4, mk(5)).gates));
+t('The safe room has no gates', FloorGen.safeRoom(1).gates.length === 0);
+process.exit(bad ? 1 : 0);

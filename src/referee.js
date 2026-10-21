@@ -18,12 +18,13 @@ const Referee = (function () {
   'use strict';
 
   const CELL = 2;       // world units per grid cell
-  const WALL_H = 5.5;   // wall height
+  const WALL_H = 11.5;   // wall height
 
   const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
   const lerp = (a, b, t) => a + (b - a) * t;
   const D = typeof RefereeData !== 'undefined' ? RefereeData : require('./referee_data.js');   // monster kinds, skills, wave plan
   const CL = typeof RefereeClass !== 'undefined' ? RefereeClass : require('./referee_class.js');   // the Gunslinger, Assassin and Witch rules
+  const RL = typeof RefereeLocks !== 'undefined' ? RefereeLocks : require('./referee_locks.js');           // the gold gates and the boss door's puzzle
   const TR = typeof RefereeTrail !== 'undefined' ? RefereeTrail : require('./referee_trail.js');         // the gold trail to the boss
   const RB = typeof RefereeBosses !== 'undefined' ? RefereeBosses : require('./referee_bosses.js');       // the Bat Lord, Lich King and Elder Dragon moves
   const ST = typeof RefereeStash !== 'undefined' ? RefereeStash : require('./referee_stash.js');         // the run stash and blueprints
@@ -47,6 +48,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
   // Every tunable number lives here.
   const DEFAULT_CFG = {
     trapTier: 0,                                       // 0 = traps get more advanced with the floor; a number forces that tier (test links)
+    locks: true,               // gold gates across the corridors and a puzzle on the boss door (tests can turn them off)
     startSafe: false, startGold: 600,                  // test links: start in the safe room (#safe) with this much gold
     // body
     eyeStand: 1.7,
@@ -59,6 +61,9 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     slideSpeed: 15,
     slideTime: 0.75,
     slideCooldown: 0.35,
+    // jump: straight up with the speed you already have (so it goes any direction you were moving), and a slide goes any direction you hold
+    jumpSpeed: 6.4,
+    gravity: 18,
     // camera
     fovBase: 64,
     fovAds: 44,
@@ -90,6 +95,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     guest: false,             // this is a friend's copy: monsters, waves and doors come from the host (applyWorld); only what is personal is played here
     selfKey: 'host',          // this player's name on the net
     selfName: 'Host',
+    selfSkin: '',                       // the look you picked in the lobby (the referee only carries the name of it; the screen draws it)
     stashOpen: false,         // can you put things in the safe-room stash? off here so tests stay steady; the game screen turns it on (later: only after the wave 100 boss when playing alone)
     modDrops: false,          // do monsters drop gun mods? off here so tests stay steady; the game screen turns it on
     gearDrops: false,         // do monsters drop armor and charms? off here so tests stay steady; the game screen turns it on
@@ -121,10 +127,11 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     /* ---------- the floor you are on (a new one is generated when you go through the door) ---------- */
     let M0, G, GW, GH, floorNo = 0, mapId = 0, doorOpen = false, floorCells = [], explored = null, exploredCell = -1;
     let flow = null, queue = null, flowCell = -1, flowTimer = 0;
+    let gateSet = new Set(), tflow = null, LK = null, bossDown = false, lockOut = [], sealedT = 0;     // the floor's locks (referee_locks.js), whether the boss has fallen, and what a friend's copy tells the host
     const solid = (cx, cz) => {
       if (cx < 0 || cz < 0 || cx >= GW || cz >= GH) return true;
       const c = G[cz][cx];
-      return c !== '.' && c !== 'c' && c !== 'd';      // 'D' is the locked door, 'd' the same door once it is open
+      return c !== '.' && c !== 'c' && c !== 'd';      // 'D' is the locked door (or a locked gate), 'd' the same once it is open
     };
     function loadFloor(n) {
       floorNo = n;
@@ -138,7 +145,39 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       for (let z = 0; z < GH; z++) for (let x = 0; x < GW; x++) if (!solid(x, z)) floorCells.push([x, z]);
       flow = new Int16Array(GW * GH); queue = new Int16Array(GW * GH); flowCell = -1; flowTimer = 0;
       explored = new Uint8Array(GW * GH); exploredCell = -1;
+      LK = RL.create(RL.layout(M0, floorNo)); bossDown = false; sealedT = 0; gateSet = new Set(); for (const g of M0.gates || []) for (const [x, z] of g.cells) gateSet.add(z * GW + x);
+      R.keys = 0; if (cfg.locks === false) LK.load({ o: LK.layout.gates.map(() => 1), s: 1 }); syncGates();
+      if (LK.layout.keeper && cfg.locks !== false && !cfg.guest) spawnKeeper(LK.layout.keeper);
       for (const a of peers.values()) { a.flow = new Int16Array(GW * GH); a.flowCell = -1; a.flowTimer = 0; }
+    }
+
+    // the Key Keeper: a big tough monster asleep in a room on your side of the key gate; every player's game hands them a key when he dies (see rewardDrops)
+    function spawnKeeper(kp) {
+      addMonster(kp.kind, kp.x, kp.z); const m = monsters[monsters.length - 1];
+      m.mini = true; m.elite = ['keeper']; m.hp = m.maxHp = m.hp * L.keeperHp; m.dmg *= L.keeperDmg; m.scale *= L.keeperScale; m.state = 'guard'; m.yaw = m.yawT = rng() * Math.PI * 2;
+    }
+    const waveCount = () => monsters.reduce((n, m) => n + (m.mini ? 0 : 1), 0);      // the Key Keeper is not part of any wave: waves end and fill up without counting him
+    // every gate that has been paid for stands open
+    function syncGates() {
+      for (const g of M0.gates || []) if (LK.S.open[g.id] && G[g.cells[0][1]][g.cells[0][0]] !== 'd') { for (const [x, z] of g.cells) G[z][x] = 'd'; flowCell = -1; for (const a of peers.values()) a.flowCell = -1; }
+    }
+    // the boss door opens when the boss is down and the puzzle is solved
+    function tryOpenDoor() { if (bossDown && LK.solved() && !doorOpen && !R.safe) openDoor(); }
+    // use what is near you (0: first action, 1: second). A friend's copy does it here and tells the host; the host and a solo game do it for real.
+    function useLock(idx) {
+      const a = LK.use(P.x, P.z, R.gold, idx, R.keys); if (!a) return;
+      const r = LK.act(a, R.gold, R.keys); if (!r) return;
+      R.gold -= r.cost; R.keys -= r.key || 0; events.push(r.ev); if (cfg.guest) lockOut.push(a); else { syncGates(); tryOpenDoor(); }
+    }
+    function hitSocket(i) {
+      const a = { k: 'sock', i }, r = LK.act(a, 0, 0); if (!r) return;
+      events.push(r.ev); if (cfg.guest) lockOut.push(a); else tryOpenDoor();
+    }
+    const locksOut = () => { const o = lockOut; lockOut = []; return o; };
+    // a friend did something at a lock (they paid with their own gold): the host makes it so
+    function remoteLocks(key, list) {
+      if (cfg.guest) return;
+      between(() => { for (const a of (list || []).slice(0, 6)) { const r = LK.act({ k: String(a && a.k), i: a && a.i | 0, d: a && a.d > 0 ? 1 : -1 }, Infinity, 1); if (r) events.push(r.ev); } syncGates(); tryOpenDoor(); });
     }
 
     function collides(x, z, r) {
@@ -203,8 +242,15 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     }
     let trailKey = '', trailPts = [];
     function trailTo(b) {                                       // cached: only worked out again when you or the boss change cell
-      const key = M0.id + ':' + flowCell + ':' + Math.floor(b.x / CELL) + ':' + Math.floor(b.z / CELL);
-      if (key !== trailKey) { trailKey = key; trailPts = TR.walk(flow, GW, GH, CELL, solid, b.x, b.z); }
+      const key = M0.id + ':' + flowCell + ':' + Math.floor(b.x / CELL) + ':' + Math.floor(b.z / CELL) + ':' + LK.gateOpenIds().length;
+      if (key !== trailKey) {                                   // the line leads through the gold gates too (you have to pay your way along it)
+        trailKey = key;
+        const blocked = (x, z) => solid(x, z) && !gateSet.has(z * GW + x);
+        if (!tflow || tflow.length !== GW * GH) tflow = new Int16Array(GW * GH);
+        tflow.fill(-1); const pc = clamp(Math.floor(P.z / CELL), 0, GH - 1) * GW + clamp(Math.floor(P.x / CELL), 0, GW - 1), q = [pc]; tflow[pc] = 0;
+        for (let i = 0; i < q.length; i++) { const cx = q[i] % GW, cz = (q[i] / GW) | 0; for (const [ox, oz] of NB) { const nx = cx + ox, nz = cz + oz; if (blocked(nx, nz)) continue; if (ox !== 0 && oz !== 0 && (blocked(cx + ox, cz) || blocked(cx, cz + oz))) continue; const ni = nz * GW + nx; if (tflow[ni] !== -1) continue; tflow[ni] = tflow[q[i]] + 1; q.push(ni); } }
+        trailPts = TR.walk(tflow, GW, GH, CELL, blocked, b.x, b.z);
+      }
       return trailPts;
     }
     function flowDir(x, z) {
@@ -230,7 +276,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     const SELF = {
       get key() { return cfg.selfKey; }, get down() { return !!R.down; }, x: 0, z: 0, yaw: 0, pitch: 0,                       // set by placePlayer, once the floor exists
       vx: 0, vz: 0, eye: cfg.eyeStand,
-      sliding: false, slideT: 0, slideCd: 0, sdx: 0, sdz: 0,
+      sliding: false, slideT: 0, slideCd: 0, sdx: 0, sdz: 0, jumpH: 0, jumpV: 0,
       sprinting: false, sprintK: 0, adsT: 0, kick: 0,
       hp: cfg.playerHp, hurt: 0, sinceHit: 0, invuln: 0, fireCd: 0,
       ammo: cfg.magSize, reloading: false, reloadT: 0, reloadDur: 0, reloadEmpty: false
@@ -263,7 +309,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
 
     function newRun() {
       R.wave = cfg.startWave; R.phase = 'intermission'; R.timer = L.firstDelay; R.level = 1; R.xp = 0;
-      R.stacks = {}; R.choices = null; R.classChoices = null; R.pending = 0; R.fogOn = false; R.fogK = 0; R.frenzy = 0; R.over = null; R.down = false; R.reviveT = 0; R.time = 0; R.hold = null; R.gold = 0; R.safe = false; R.shop = null; R.shopShut = false;
+      R.stacks = {}; R.choices = null; R.classChoices = null; R.pending = 0; R.fogOn = false; R.fogK = 0; R.frenzy = 0; R.over = null; R.down = false; R.reviveT = 0; R.time = 0; R.hold = null; R.gold = 0; R.keys = 0; R.safe = false; R.shop = null; R.shopShut = false;
       kit.reset(cfg.classId);
       W.slots = [WP.make(cfg.startGun, 0, 1), null]; W.held = 0; W.mods = []; R.stash = []; GEAR.worn = [null, null, null, null, null]; applyLoadout();
       grantStartKit();
@@ -290,7 +336,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     }
     function placePlayer() {
       P.x = M0.start.x; P.z = M0.start.z; P.yaw = M0.start.yaw; P.pitch = 0;
-      P.vx = P.vz = 0; P.sliding = false; P.slideT = 0; P.kick = 0;
+      P.vx = P.vz = 0; P.sliding = false; P.slideT = 0; P.kick = 0; P.jumpH = P.jumpV = 0;
       P.hp = maxHp(); P.invuln = 1.5; P.hurt = 0; P.sinceHit = 0;
       P.ammo = maxMag(); P.reloading = false; P.reloadT = 0; P.fireCd = 0;
       if (explored) reveal(P);
@@ -444,11 +490,12 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
         for (const t of targets()) aim(t, () => { if (Math.hypot(P.x - m.x, P.z - m.z) < L.volatileRadius) hurtPlayer(m.dmg * L.volatileDmg, m.id); });
       }
       monsters = monsters.filter((o) => o !== m);
-      if (k.boss) openDoor();
+      if (k.boss) { bossDown = true; tryOpenDoor(); if (!doorOpen) R.hold = 'door'; }     // the door stays sealed until the puzzle is solved too: waves of ordinary monsters keep coming meanwhile (see worldStep)
     }
     // what a kill leaves for YOU: loot, coins, xp (in co-op every player rolls their own when a monster dies)
     function rewardDrops(m, k) {
       dropLoot(m, k);
+      if (m.elite.includes('keeper')) { R.keys++; events.push({ type: 'keyTaken' }); }
       if (m.elite.length) for (let i = 1; i < L.eliteXp; i++) orbs.push({ id: nextId++, x: m.x + (rng() - 0.5), z: m.z + (rng() - 0.5), v: k.xp, life: L.orbLife });
     }
     // the boss is down: the door he guarded opens right there, and the next wave waits until you step through
@@ -514,9 +561,10 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       if (m.hp <= 0) return;
       dmg *= kit.takenMul(m) * gfx.takenMul(m);                               // a hexed monster takes extra
       m.hp -= dmg;
+      const died = m.hp <= 0 && !m.lifeTaken;                                    // the killing blow: you heal a flat amount of life for each kill (once per monster)
+      if (died) { m.lifeTaken = true; const gain = M.steal + gunStats().leech; if (gain > 0) P.hp = Math.min(maxHp(), P.hp + gain); }
       if (cfg.guest) { outbox.push([m.id, dmg]); if (m.hp <= 0) m.hp = 0.001; }       // a friend's copy tells the host; the host decides when it dies
       if (!quiet) { m.flash = 0.12; if (!splash) m.stun = 0.08; events.push({ type: 'hit', id: m.id, dmg: Math.round(dmg), crit, x, y, z, splash: !!splash }); }
-      const steal = M.steal + gunStats().leech; if (steal > 0) P.hp = Math.min(maxHp(), P.hp + dmg * steal);
       if (m.hp <= 0) killMonster(m);
     }
 
@@ -607,19 +655,30 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     }
     const between = (fn) => { events = pendingEv; try { return fn(); } finally { pendingEv = events; } };     // things that happen between steps are reported with the next step
     const reviveK = () => clamp((R.reviveT || 0) / RC.RULES.reviveTime, 0, 1);
-    const peerSnap = (a) => ({ key: a.key, name: a.name, x: a.x, z: a.z, yaw: a.yaw, eye: a.eye, sliding: !!a.sliding, hp: a.hp, maxHp: a.maxHp, down: !!a.down, rk: a.rk || 0, gun: a.gun, gr: a.gr, cls: a.cls });
-    const playerView = (a) => ({ key: a.key, name: a.name, x: a.x, z: a.z, yaw: a.yaw, eye: a.eye, sl: !!a.sliding, hp: a.hp, mhp: a.maxHp, dn: !!a.down, rk: a.rk || 0, gun: a.gun, gr: a.gr, cls: a.cls });
+    const peerSnap = (a) => ({ key: a.key, name: a.name, x: a.x, z: a.z, yaw: a.yaw, eye: a.eye, sliding: !!a.sliding, hp: a.hp, maxHp: a.maxHp, down: !!a.down, rk: a.rk || 0, gun: a.gun, gr: a.gr, gs: a.gs || [], cls: a.cls, skin: a.skin || '' });
+    const playerView = (a) => ({ key: a.key, name: a.name, x: a.x, z: a.z, yaw: a.yaw, eye: a.eye, sl: !!a.sliding, hp: a.hp, mhp: a.maxHp, dn: !!a.down, rk: a.rk || 0, gun: a.gun, gr: a.gr, gs: a.gs || [], cls: a.cls, skn: a.skin || '' });
     // host side
-    function remoteJoin(key, name) {
+    const cleanSkin = (s) => String(s || '').replace(/[^a-z]/g, '').slice(0, 12);
+    function remoteJoin(key, name, skin) {
       if (cfg.guest || peers.has(key)) return peers.has(key);
       if (peers.size >= RC.RULES.maxPlayers - 1) return false;
-      peers.set(key, { key, name: name || 'Friend', x: M0.start.x, z: M0.start.z, yaw: 0, eye: cfg.eyeStand, sliding: false, hp: cfg.playerHp, maxHp: cfg.playerHp, down: false, flow: new Int16Array(GW * GH), flowCell: -1, flowTimer: 0 });
+      peers.set(key, { key, name: name || 'Friend', skin: cleanSkin(skin), x: M0.start.x, z: M0.start.z, yaw: 0, eye: cfg.eyeStand, sliding: false, hp: cfg.playerHp, maxHp: cfg.playerHp, down: false, flow: new Int16Array(GW * GH), flowCell: -1, flowTimer: 0 });
       return true;
     }
     const remoteLeave = (key) => { peers.delete(key); };
     function remoteState(key, st) {
       const a = peers.get(key); if (!a) return;
-      a.x = st.x; a.z = st.z; a.yaw = st.yaw; a.eye = st.eye; a.sliding = !!st.sl; a.hp = st.hp; a.maxHp = st.mhp; a.down = !!st.dn; a.rk = st.rk; a.gun = st.gun; a.gr = st.gr; a.cls = st.cls;
+      a.x = st.x; a.z = st.z; a.yaw = st.yaw; a.eye = st.eye; a.sliding = !!st.sl; a.hp = st.hp; a.maxHp = st.mhp; a.down = !!st.dn; a.rk = st.rk; a.gun = st.gun; a.gr = st.gr; a.gs = Array.isArray(st.gs) ? st.gs.slice(0, 2) : []; a.cls = st.cls; if (st.skn) a.skin = cleanSkin(st.skn);
+    }
+    // a friend's bullets, as their game saw them: the host passes them on to everyone so each screen can draw the streaks, flashes and hits
+    function remoteShots(key, list) {
+      const ok = (v) => typeof v === 'number' && isFinite(v);
+      between(() => {
+        for (const s of (list || []).slice(0, 12)) {
+          if (![s.ox, s.oy, s.oz, s.ex, s.ey, s.ez].every(ok)) continue;
+          events.push({ type: 'peerShot', key, ox: s.ox, oy: s.oy, oz: s.oz, ex: s.ex, ey: s.ey, ez: s.ez, hit: s.hit | 0, g: String(s.g || '').slice(0, 24), r: s.r | 0, s: Array.isArray(s.s) ? s.s.slice(0, 2) : [] });
+        }
+      });
     }
     // a friend's hit on a monster: their game worked out the damage; here it only lowers the monster's health (and the host sees the number)
     function remoteDamage(key, list) {
@@ -631,20 +690,22 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
         }
       });
     }
-    const playersView = () => [playerView({ key: SELF.key, name: cfg.selfName, x: P.x, z: P.z, yaw: P.yaw, eye: P.eye, sliding: P.sliding, hp: P.hp, maxHp: maxHp(), down: R.down, rk: reviveK(), gun: W.slots[W.held].id, gr: W.slots[W.held].rarity, cls: cfg.classId })].concat(Array.from(peers.values()).map(playerView));
+    const playersView = () => [playerView({ key: SELF.key, name: cfg.selfName, x: P.x, z: P.z, yaw: P.yaw, eye: P.eye, sliding: P.sliding, hp: P.hp, maxHp: maxHp(), down: R.down, rk: reviveK(), gun: W.slots[W.held].id, gr: W.slots[W.held].rarity, gs: W.slots[W.held].status || [], cls: cfg.classId, skin: cfg.selfSkin })].concat(Array.from(peers.values()).map(playerView));
     function worldView() {
       const boss = monsters.find((m) => D.KINDS[m.kind].boss);
       return {
         t: time, run: runNo, seed: SEEDS.map, floor: floorNo, safe: R.safe, door: doorOpen, hold: R.hold, n: coopN(),
-        wave: { n: R.wave, phase: R.phase, timer: R.timer, fogOn: R.fogOn, left: spawnQ.length + monsters.length },
+        wave: { n: R.wave, phase: R.phase, timer: R.timer, fogOn: R.fogOn, left: spawnQ.length + waveCount() },
         over: R.over ? { wave: R.over.wave, time: R.over.time } : null,
         monsters: monsters.map((m) => { const k = D.KINDS[m.kind]; return RC.compact(m, m.state === 'attack' ? clamp(1 - m.atk / k.wind, 0, 1) : 0, k.moves ? BO.view(m, k).k : m.state === 'cast' ? clamp(1 - m.shW / k.shoot.wind, 0, 1) : 0); }),
         shots: mshots.view(), bossFx: boss && D.KINDS[boss.kind].moves ? BO.view(boss, D.KINDS[boss.kind]).warn : [],
-        players: playersView()
+        players: playersView(), lk: LK.state()
       };
     }
     // friend side
-    function selfState() { const g = W.slots[W.held]; return { x: P.x, z: P.z, yaw: P.yaw, eye: P.eye, sl: P.sliding, hp: P.hp, mhp: maxHp(), dn: !!R.down, rk: reviveK(), gun: g.id, gr: g.rarity, cls: cfg.classId }; }
+    function selfState() { const g = W.slots[W.held]; return { x: P.x, z: P.z, yaw: P.yaw, eye: P.eye, sl: P.sliding, hp: P.hp, mhp: maxHp(), dn: !!R.down, rk: reviveK(), gun: g.id, gr: g.rarity, gs: g.status || [], cls: cfg.classId, skn: cfg.selfSkin }; }
+    let shotOut = [];
+    const shotsOut = () => { const o = shotOut; shotOut = []; return o; };           // the bullets to tell the host about
     function guestOut() {                                       // what to tell the host: damage dealt, added up per monster
       const sum = new Map(); for (const [id, d] of outbox) sum.set(id, (sum.get(id) || 0) + d);
       outbox = []; return Array.from(sum.entries());
@@ -656,10 +717,11 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
         R.netRun = w.run;
         syncFloor(w);
         time = w.t; R.wave = w.wave.n; R.phase = w.wave.phase; R.timer = w.wave.timer; R.fogOn = w.wave.fogOn; R.hold = w.hold; R.netLeft = w.wave.left; R.coopN = w.n;
+        if (w.lk) { LK.load(w.lk); syncGates(); }
         if (w.door && !doorOpen) openDoor();
         for (const e of evs || []) worldEvent(e);
         monsters = RC.merge(monsters, w.monsters);
-        R.netShots = w.shots; R.netBossFx = w.bossFx; R.others = w.players.filter((q) => q.key !== SELF.key).map((q) => ({ key: q.key, name: q.name, x: q.x, z: q.z, yaw: q.yaw, eye: q.eye, sliding: q.sl, hp: q.hp, maxHp: q.mhp, down: q.dn, rk: q.rk, gun: q.gun, gr: q.gr, cls: q.cls }));
+        R.netShots = w.shots; R.netBossFx = w.bossFx; R.others = w.players.filter((q) => q.key !== SELF.key).map((q) => ({ key: q.key, name: q.name, x: q.x, z: q.z, yaw: q.yaw, eye: q.eye, sliding: q.sl, hp: q.hp, maxHp: q.mhp, down: q.dn, rk: q.rk, gun: q.gun, gr: q.gr, gs: q.gs || [], cls: q.cls, skin: q.skn || '' }));
         if (w.over && !R.over) { R.over = { wave: w.over.wave, kills, level: R.level, time: R.time }; events.push({ type: 'dead' }); }
       });
     }
@@ -671,6 +733,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     function worldEvent(e) {
       if (e.type === 'remoteHurt') { if (e.to === SELF.key) hurtPlayer(e.dmg, e.id); return; }
       if (e.type === 'dead') return;
+      if (e.type === 'peerShot') { if (e.key !== SELF.key) events.push(e); return; }          // your own bullets came back from the host: you already drew them
       if (e.type === 'kill') {                                  // every friend gets their own loot and xp for a kill
         const k = D.KINDS[e.kind], m = monsters.find((o) => o.id === e.id) || { id: e.id, kind: e.kind, x: e.x, z: e.z, scale: e.scale, yaw: e.yaw, elite: e.elite || [], dmg: 0 };
         kills++; kit.onKill(m); events.push(e); rewardDrops(m, k);
@@ -770,7 +833,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
 
     /* ---------------- reload ---------------- */
     function startReload() {
-      if (P.reloading || P.ammo >= maxMag()) return;
+      if (P.reloading || P.ammo >= maxMag() || kit.mods().freeAmmo) return;
       P.reloading = true; P.reloadT = 0; P.reloadEmpty = P.ammo <= 0;
       P.reloadDur = (gunStats().reload + (P.reloadEmpty ? cfg.reloadEmptyExtra : 0)) * M.reloadMul * kit.reloadMul(); kit.onReload();
       events.push({ type: 'reloadStart', dur: P.reloadDur, empty: P.reloadEmpty });
@@ -814,7 +877,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
         const dl = Math.hypot(dx, dy, dz); dx /= dl; dy /= dl; dz /= dl;
 
         const wallT = castWall(ex, ey, ez, dx, dy, dz, cfg.range);
-        let bestT = wallT, bestM = null, bestHead = false;
+        let bestT = wallT, bestM = null, bestHead = false, sock = null;
         for (const m of monsters) {
           const k = D.KINDS[m.kind], sc = m.scale, mfx = Math.sin(m.yaw), mfz = -Math.cos(m.yaw);
           for (const sph of k.spheres) {
@@ -822,11 +885,18 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
             if (t >= 0 && t < bestT) { bestT = t; bestM = m; bestHead = !!sph.head; }
           }
         }
+        sock = LK.socketHit(ex, ey, ez, dx, dy, dz, bestT); if (sock) { bestT = sock.t; bestM = null; }      // a gold socket on the wall is in the way of this bullet
         const endx = ex + dx * bestT, endy = ey + dy * bestT, endz = ez + dz * bestT;
         events.push({
           type: 'shot', extra: b > 0, ox: ex, oy: ey, oz: ez, dx, dy, dz, t: bestT,
           ex: endx, ey: endy, ez: endz, hit: bestM ? 'monster' : (bestT >= cfg.range - 0.2 ? 'none' : 'wall')
         });
+        if (cfg.coop) {                                                         // friends see this bullet too: where it started, where it ended, what it hit, and the gun look it came from
+          const q2 = (v) => Math.round(v * 100) / 100, gn = W.slots[W.held], hit = bestM ? 2 : (bestT >= cfg.range - 0.2 ? 0 : 1);
+          const rec = { ox: q2(ex), oy: q2(ey), oz: q2(ez), ex: q2(endx), ey: q2(endy), ez: q2(endz), hit, g: gn.id, r: gn.rarity, s: gn.status || [] };
+          if (cfg.guest) { if (shotOut.length < 12) shotOut.push(rec); } else events.push(Object.assign({ type: 'peerShot', key: SELF.key }, rec));
+        }
+        if (sock) hitSocket(sock.i);
         if (bestM) {
           const crit = kit.rollCrit(vol.force) || (GS.crit + M.crit > 0 && rngW() < GS.crit + M.crit); if (crit) events.push({ type: 'crit' });
           const dmg = dmgOne * (bestHead ? cfg.headMul * (1 + GS.head) : 1) * (crit ? kit.critMul() + GS.critDmg + M.critDmg : 1);
@@ -882,7 +952,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       let mvx = 0, mvz = 0;
       const was = m.state;
       if (m.state === 'guard') {                          // asleep on his feet at the door until you come into sight or hurt him
-        if (m.hp < m.maxHp || (dist < k.guard.wake && hasLOS(m.x, m.z, P.x, P.z))) { m.state = 'chase'; m.shT = 0.4; events.push({ type: 'bossWake', name: k.name }); }   // he opens the fight with a fireball
+        if (m.hp < m.maxHp || (dist < (k.guard ? k.guard.wake : L.keeperWake) && hasLOS(m.x, m.z, P.x, P.z))) { m.state = 'chase'; m.shT = 0.4; events.push(m.mini ? { type: 'keeperWake' } : { type: 'bossWake', name: k.name }); }   // he opens the fight with a fireball
         else { m.yaw += clamp(angleDiff(m.yawT, m.yaw), -dt * 9, dt * 9); return; }
       }
       if (k.summonAt && !m.summoned && m.hp <= m.maxHp * k.summonAt) {
@@ -962,7 +1032,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       const tier = cfg.trapTier || floorNo, pct = Math.min(L.trapMax, L.trapPct * (1 + L.trapScale * (tier - 1)));
       for (const t of traps) {
         if (trapState(t) !== 2) continue;
-        if (!P.trapCd && !P.sliding && onTrap(t, P.x, P.z)) { P.trapCd = L.trapTick; hurtPlayer(Math.max(1, Math.round(maxHp() * pct)), 'trap'); }
+        if (!P.trapCd && !P.sliding && P.jumpH < 0.4 && onTrap(t, P.x, P.z)) { P.trapCd = L.trapTick; hurtPlayer(Math.max(1, Math.round(maxHp() * pct)), 'trap'); }
         if (!cfg.guest) for (const m of monsters.slice()) {
           if (m.trapCd || m.hp <= 0 || D.KINDS[m.kind].hover || !onTrap(t, m.x, m.z)) continue;
           m.trapCd = L.trapTick;
@@ -1018,6 +1088,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       dt = Math.min(Math.max(dt, 0), 0.05);
       events = pendingEv; pendingEv = [];                // (what happened between steps, like a friend's hit, is reported with this one)
       inp = inp || {};
+      if (Number.isInteger(inp.lockUse) && !R.over && !R.down && !(R.choices || R.classChoices)) useLock(inp.lockUse);
       if (R.over) { if (inp.restart && !cfg.guest) { if (inp.seeds) setSeeds(inp.seeds); restartRun(); } return { state: snapshot(), events }; }
       let frozen = false;                                // co-op: a menu is open; your body stands still and can not be hurt, but the world keeps going
       const levelPending = !!(R.choices || R.classChoices);       // a level-up always comes first: the shop waits behind it, so a pick can never be eaten by the shop
@@ -1074,11 +1145,17 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       if (ads) top *= Math.min(1, cfg.adsSpeedMul * (1 + gunStats().adsMove));
 
       p.slideCd -= dt;
-      if (inp.slide && !p.sliding && p.slideCd <= 0) {
-        const sp = Math.hypot(p.vx, p.vz);
-        if (sp > cfg.walkSpeed * 0.5) {
+      // jump: leave the ground with a push up; you keep the sideways speed you had, and gravity brings you down
+      if (inp.jump && !p.sliding && p.jumpH <= 0 && !R.down) { p.jumpV = cfg.jumpSpeed; events.push({ type: 'jump' }); }
+      if (p.jumpV !== 0 || p.jumpH > 0) {
+        p.jumpH += p.jumpV * dt; p.jumpV -= cfg.gravity * dt;
+        if (p.jumpH <= 0) { p.jumpH = 0; p.jumpV = 0; events.push({ type: 'land' }); }
+      }
+      if (inp.slide && !p.sliding && p.slideCd <= 0 && p.jumpH <= 0) {
+        const sp = Math.hypot(p.vx, p.vz), want = Math.hypot(wx, wz);       // a slide goes the way you hold the stick (forward, back or sideways), or the way you were already moving
+        if (want > 0.3 || sp > cfg.walkSpeed * 0.5) {
           p.sliding = true; p.slideT = cfg.slideTime;
-          p.sdx = p.vx / sp; p.sdz = p.vz / sp;
+          p.sdx = want > 0.3 ? wx / want : p.vx / sp; p.sdz = want > 0.3 ? wz / want : p.vz / sp;
           p.slideCd = cfg.slideTime + cfg.slideCooldown;
           events.push({ type: 'slide' }); kit.slideStart();
         }
@@ -1099,7 +1176,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       if (mv.bz) p.vz = 0;
       if (p.sliding && (mv.bx || mv.bz)) p.slideT = Math.min(p.slideT, 0.05);
 
-      p.eye += ((p.sliding ? cfg.eyeSlide : cfg.eyeStand) - p.eye) * Math.min(1, dt * 16);
+      p.eye += ((p.sliding ? cfg.eyeSlide : cfg.eyeStand) + p.jumpH - p.eye) * Math.min(1, dt * 16);
       const ar = dt / (cfg.adsTime / (1 + gunStats().ads));
       p.adsT += clamp((ads ? 1 : 0) - p.adsT, -ar, ar);
       p.sprintK += ((p.sprinting ? 1 : 0) - p.sprintK) * Math.min(1, dt * 7);
@@ -1113,7 +1190,10 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       if (p.ammo > maxMag()) p.ammo = maxMag();
       if (inp.swap) swapGun();
       if (inp.pickup && !R.over) pickUpGun();
-      if (inp.reload) startReload();
+      if (CM.freeAmmo) {                                         // Bullet Storm means no reloading: a reload already under way stops and the magazine is full, so the fire never stalls
+        if (p.reloading) { p.reloading = false; p.reloadT = 0; events.push({ type: 'reloadEnd' }); }
+        p.ammo = maxMag();
+      } else if (inp.reload) startReload();
       if (p.reloading) {
         p.reloadT += dt;
         if (p.reloadT >= p.reloadDur) { p.reloading = false; p.ammo = maxMag(); events.push({ type: 'reloadEnd' }); }
@@ -1143,13 +1223,16 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       mshots.update(dt); kit.update(dt); gfx.update(dt);
       if (R.phase === 'fight') {
         spawnTimer -= dt;
-        if (spawnTimer <= 0 && spawnQ.length && monsters.length < aliveMax()) {
+        if (spawnTimer <= 0 && spawnQ.length && waveCount() < aliveMax()) {
           const heavyN = monsters.filter((m) => D.KINDS[m.kind].heavy).length;
           const shootN = monsters.filter((m) => D.KINDS[m.kind].shoot && !D.KINDS[m.kind].boss).length;
           const i = spawnQ.findIndex((kd) => (!D.KINDS[kd].heavy || D.KINDS[kd].boss || heavyN < L.heavyCap * RC.countMul(coopN())) && (!D.KINDS[kd].shoot || D.KINDS[kd].boss || shootN < L.shooterCap * RC.countMul(coopN())));
           if (i >= 0 && spawnFor(spawnQ[i])) { spawnQ.splice(i, 1); spawnTimer = L.spawnGap; } else spawnTimer = 0.3;
         }
-        if (!spawnQ.length && !monsters.length) endWave();
+        if (!spawnQ.length && !waveCount()) endWave();
+      } else if (R.hold === 'door' && !doorOpen && !R.safe) {   // the boss is down but the door is still sealed by its puzzle: a few ordinary monsters keep coming, so there is always gold to earn
+        sealedT -= dt;
+        if (sealedT <= 0 && waveCount() < L.sealedAlive) { const kd = D.waveKinds(Math.max(1, R.wave - 1), rng, null).find((q) => !D.KINDS[q].boss && !D.KINDS[q].heavy); if (kd) spawnFor(kd); sealedT = L.sealedGap; }
       } else if (R.hold === 'door') {                     // the boss is down and the door is open: the next wave waits until you step through
         if (targets().some((t) => !t.down && G[clamp(Math.floor(t.z / CELL), 0, GH - 1)][clamp(Math.floor(t.x / CELL), 0, GW - 1)] === 'd')) { if (R.safe) nextFloor(); else enterSafe(); }
       } else {
@@ -1200,6 +1283,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
         })),
         floor: floorNo, floorId: M0.id,
         door: { x: M0.door.x, z: M0.door.z, open: doorOpen },
+        locks: locksView(),
         traps: (M0.traps || []).map(trapState),
         gold: R.gold, coins: coins.map((c) => ({ id: c.id, x: c.x, z: c.z, v: c.v })),
         safe: R.safe, merchant: R.safe && M0.merchant ? { x: M0.merchant.x, z: M0.merchant.z } : null,
@@ -1214,7 +1298,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
         fog: { k: R.fogK, mul: 1 + (L.fogMul - 1) * R.fogK },      // how thick the fog is, and the fraction of the normal view distance you can see
         shots: cfg.guest ? (R.netShots || []) : mshots.view(),
         coop: { on: !!cfg.coop, n: coopN(), max: RC.RULES.maxPlayers, down: !!R.down, reviveK: reviveK(), key: SELF.key, peers: cfg.guest ? (R.others || []) : Array.from(peers.values()).map(peerSnap) },
-        wave: { n: R.wave, phase: R.phase, timer: Math.max(0, R.timer), left: cfg.guest ? (R.netLeft || 0) : spawnQ.length + monsters.length, boss: R.phase === 'fight' ? !!boss || spawnQ.some((kd) => D.KINDS[kd].boss) : R.wave % L.bossEvery === 0 },
+        wave: { n: R.wave, phase: R.phase, timer: Math.max(0, R.timer), left: cfg.guest ? (R.netLeft || 0) : spawnQ.length + waveCount(), boss: R.phase === 'fight' ? !!boss || spawnQ.some((kd) => D.KINDS[kd].boss) : R.wave % L.bossEvery === 0 },
         bossBar: boss ? { name: D.KINDS[boss.kind].name, hp: boss.hp, maxHp: boss.maxHp, state: boss.state } : null,
         level: { n: R.level, xp: R.xp, need: D.xpNeed(R.level) },
         orbs: orbs.map((o) => ({ id: o.id, x: o.x, z: o.z, v: o.v })),
@@ -1228,6 +1312,16 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       };
     }
 
+    // what the screen needs to draw the gold gates, the boss door's sign and puzzle, and the prompt when you stand at one
+    function locksView() {
+      const lay = LK.layout, S = LK.S, b = lay.boss, n = R.over || R.down ? null : LK.near(P.x, P.z, R.gold, R.keys);
+      return {
+        gates: lay.gates.map((g) => ({ i: g.id, x: g.x, z: g.z, nx: g.nx, nz: g.nz, open: !!S.open[g.id], price: g.price, type: g.type })),
+        boss: b ? { kind: b.kind, solved: S.solved, sign: b.sign, station: b.station, text: RL.signText(b), target: b.target, pan: S.pan, spin: b.spin, sym: b.sym, wheels: S.wheels.slice(), locked: S.locked.slice(), sockets: b.sockets.map((q, i) => ({ x: q.x, y: q.y, z: q.z, nx: q.nx, nz: q.nz, hit: !!S.hit[i] })) } : null,
+        keys: R.keys, keeper: (() => { const q = monsters.find((o) => o.mini); return q ? { x: q.x, z: q.z, asleep: q.state === 'guard' } : null; })(),
+        near: n, sealed: bossDown && !doorOpen && !R.safe
+      };
+    }
     // put the player somewhere (tests and tools only: the game never teleports you)
     function place(x, z, yaw) { P.x = x; P.z = z; if (yaw !== undefined) P.yaw = yaw; P.vx = P.vz = 0; flowCell = -1; }
     // put a monster somewhere (tests and tools only)
@@ -1235,13 +1329,15 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     function spawnElite(kind, x, z) { forceElite = true; addMonster(kind, x, z); forceElite = false; }   // for tests: an elite right here
     function setCfg(o) { Object.assign(cfg, o); }
     function clearWave() { spawnQ = []; for (const m of monsters.slice()) killMonster(m); }   // tests: the wave is over right now
+    function solveLocks() { LK.load({ o: LK.layout.gates.map(() => 1), s: 1 }); syncGates(); tryOpenDoor(); }   // tests: every gate stands open and the boss door's puzzle is solved
+    const lockState = () => LK;                                                       // tests: the floor's locks
     function giveGold(v) { R.gold += v; }                                               // tests: some gold right now
     function giveXp(v) { gainXp(v); }                                                  // tests: some experience right now
     function giveGun(id, rarity, wave) { dropGun(P.x, P.z, 0, WP.make(id, rarity, wave || R.wave, rngW, cfg.classId)); }   // tests: a gun lies at your feet
     function equipGun(id, rarity) {                                                     // cheat build and tests: the gun in your hands becomes this one, full magazine
       const it = WP.make(id, rarity || 0, R.wave, rngW, cfg.classId); it.ammo = WP.stats(it, cfg).mag; W.slots[W.held] = it; P.ammo = maxMag(); P.reloading = false; P.reloadT = 0; P.fireCd = 0.3;
     }
-    function gearView() { const t = GR.total(GEAR.worn); return { worn: GEAR.worn.map((it, i) => it ? GR.view(it, null) : { slot: GR.WEAR[i], empty: true }), def: Math.round(t.def * 1000) / 10, hp: Math.round(t.hp), vit: Math.round(t.vit * 100), regen: Math.round(t.regen * 10) / 10, speed: Math.round(t.speed * 100), magnet: Math.round(t.magnet * 100), dmg: Math.round(t.dmg * 100), rate: Math.round(t.rate * 100), crit: Math.round(t.crit * 1000) / 10, critdmg: Math.round(t.critdmg * 100), leech: Math.round(t.leech * 1000) / 10, reload: Math.round(t.reload * 100) }; }
+    function gearView() { const t = GR.total(GEAR.worn); return { worn: GEAR.worn.map((it, i) => it ? GR.view(it, null) : { slot: GR.WEAR[i], empty: true }), def: Math.round(t.def * 1000) / 10, hp: Math.round(t.hp), vit: Math.round(t.vit * 100), regen: Math.round(t.regen * 10) / 10, speed: Math.round(t.speed * 100), magnet: Math.round(t.magnet * 100), dmg: Math.round(t.dmg * 100), rate: Math.round(t.rate * 100), crit: Math.round(t.crit * 1000) / 10, critdmg: Math.round(t.critdmg * 100), leech: Math.round(t.leech * 10) / 10, reload: Math.round(t.reload * 100) }; }
     function giveGear(slot, rarity, wave) { dropGear(P.x, P.z, 0, GR.make(slot, rarity, wave || R.wave, rngW, cfg.classId)); }   // tests: a piece of gear lies at your feet
     function wearGear(item, at) { GEAR.worn[at === undefined ? GR.WEAR.indexOf(item.slot) : at] = item; M = computeMods(); P.hp = Math.min(P.hp, maxHp()); }   // tests: wear exactly this piece
     function equipItem(item) { const it = Object.assign({}, item); it.ammo = WP.stats(it, cfg).mag; W.slots[W.held] = it; P.ammo = maxMag(); P.reloading = false; P.reloadT = 0; P.fireCd = 0; }   // tests: hold exactly this gun item (with the affixes it carries)
@@ -1280,7 +1376,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
 
     newRun(); startFloor(); placePlayer();
     // first state, so the screen can draw before the first step
-    return { get map() { return M0; }, cfg, setCfg, place, spawnAt, spawnElite, clearWave, giveSkill, giveGold, giveXp, setHp, giveGun, equipGun, equipItem, giveGear, wearGear, seeds: () => Object.assign({}, SEEDS), setSeeds, saveData, loadData, giveMod, addMod, attachMod, detachMod, stashItem, setLoadout, stashEntry, monsterFx, step, snapshot, reset, remoteJoin, remoteLeave, remoteState, remoteDamage, worldView, selfState, guestOut, applyWorld, kinds: D.KINDS, defaults: Object.assign({}, DEFAULT_CFG) };
+    return { get map() { return M0; }, cfg, setCfg, place, spawnAt, spawnElite, clearWave, giveSkill, giveGold, giveXp, setHp, giveGun, equipGun, equipItem, giveGear, wearGear, seeds: () => Object.assign({}, SEEDS), setSeeds, saveData, loadData, giveMod, addMod, attachMod, detachMod, stashItem, setLoadout, stashEntry, monsterFx, step, snapshot, reset, remoteJoin, remoteLeave, remoteState, remoteDamage, worldView, remoteShots, shotsOut, remoteLocks, locksOut, solveLocks, lockState, selfState, guestOut, applyWorld, kinds: D.KINDS, defaults: Object.assign({}, DEFAULT_CFG) };
   }
 
   return { create };

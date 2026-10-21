@@ -19,12 +19,12 @@ const cap = D.LOOP.aliveCap;   // with the default 6 alive in wave 1, the screen
   // spawnAt rolls elites the same way waves do
   for (const m of e.ref.snapshot().monsters) { total++; if (m.elite.length) elites++; }
   t('Some of the monsters past the cap are elites, but not all of them', elites > 0 && elites < total);
-  const f = at(cap - 5 + 10, 3); f.ref.spawnElite('fiend', f.m.start.x + 12, f.m.start.z); const el = f.ref.snapshot().monsters[0];
+  const f = at(cap - 5 + 10, 3); f.ref.spawnElite('fiend', f.m.start.x + 12, f.m.start.z); const el = f.ref.snapshot().monsters.filter((q) => !q.elite.includes("keeper"))[0];
   t('An elite is bigger and much tougher than a normal one', el.elite.length >= 1 && el.maxHp > Math.min(...[1,2,3,4,5,6,7,8].map(() => hp0(f.ref, 'fiend'))) * 1.4 && el.scale > 0);
   const lots = at(cap + 40, 4); lots.ref.spawnElite('fiend', lots.m.start.x + 12, lots.m.start.z);
-  t('Far past the cap an elite carries several abilities at once', lots.ref.snapshot().monsters[0].elite.length >= 4);
+  t('Far past the cap an elite carries several abilities at once', lots.ref.snapshot().monsters.filter((q) => !q.elite.includes("keeper"))[0].elite.length >= 4);
   const early = at(1, 4); early.ref.spawnElite('fiend', early.m.start.x + 12, early.m.start.z);
-  t('A new elite on an early wave carries just one ability', early.ref.snapshot().monsters[0].elite.length === 1);
+  t('A new elite on an early wave carries just one ability', early.ref.snapshot().monsters.filter((q) => !q.elite.includes("keeper"))[0].elite.length === 1);
 }
 { // volatile blast: kill a volatile elite next to you and it hurts
   let hurt = false, blast = false;

@@ -104,7 +104,7 @@ const WorldView = (function () {
         door.lamp.intensity = doorOpen ? 0 : 1.1 + 0.25 * Math.sin(time * 3);
       }
     }
-    return { load, update, light: (x, y, z, nx, ny, nz) => baked.light(x, y, z, nx, ny, nz), setFogFar: (v) => { fogFar = v; }, mats: worldMats };
+    return { load, update, light: (x, y, z, nx, ny, nz) => baked.light(x, y, z, nx, ny, nz), setFogFar: (v) => { fogFar = v; }, setFlame: (outer, inner) => { flameOuter.color.setHex(outer); flameInner.color.setHex(inner); }, mats: worldMats };
   }
   return { create };
 })();

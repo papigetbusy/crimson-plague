@@ -8,7 +8,7 @@ const RefereeClass = (function () {
   // env: { rng, P, monsters(), damage(m, dmg, crit, x, y, z, splash, quiet), heal(v), maxHp(), baseDmg(), isBoss(m), event(e), tryMove(obj, dx, dz, r), nextId() }
   function create(env) {
     let id = '', def = null, owned = {}, use = {}, ult = null;
-    let cloakT = 0, shadowT = 0, magBoost = false, shotCount = 0, qdReady = false, qdCd = 0, ultT = 0, charge = 0, cloudTick = 0, thralls = [];
+    let cloakT = 0, shadowT = 0, magBoost = false, shotCount = 0, qdT = 0, ultT = 0, charge = 0, cloudTick = 0, thralls = [];
 
     const fx = (m) => m.fx || (m.fx = { bleed: null, poison: null, hexT: 0, hexMul: 0, tick: 0 });
     const lvl = (sid) => owned[sid] || 0;
@@ -18,7 +18,7 @@ const RefereeClass = (function () {
 
     function reset(classId) {
       id = C.CLASSES[classId] ? classId : ''; def = id ? C.CLASSES[id] : null;
-      owned = {}; use = {}; cloakT = shadowT = ultT = qdCd = charge = cloudTick = 0; magBoost = qdReady = false; shotCount = 0; thralls = [];
+      owned = {}; use = {}; cloakT = shadowT = ultT = qdT = charge = cloudTick = 0; magBoost = false; shotCount = 0; thralls = [];
       ult = def ? def.ult : null;
     }
     // a skill gets better the more it is used (and every time you pick it again)
@@ -72,6 +72,7 @@ const RefereeClass = (function () {
     /* ----- hooks ----- */
     function slideStart() {
       if (lvl('shadowstep')) shadowT = RU.shadowWindow;
+      if (lvl('quickdraw')) { qdT = val('quickdraw').win; }
       if (lvl('cloak')) { cloakT = val('cloak').dur; env.event({ type: 'cloakStart', dur: cloakT }); used('cloak'); }
     }
     // before the bullets of a shot are fired: how many extra bullets, and whether this shot is a sure crit
@@ -88,7 +89,7 @@ const RefereeClass = (function () {
     const rollCrit = (force) => !!force || (critChance() > 0 && env.rng() < critChance());
     function critMul() { return RU.critMul; }
     function onReload() { magBoost = false; }
-    function reloadMul() { if (qdReady) { qdReady = false; return 0.02; } return 1; }
+    function reloadMul() { if (qdT > 0) { qdT = 0; used('quickdraw'); return val('quickdraw').mul; } return 1; }      // a slide just before makes this one reload faster (not instant)
     function takenMul(m) { return m.fx && m.fx.hexT > 0 ? 1 + m.fx.hexMul : 1; }
 
     // a status newly landing on a monster tells the screen (a puff of colour and a badge); a refresh does not
@@ -125,7 +126,6 @@ const RefereeClass = (function () {
         charge++;
         if (charge >= def.ult.need) { charge = 0; ultT = val(def.ult.id).dur; env.event({ type: 'ultStart', id: def.ult.id, name: def.ult.name, dur: ultT }); used(def.ult.id); }
       }
-      if (lvl('quickdraw') && qdCd <= 0) { qdReady = true; qdCd = val('quickdraw').cd; used('quickdraw'); }
       if (lvl('siphon')) { env.heal(val('siphon').heal); used('siphon'); }
       if (ultOn() && id === 'assassin') env.heal(env.maxHp() * val('deathmark').heal);
       const f = m.fx;
@@ -158,7 +158,7 @@ const RefereeClass = (function () {
       }
     }
     function update(dt) {
-      cloakT = Math.max(0, cloakT - dt); shadowT = Math.max(0, shadowT - dt); qdCd = Math.max(0, qdCd - dt);
+      cloakT = Math.max(0, cloakT - dt); shadowT = Math.max(0, shadowT - dt); qdT = Math.max(0, qdT - dt);
       if (ultT > 0) {
         ultT -= dt;
         if (ultT <= 0) { ultT = 0; env.event({ type: 'ultEnd' }); }

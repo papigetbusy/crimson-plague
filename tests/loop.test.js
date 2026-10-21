@@ -83,15 +83,15 @@ const god = (ref) => { ref.setCfg({ playerHp: 1e7, regen: 0 }); ref.reset(); };
 }
 const nearBoss = (ref, d) => { const b = ref.snapshot().monsters.find((q) => q.kind === 'demon'); ref.place(b.x + ref.map.door.nx * (d || 6), b.z + ref.map.door.nz * (d || 6)); };   // walk up to him (the floor is big: the tests do not make the bot cross it)
 { // starting late hands out upgrades
-  const a = Referee.create(3); a.setCfg({ startWave: 10 }); a.reset();
+  const a = Referee.create(3); a.setCfg({ locks: false, startWave: 10 }); a.reset();
   const sa = a.snapshot(), got = sa.skills.reduce((n, k) => n + k.n, 0);
   t('Starting on wave 10 gives you random upgrades so you are not too weak (about 7)', got >= 6 && got <= 8 && sa.level.n === 1 + got);
-  const b = Referee.create(3); b.setCfg({ startWave: 10 }); b.reset();
+  const b = Referee.create(3); b.setCfg({ locks: false, startWave: 10 }); b.reset();
   t('The same seed hands out the same upgrades', JSON.stringify(sa.skills) === JSON.stringify(b.snapshot().skills));
   const c = Referee.create(3); t('A normal start on wave 1 gives no free upgrades', c.snapshot().skills.length === 0);
 }
 { // boss wave
-  const ref = Referee.create(14); ref.setCfg({ startWave: 10, playerHp: 1e7, regen: 0 }); ref.reset();
+  const ref = Referee.create(14); ref.setCfg({ locks: false, startWave: 10, playerHp: 1e7, regen: 0 }); ref.reset();
   const r = run(ref, (o) => o.bossBar, 40, { idle: true });
   t('Starting on wave 10 brings out the demon lord with a boss bar', !!r.out.bossBar && r.out.bossBar.name === 'Demon Lord' && r.out.wave.boss);
   const m = r.out.monsters.find((q) => q.kind === 'demon');
@@ -101,7 +101,7 @@ const nearBoss = (ref, d) => { const b = ref.snapshot().monsters.find((q) => q.k
   t('The boss rears back (wind-up) and then charges at you', states.has('windup') && states.has('charge'));
 }
 { // the boss guards the door
-  const ref = Referee.create(16); ref.setCfg({ startWave: 10, playerHp: 1e7, regen: 0 }); ref.reset();
+  const ref = Referee.create(16); ref.setCfg({ locks: false, startWave: 10, playerHp: 1e7, regen: 0 }); ref.reset();
   const door = ref.map.door;
   const r = run(ref, (o) => o.bossBar, 40, { idle: true });
   const b0 = r.out.monsters.find((q) => q.kind === 'demon');
@@ -114,7 +114,7 @@ const nearBoss = (ref, d) => { const b = ref.snapshot().monsters.find((q) => q.k
   t('When you come into his sight he wakes, and the compass disappears as the fight starts', w.out.compass === null && w.out.monsters.find((q) => q.kind === 'demon').state !== 'guard');
 }
 { // hurting him from afar also wakes him
-  const ref = Referee.create(17); ref.setCfg({ startWave: 10, playerHp: 1e7, regen: 0 }); ref.reset();
+  const ref = Referee.create(17); ref.setCfg({ locks: false, startWave: 10, playerHp: 1e7, regen: 0 }); ref.reset();
   run(ref, (o) => o.bossBar, 40, { idle: true });
   const b = ref.snapshot().monsters.find((q) => q.kind === 'demon');
   ref.place(b.x + ref.map.door.nx * 15, b.z + ref.map.door.nz * 15);
@@ -123,7 +123,7 @@ const nearBoss = (ref, d) => { const b = ref.snapshot().monsters.find((q) => q.k
   t('Shoot him from there and he wakes', run(ref, (o) => o.monsters.find((q) => q.kind === 'demon').state !== 'guard', 8).out.monsters.find((q) => q.kind === 'demon').state !== 'guard');
 }
 { // the door opens where he falls, and the next floor is bigger
-  const ref = Referee.create(18); ref.setCfg({ startWave: 10, playerHp: 1e7, regen: 0, damage: 400 }); ref.reset();
+  const ref = Referee.create(18); ref.setCfg({ locks: false, startWave: 10, playerHp: 1e7, regen: 0, damage: 400 }); ref.reset();
   t('Floors are ten waves long: waves 1 to 10 are floor 1, wave 11 starts floor 2', Referee.create(1).snapshot().floor === 1);
   run(ref, (o) => o.bossBar, 40, { idle: true }); nearBoss(ref, 9);
   const kill = run(ref, (o, ev) => ev.some((e) => e.type === 'doorOpen'), 90);
@@ -161,7 +161,7 @@ const nearBoss = (ref, d) => { const b = ref.snapshot().monsters.find((q) => q.k
   t('Monsters appear a walk away from you, not on the far side of a huge floor', r.out.monsters.length >= 4 && r.out.monsters.every((m) => Math.hypot(m.x - r.out.player.x, m.z - r.out.player.z) < 60));
 }
 { // boss summons at half health
-  const ref = Referee.create(15); ref.setCfg({ startWave: 10, playerHp: 1e7, regen: 0, damage: 120 }); ref.reset();
+  const ref = Referee.create(15); ref.setCfg({ locks: false, startWave: 10, playerHp: 1e7, regen: 0, damage: 120 }); ref.reset();
   run(ref, (o) => o.bossBar, 40, { idle: true }); nearBoss(ref);
   const r = run(ref, (o, ev) => ev.some((e) => e.type === 'bossSummon'), 90);
   t('At half health the boss calls hounds to its side, once', r.ev.filter((e) => e.type === 'bossSummon').length === 1);
@@ -169,7 +169,7 @@ const nearBoss = (ref, d) => { const b = ref.snapshot().monsters.find((q) => q.k
   t('Killing the boss pays out a lot of XP and a health pickup', r2.ev.some((e) => e.type === 'kill' && e.boss) && (r2.out.orbs.some((q) => q.v >= 400) || r2.ev.some((e) => e.type === 'orb' && e.v >= 400)));
 }
 { // caps
-  const ref = Referee.create(16); ref.setCfg({ startWave: 12, playerHp: 1e7 }); ref.reset();
+  const ref = Referee.create(16); ref.setCfg({ locks: false, startWave: 12, playerHp: 1e7 }); ref.reset();
   let maxAlive = 0, maxHeavy = 0;
   for (let i = 0; i < 60 * 40; i++) {
     const o = ref.step(1 / 60, {}); maxAlive = Math.max(maxAlive, o.state.monsters.length);
@@ -198,6 +198,6 @@ const nearBoss = (ref, d) => { const b = ref.snapshot().monsters.find((q) => q.k
 { // determinism
   const sim = () => { const ref = Referee.create(21); god(ref); const r = run(ref, (o) => o.wave.n >= 2, 120); return [r.out.kills, r.out.level.n, r.out.monsters.length, r.out.player.x.toFixed(3)].join(); };
   t('The same seed plays out the same way every time', sim() === sim());
-  t('The hall ceiling is 5.5 high, so the Demon Lord (4.2 tall) has room and the torches sit lower than the ceiling', Referee.create(1).map.WALL_H === 5.5 && Referee.create(1).map.torches.every((x) => x.y < 5.5 - 1));
+  t('The hall ceiling is 11.5 high (raised by 6), so the Elder Dragon and Demon Lord have room and the torches sit lower than the ceiling', Referee.create(1).map.WALL_H === 11.5 && Referee.create(1).map.torches.every((x) => x.y < 11.5 - 1));
 }
 process.exit(bad ? 1 : 0);

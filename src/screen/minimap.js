@@ -66,6 +66,7 @@ const Minimap = (function () {
       }
       trail(ctx, st.trail, px, pz, s);
       if (st.door) marker(ctx, px(st.door.x), pz(st.door.z), Math.max(3, s * 1.2), st.door.open ? '#6fe08a' : '#e2b03c');
+      if (st.locks && st.locks.keeper) marker(ctx, px(st.locks.keeper.x), pz(st.locks.keeper.z), Math.max(3, s * 1.6), '#f0c040');   // the Key Keeper, gold, until he falls
       if (st.compass) marker(ctx, px(st.compass.x), pz(st.compass.z), Math.max(3, s * 1.4), '#e23a42');   // the Demon Lord, from the moment he appears until he wakes
       // every monster alive, so you can find the last one or see where to run; with only a few left, ones off the edge of the small map are pinned to its rim
       const few = st.monsters.length <= 6;

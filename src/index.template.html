@@ -54,6 +54,11 @@ body {
 #coopMenu { display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap; }
 #coopPanel button, #coopPanel input { font-family: var(--body); font-weight: 700; font-size: 14px; color: var(--ink); background: #12202e; border: 1px solid #4a7aa8; padding: 7px 12px; }
 #coopPanel input { width: 7em; text-transform: uppercase; letter-spacing: 0.2em; text-align: center; }
+#coopSkins { display: flex; gap: 5px; justify-content: center; align-items: center; flex-wrap: wrap; margin: 2px 0 8px; }
+#coopPanel #coopSkins button.skinBtn { width: 34px; height: 34px; padding: 0; border: 2px solid #4a7aa8; background: linear-gradient(135deg, var(--tone) 55%, var(--glow) 56%); }
+#coopPanel #coopSkins button.skinBtn.sel { border-color: var(--gold); box-shadow: 0 0 10px rgba(207, 165, 74, 0.7); }
+#coopPanel #coopSkins button.skinDice { width: auto; padding: 4px 8px; font-size: 12px; }
+#coopSkinName { flex-basis: 100%; text-align: center; font-size: 12px; color: var(--gold); min-height: 1.2em; }
 #coopPanel #coopName { width: 9em; text-transform: none; letter-spacing: 0; }
 #coopPanel button { cursor: pointer; touch-action: manipulation; }
 #coopInfo { margin: 8px 0 2px; font-size: 14px; font-weight: 700; color: #bfe0ff; min-height: 1.2em; }
@@ -74,7 +79,7 @@ body {
   #classPick { margin: 0; gap: 6px; } #classPick button { padding: 4px 4px; gap: 1px; } #classPick b { font-size: 16px; } #classPick span { display: none; } #classPick em { font-size: 10px; }
   #startLists { max-height: 9vh; margin: 0; } #startLists * { font-size: 10px; }
   #play { font-size: 20px; padding: 6px 22px 4px; } #coopBtn, #codexBtn { font-size: 11px; padding: 6px 10px; margin-top: 0; }
-  #coopPanel { margin: 2px auto; padding: 4px 6px; } #coopPanel button, #coopPanel input { font-size: 12px; padding: 4px 8px; } #coopInfo { margin: 4px 0 0; font-size: 12px; } #coopRow { margin-bottom: 3px; font-size: 11px; }
+  #coopPanel { margin: 2px auto; padding: 4px 6px; } #coopSkins { margin: 0 0 3px; gap: 3px; } #coopPanel #coopSkins button.skinBtn { width: 26px; height: 26px; } #coopSkinName { font-size: 10px; } #coopPanel button, #coopPanel input { font-size: 12px; padding: 4px 8px; } #coopInfo { margin: 4px 0 0; font-size: 12px; } #coopRow { margin-bottom: 3px; font-size: 11px; }
   body.touch .touchhelp { display: none !important; }
   #start .card h1 { font-size: 30px; }
 }
@@ -115,6 +120,8 @@ body {
 .cxbody h2 { margin: 2px 0 8px; font-family: var(--display); font-weight: 400; font-size: 26px; color: var(--gold); } .cxbody h3 { margin: 12px 0 4px; font-size: 16px; color: #fff; letter-spacing: 0.04em; border-bottom: 1px solid #3a1a1e; } .cxbody h3 small { font-size: 10px; color: var(--dim); letter-spacing: 0.14em; text-transform: uppercase; margin-left: 6px; }
 .cxbody p { margin: 4px 0; color: var(--ink); } .cxbody ul { margin: 4px 0; padding-left: 18px; } .cxbody li { margin: 4px 0; } .cxbody i { color: var(--dim); }
 .cxbody table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 12.5px; } .cxbody th { text-align: left; color: var(--gold); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 6px; border-bottom: 1px solid var(--gold-dim); } .cxbody td { padding: 3px 6px; border-bottom: 1px solid #2a1418; vertical-align: top; }
+#lockBox { position: fixed; z-index: 6; left: 50%; bottom: 30%; transform: translateX(-50%); display: none; text-align: center; font-family: var(--body); font-size: 14px; color: var(--ink); background: var(--glass); border: 2px solid var(--gold-dim); padding: 8px 12px; text-shadow: 0 1px 0 #000; } #lockBox.show { display: block; } #lockTxt { margin-bottom: 4px; color: var(--gold, #e8b830); letter-spacing: 0.04em; }
+#lockBox button { min-width: 120px; min-height: 42px; margin: 3px 4px 0; font: inherit; color: var(--ink); background: rgba(226, 58, 66, 0.55); border: 2px solid var(--gold-dim); touch-action: manipulation; } #lockBox button.no { opacity: 0.45; } #lockBox button[hidden] { display: none; }
 #floorCard { position: fixed; z-index: 7; display: none; pointer-events: none; left: 0; top: 0; width: clamp(150px, 26vw, 210px); padding: 6px 9px; font-family: var(--body); font-size: 12px; color: var(--ink); background: var(--glass); border: 2px solid var(--gold-dim); text-shadow: 0 1px 0 #000; }
 #floorCard h4 { margin: 0; font-size: 15px; letter-spacing: 0.06em; } #floorCard .sub { font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--dim); margin-bottom: 3px; }
 #floorCard .nums { display: grid; grid-template-columns: 1fr 1fr; gap: 0 8px; } #floorCard .nums b { color: #fff; } #floorCard em { font-style: normal; font-size: 10px; } #floorCard em.up { color: #5fe070; } #floorCard em.dn { color: #e23a42; }
@@ -185,6 +192,7 @@ body.touch #bAds { width: var(--aw); height: var(--aw); right: calc(var(--edge) 
 body.touch #bSlide { width: var(--lw); height: var(--lw); right: calc(var(--edge) + 3vh + var(--fw) + 2vh + 7vh + var(--rw) + 2vh); bottom: calc(var(--bot) + 12vh + var(--slot) + 2vh); }
 body.touch #bSprint { width: var(--rw); height: var(--rw); right: calc(var(--edge) + 3vh + var(--fw) + 2vh + 7vh); bottom: calc(var(--bot) + 12vh + var(--slot) + 2vh); }
 
+body.touch #bJump { width: var(--lw); height: var(--lw); right: calc(var(--edge) + 3vh + var(--fw) / 2 - var(--lw) / 2); bottom: calc(var(--bot) + 9vh + var(--fw) + 2vh); }
 body.touch #bSwap { width: var(--lw); height: var(--lw); right: calc(var(--edge) + 3vh + var(--fw) + 2vh + 7vh); bottom: calc(var(--bot) + 12vh + var(--slot) + 2vh + var(--rw) + 2vh); font-size: clamp(9px, 2.4vh, 12px); }
 body.touch #bSwap.off { opacity: 0.35; }
 body.touch #bReload { width: var(--ew); height: var(--ew); font-size: clamp(9px, 2.4vh, 12px); letter-spacing: 0.06em; right: calc(var(--edge) + 3vh + var(--fw) + 2vh + var(--aoff)); bottom: calc(var(--bot) + 12vh); }
@@ -357,8 +365,10 @@ body.pad .card3.sel { border-color: var(--gold); background: linear-gradient(#3c
 <button class="act" id="bAds" type="button">Aim</button>
 <button class="act" id="bSprint" type="button">Run</button>
 <button class="act" id="bReload" type="button">Reload</button>
+<button class="act" id="bJump" type="button">Jump</button>
 <button class="act" id="bSlide" type="button">Slide</button>
 <button class="act" id="bSwap" type="button">Swap</button>
+<div id="lockBox"><div id="lockTxt"></div><button id="lockB0" type="button"></button><button id="lockB1" type="button"></button></div>
 <div id="floorCard"></div>
 <div id="gearMenu" class="overlay gm" hidden><div class="gbody"></div></div>
 <div id="stashMenu" class="overlay gm" hidden><div class="gbody"></div></div>
@@ -387,7 +397,7 @@ body.pad .card3.sel { border-color: var(--gold); background: linear-gradient(#3c
     <div class="keys">
       <p><b>WASD</b> move</p><p><b>Mouse</b> look, <b>Click</b> fire</p>
       <p><b>Shift</b> sprint</p><p><b>Right click</b> aim</p>
-      <p><b>C</b> slide while running</p><p><b>R</b> reload</p><p><b>Tab</b> tuning</p><p><b>Q</b> swap gun</p><p><b>E</b> pick up gun</p><p><b>G</b> gear menu</p><p></p>
+      <p><b>C</b> slide any direction</p><p><b>Space</b> jump</p><p><b>R</b> reload</p><p><b>Tab</b> tuning</p><p><b>Q</b> swap gun</p><p><b>E</b> pick up gun</p><p><b>G</b> gear menu</p><p></p>
     </div>
     <div id="classPick">
       <button type="button" data-cls="gunslinger" class="sel"><b>Gunslinger</b><span>Fast guns, lots of bullets</span><em>+15% fire rate</em></button>
@@ -400,6 +410,7 @@ body.pad .card3.sel { border-color: var(--gold); background: linear-gradient(#3c
     <button id="coopBtn" type="button">PLAY WITH FRIENDS</button>
     <div id="coopPanel" hidden>
       <div id="coopRow"><label for="coopName">Your name</label><input id="coopName" maxlength="12" autocomplete="off"></div>
+      <div id="coopSkins" role="group" aria-label="Your look"></div>
       <div id="coopMenu"><button id="coopHost" type="button">HOST A GAME (up to 5 players)</button><span>or</span><input id="coopCode" maxlength="5" placeholder="CODE" autocapitalize="characters" autocomplete="off" aria-label="Room code"><button id="coopJoin" type="button">JOIN</button></div>
       <p id="coopInfo"></p>
       <button id="coopLeave" type="button" hidden>LEAVE THE ROOM</button>

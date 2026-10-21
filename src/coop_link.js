@@ -11,8 +11,8 @@ const CoopLink = (function () {
     let acc = 0, buf = [];
     return {
       onMessage(key, msg) {
-        if (msg.t === 'hello') { const ok = ref.remoteJoin(key, msg.name); send(key, { t: 'welcome', ok, seed: ref.seeds().map, key }); }
-        else if (msg.t === 'st') { ref.remoteState(key, msg.s); if (msg.d && msg.d.length) ref.remoteDamage(key, msg.d); }
+        if (msg.t === 'hello') { const ok = ref.remoteJoin(key, msg.name, msg.skin); send(key, { t: 'welcome', ok, seed: ref.seeds().map, key }); }
+        else if (msg.t === 'st') { ref.remoteState(key, msg.s); if (msg.d && msg.d.length) ref.remoteDamage(key, msg.d); if (msg.sh && msg.sh.length) ref.remoteShots(key, msg.sh); if (msg.lk && msg.lk.length) ref.remoteLocks(key, msg.lk); }
         else if (msg.t === 'bye') ref.remoteLeave(key);
       },
       leave(key) { ref.remoteLeave(key); },
@@ -31,12 +31,12 @@ const CoopLink = (function () {
   function guest(ref, send, name, onWelcome) {
     let acc = 0, welcomed = false;
     return {
-      hello() { send({ t: 'hello', name }); },
+      hello() { send({ t: 'hello', name, skin: ref.cfg.selfSkin || '' }); },
       get ready() { return welcomed; },
       onMessage(msg) { if (msg.t === 'welcome') { welcomed = !!msg.ok; if (onWelcome) onWelcome(msg); } else if (msg.t === 'go') { if (onWelcome) onWelcome(msg); } else if (msg.t === 'w') ref.applyWorld(msg.w, msg.e); },
       tick(dt) {
         acc += dt; if (acc < EVERY_FRIEND) return;
-        acc = 0; send({ t: 'st', s: ref.selfState(), d: ref.guestOut() });
+        acc = 0; send({ t: 'st', s: ref.selfState(), d: ref.guestOut(), sh: ref.shotsOut(), lk: ref.locksOut() });
       },
       bye() { send({ t: 'bye' }); }
     };

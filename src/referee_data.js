@@ -59,7 +59,7 @@ const RefereeData = (function () {
     { id: 'speed',  name: 'Fleet Foot',       desc: '+8% move speed',                  max: 8,  per: 0.08 },
     { id: 'multi',  name: 'Split Shot',       desc: '+1 bullet every shot',            max: 4,  per: 1 },
     { id: 'hp',     name: 'Iron Blood',       desc: '+25 max health and heal 25',      max: 8,  per: 25 },
-    { id: 'steal',  name: 'Leech',            desc: 'Heal 3% of damage you deal',      max: 6,  per: 0.03 },
+    { id: 'steal',  name: 'Leech',            desc: 'Heal 1 life for every kill',        max: 6,  per: 1 },
     { id: 'reload', name: 'Quick Hands',      desc: '15% faster reload',               max: 5,  per: 0.15 },
     { id: 'blast',  name: 'Hellfire Rounds',  desc: 'Hits explode for 35% damage',     max: 5,  per: 0.35 },
     { id: 'magnet', name: 'Grave Magnet',     desc: '+60% pickup range',               max: 4,  per: 0.6 },
@@ -86,6 +86,8 @@ const RefereeData = (function () {
     eliteAffixEvery: 8, eliteAffixMax: 4,               // an elite carries one ability, plus one more for every 8 waves past the cap
     volatileRadius: 3.6, volatileDmg: 1.0,              // an exploding elite hurts you within this far, for this times its damage
     goldPerXp: 0.4, goldWave: 0.06, goldElite: 3, coinMagnet: 4, coinPickup: 0.9, coinLife: 40,   // gold: a kill drops this much per point of its xp, a bit more every wave, triple from elites
+    keeperHp: 6, keeperDmg: 1.4, keeperScale: 1.35, keeperWake: 11,   // the Key Keeper (a mini boss that holds a gate key): this many times the health and damage of his kind, this much bigger, wakes when you come this close in sight
+    sealedAlive: 6, sealedGap: 3,   // while the boss door is sealed by its puzzle, up to this many ordinary monsters at a time, one every few seconds
     shopRadius: 3.2, shopHeal: 100, shopSkill: 150, shopSkillPer: 75, shopOffers: 3,   // the merchant: a full heal, and up to three class skill levels that cost more the higher the skill already is
     trapPct: 0.12, trapScale: 0.12, trapMax: 0.35, trapTick: 0.7,           // traps: a hit takes this share of your health, a bit more on deeper floors (up to the max), and again every so often while you stand in it
     trapMonsterPct: 0.08, trapBoss: 0.25, ventEvery: 3.2, ventWarn: 0.6, ventFire: 0.8, pulseEvery: 2.8, pulseUp: 1.4,   // monsters lose this share of their health per tick (a boss a quarter of that); a vent glows then fires on its beat; pulse spikes are up for half of theirs

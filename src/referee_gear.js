@@ -27,14 +27,14 @@ const RefereeGear = (function () {
     { id: 'haste',   name: 'Haste',        stat: 'rate',    base: 0.04,  text: 'fire rate', slots: ['charm'] },
     { id: 'eye',     name: 'Keen Eye',     stat: 'crit',    base: 0.03,  text: 'crit chance', slots: ['head', 'charm'], flat: true },
     { id: 'ruin',    name: 'Ruin',         stat: 'critdmg', base: 0.10,  text: 'crit damage', slots: ['charm'] },
-    { id: 'leech',   name: 'Leech',        stat: 'leech',   base: 0.012, text: 'of damage healed', slots: ['chest', 'charm'], flat: true },
+    { id: 'leech',   name: 'Leech',        stat: 'leech',   base: 1, text: 'life on kill', slots: ['chest', 'charm'], unit: '' },
     { id: 'quick',   name: 'Quick Hands',  stat: 'reload',  base: 0.06,  text: 'faster reload', slots: ['head', 'charm'] },
     // class-only lines: bigger than the plain ones, and only for that class
     { id: 'g_hands', name: "Gunslinger's Hands", stat: 'reload', base: 0.12, text: 'faster reload', slots: ['head', 'charm'], cls: 'gunslinger' },
     { id: 'g_nerve', name: 'Steel Nerve',  stat: 'def',     base: 0.05,  text: 'defense', slots: ['chest'], cls: 'gunslinger' },
     { id: 'a_shadow', name: 'Shadow Step', stat: 'speed',   base: 0.10,  text: 'move speed', slots: ['boots', 'charm'], cls: 'assassin' },
     { id: 'a_fang',  name: 'Viper Fang',   stat: 'critdmg', base: 0.22,  text: 'crit damage', slots: ['charm', 'head'], cls: 'assassin' },
-    { id: 'w_pact',  name: 'Blood Pact',   stat: 'leech',   base: 0.03,  text: 'of damage healed', slots: ['chest', 'charm'], cls: 'witch', flat: true },
+    { id: 'w_pact',  name: 'Blood Pact',   stat: 'leech',   base: 2,  text: 'life on kill', slots: ['chest', 'charm'], cls: 'witch', unit: '' },
     { id: 'w_bloom', name: 'Grave Bloom',  stat: 'regen',   base: 0.9,   text: 'health a second', slots: ['chest', 'charm'], cls: 'witch', flat: true }
   ];
   const BY_ID = {}; for (const a of LIST) BY_ID[a.id] = a;

@@ -3,6 +3,8 @@
    Grid characters (same as the old hall): '#' stone (flavoured later), '.' floor, 'c' carpet, 'P' pillar, 'D' the locked door.
    You spawn in one corner room; the door is in the opposite corner room, on the outer wall. Short carpet runners lie in the corner rooms and in some others; the one in the door room leads up to the door. */
 const FloorGen = (function () {
+  const Gates = typeof FloorGenGates !== 'undefined' ? FloorGenGates : require('./floorgen_gates.js');
+  const makeLcg = (seed) => { let a = seed >>> 0; return () => { a = (Math.imul(a, 1664525) + 1013904223) >>> 0; return a / 4294967296; }; };
   const CELL = 2;
   const open = (c) => c === '.' || c === 'c';
 
@@ -114,11 +116,15 @@ const FloorGen = (function () {
     for (let z = 0; z < H; z++) for (let x = 0; x < W; x++) if (g[z][x] === '#') { const k = (x + z) % 3; g[z][x] = k === 0 ? 'B' : k === 1 ? 'W' : '#'; }
     for (const [x, z] of doorCells) g[z][x] = 'D';
 
+    // locked gates across the corridors that lead to the boss's door (they use their own random stream, so the rest of the floor is the same as before)
+    const gateRng = makeLcg((floor * 7919 + W * 31 + rooms.length) >>> 0);
+    const gates = Gates.place(g, W, H, rooms, sc, beside, floor, gateRng).map((q, id) => ({ id, cells: q.cells, nx: q.nx, nz: q.nz, x: q.x * CELL, z: q.z * CELL }));
+    if (!gates.length) return null;                           // a floor needs at least one gate: try again (the next try uses the next numbers of the same stream)
     const torches = placeTorches(g, W, H, rooms, doorCells, dn, rng);
     const traps = placeTraps(g, rooms, tier, rng);          // last, so the hall itself is the same as before traps existed
     const yaw = Math.atan2(dc[0] - sc[0], -(dc[1] - sc[1]));
     return {
-      W, H, CELL, floor, rows: g.map((r) => r.join('')), torches, rooms, traps,
+      W, H, CELL, floor, rows: g.map((r) => r.join('')), torches, rooms, traps, gates,
       start: { x: (sc[0] + 0.5) * CELL, z: (sc[1] + 0.5) * CELL, yaw },
       door: { cells: doorCells, nx: dn.nx, nz: dn.nz, x: (doorCells[0][0] + doorCells[1][0] + 1) / 2 * CELL, z: (doorCells[0][1] + doorCells[1][1] + 1) / 2 * CELL },
       carpetLength: carpet.size, doorRunner: toDoor
@@ -164,7 +170,7 @@ const FloorGen = (function () {
     const torches = [];
     for (const [cx, cz] of [[7, 7], [18, 7], [7, 18], [18, 18], [10, 7], [15, 7]]) torches.push({ x: (cx + 0.5) * CELL, y: 1.75, z: (cz + 0.5) * CELL, nx: 0, nz: 0, kind: 'brazier' });
     return {
-      W, H, CELL, floor, safe: true, rows: g.map((r) => r.join('')), torches, rooms: [room], traps: [],
+      W, H, CELL, floor, safe: true, rows: g.map((r) => r.join('')), torches, rooms: [room], traps: [], gates: [],
       start: { x: 13 * CELL, z: 18 * CELL, yaw: 0 },
       door: { cells: doorCells, nx: 0, nz: -1, x: 13 * CELL, z: 11 },
       merchant: { x: 17.5 * CELL, z: 9.5 * CELL }, chest: { x: 14.5 * CELL, z: 9.5 * CELL },   // the stash chest stands a few steps from the merchant

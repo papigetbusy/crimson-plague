@@ -95,6 +95,8 @@ const FxPlan = (function () {
     return Object.assign({ elements: [] }, PRESETS[1]);
   }
 
+  // the legendary look was too much to see through, so everything it draws is 15% smaller (owner, 2026-10-20)
+  const LEGEND_CUT = 0.85;
   const hexNum = (s) => parseInt(String(s).replace('#', ''), 16);
 
   // the animations to play, already scaled to the event: kind = muzzle | wall | flesh | kill | blast; info = { scale, boss, crit, r }
@@ -107,7 +109,8 @@ const FxPlan = (function () {
     let mul = 1;
     if (kind === 'kill') mul = (inf.scale || 1) * (inf.boss ? 1.8 : 1);
     else if (kind === 'blast') mul = Math.max(0.6, (inf.r || 2) / 2.5);
-    return list.map((e) => Object.assign({}, e, { size: e.size * mul, tint: el && e.tintable ? el.tint : e.tint }));
+    const cut = pr.tier === 'legendary' ? LEGEND_CUT : 1;
+    return list.map((e) => Object.assign({}, e, { size: e.size * mul * cut, tint: el && e.tintable ? el.tint : e.tint }));
   }
   // how the bullet streak looks: colour, thickness, life, and how many sparkles it sheds along the way
   // n is the shot count: a gun with two colours alternates its streak between them
@@ -115,9 +118,11 @@ const FxPlan = (function () {
     const pr = presetOf(id), tier = pr.tier && TIERS[pr.tier];
     if (!tier) return { color: 0xffd27a, width: 0.03, life: 0.07, trail: 0 };
     const el = pr.elements.length ? ELEMENTS[pr.elements[(n | 0) % pr.elements.length]] : null;
-    return Object.assign({}, tier.tracer, el ? { color: el.tracer } : {});
+    const tr = Object.assign({}, tier.tracer, el ? { color: el.tracer } : {});
+    if (pr.tier === 'legendary') { tr.width *= LEGEND_CUT; tr.trail = Math.round(tr.trail * LEGEND_CUT); }
+    return tr;
   }
-  const shake = (id, kind) => { const pr = presetOf(id), tier = pr.tier && TIERS[pr.tier]; return tier && (kind === 'kill' || kind === 'blast') ? tier.shake : 0; };
+  const shake = (id, kind) => { const pr = presetOf(id), tier = pr.tier && TIERS[pr.tier]; return tier && (kind === 'kill' || kind === 'blast') ? tier.shake * (pr.tier === 'legendary' ? LEGEND_CUT : 1) : 0; };
   // the sparkle that rides the bullet streak (one per trail point), tinted to the element
   function trailSprite(id, n) {
     const pr = presetOf(id), el = pr.elements.length ? ELEMENTS[pr.elements[(n | 0) % pr.elements.length]] : null;

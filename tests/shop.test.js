@@ -3,7 +3,7 @@ const Referee = require('../src/referee.js'), D = require('../src/referee_data.j
 let bad = 0;
 const t = (name, ok) => { console.log((ok ? 'ok   ' : 'FAIL ') + name); if (!ok) bad++; };
 const L = D.LOOP;
-const fresh = (cls, wave) => { const ref = Referee.create(5); ref.setCfg({ startWave: wave || 1, playerHp: 1e7, regen: 0, classId: cls || 'gunslinger' }); ref.reset(); const m = ref.map; ref.place(m.start.x, m.start.z, 0); for (let i = 0; i < 100; i++) ref.step(1 / 60, {}); return ref; };
+const fresh = (cls, wave) => { const ref = Referee.create(5); ref.setCfg({ locks: false, startWave: wave || 1, playerHp: 1e7, regen: 0, classId: cls || 'gunslinger' }); ref.reset(); const m = ref.map; ref.place(m.start.x, m.start.z, 0); for (let i = 0; i < 100; i++) ref.step(1 / 60, {}); return ref; };
 const levels = (ref) => { for (let i = 0; i < 30 && (ref.snapshot().choices || ref.snapshot().classChoices); i++) ref.step(1 / 60, { pick: 0, pickClass: 0 }); };   // the boss's soul gives levels: take the cards
 const run = (ref, n, inp) => { let r; for (let i = 0; i < n; i++) r = ref.step(1 / 60, inp || {}); return r; };
 
@@ -68,7 +68,7 @@ const run = (ref, n, inp) => { let r; for (let i = 0; i < n; i++) r = ref.step(1
   t('You keep your gold on the next floor', st.gold === 1000 - price - L.shopHeal);
 }
 { // a level-up beats the shop
-  const ref = Referee.create(5); ref.setCfg({ startWave: 11, startSafe: true, startGold: 500, playerHp: 1e7, regen: 0, classId: 'gunslinger' }); ref.reset(); const m = ref.map.merchant; ref.place(m.x - 1.5, m.z, 0); run(ref, 3);
+  const ref = Referee.create(5); ref.setCfg({ locks: false, startWave: 11, startSafe: true, startGold: 500, playerHp: 1e7, regen: 0, classId: 'gunslinger' }); ref.reset(); const m = ref.map.merchant; ref.place(m.x - 1.5, m.z, 0); run(ref, 3);
   t('Standing at the merchant opens the shop', !!ref.snapshot().shop);
   ref.giveXp(900); const s = ref.snapshot();
   t('A level-up that arrives while the shop is open is shown instead of the shop', !s.shop && !!s.choices && !!s.classChoices);

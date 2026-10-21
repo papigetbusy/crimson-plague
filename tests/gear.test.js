@@ -77,7 +77,7 @@ t('A Witch only ever finds Witch or plain gear lines on the floor', (() => { con
 
 // ---- the merchant sells gear
 {
-  const open = (gear, cls) => { const ref = Referee.create(5); ref.setCfg({ startWave: 1, playerHp: 1e7, regen: 0, classId: cls || 'witch', startGun: 'pistol_service', gunDrops: true, gearDrops: gear }); ref.reset(); const m = ref.map;
+  const open = (gear, cls) => { const ref = Referee.create(5); ref.setCfg({ locks: false, startWave: 1, playerHp: 1e7, regen: 0, classId: cls || 'witch', startGun: 'pistol_service', gunDrops: true, gearDrops: gear }); ref.reset(); const m = ref.map;
     ref.spawnAt('demon', m.start.x + 10, m.start.z); ref.clearWave(); ref.place(m.door.x, m.door.z, 0); go(ref, 2);
     for (let i = 0; i < 30 && (ref.snapshot().choices || ref.snapshot().classChoices); i++) ref.step(1 / 60, { pick: 0, pickClass: 0 });
     const mer = ref.snapshot().merchant; ref.place(mer.x, mer.z + 2, 0); go(ref, 0.5); return ref; };

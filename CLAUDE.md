@@ -30,6 +30,10 @@ Keep the code neat: small focused files and functions in clear folders, never on
 - `node tests/gun.test.js` : gun look checks (smoothed shape, skins, motion)
 - `node tests/ember.test.js` : Ember Rifle checks (code-built gun: sight window clear, anchors, face budget)
 - `node tests/revolver.test.js` : Revolver checks (picture silhouette, open trigger guard, sight clear, glow, face budget)
+- `node tests/movement.test.js` : jump and slides in any direction, the 11.5 high roof
+- `node tests/locks.test.js` : gold gates, the Key Keeper and key gate, and the boss door puzzle (toll, Scale, Coin Sockets, Fortune Wheels, sealed door, gold keeps coming, gates stop you until paid)
+- `node tests/wallsets.test.js` : wall sets (6 looks cycling by floor, own colours, same paint every time, Crypt restores)
+- `node tests/skins.test.js` : player skins (7 looks, box budget, fallbacks) and the real gun in a friend's hand
 - `node tests/weapons.test.js` : weapons (silver pistol start, two carried guns and swap, per-gun numbers, rarity by wave, drops)
 - `node tests/affixes.test.js` : gun affixes (count by rarity, class-only lines, what each does, the floor gun card)
 - `node tests/gear.test.js` : gear (armor and charms: affix counts and fit, class-only lines, drops, pickup rules, defense/health/speed in a run, the Gear menu and floor card)
@@ -60,6 +64,8 @@ Keep the code neat: small focused files and functions in clear folders, never on
 - `python3 tools/smoke_pad.py` : fake-controller run on phone and desktop sizes (connect, play, level-up, pause, unplug)
 - `python3 tools/smoke_coop.py` : two browser windows with a fake matchmaker: host a room, join by code, start together, see each other's monsters, revive a downed friend (needs the cheat build)
 - `node tools/preview_models.js rifle|fiend out.json` then `python3 tools/preview_models.py out.json out.png side|front|back|three|top` : draws a model with no GPU
+- `node tools/skin_dump.js out.json [gun]` then `python3 tools/skin_sheet.py out.json out.png front|three|back` : draws the 7 player skins holding a real gun with no GPU
+- `python3 tools/wall_sets_sheet.py out.png` : draws every wall set's textures large; `WALLSET=<id> python3 tools/hall_shot.py ...` draws the hall in one set; `FLOOR=<n> python3 tools/hall_shot.py out gate sign station both socket` draws the gold gate, boss door sign and puzzle with the game's own code
 - `node tools/guard.js` : architecture guard
 - `node tools/build.js` : builds `site/index.html` (one playable page, the real game: no Effects or Gun menu)
 - `node tools/build.js x --cheat` : builds the private cheat page `cheat/index.html` (git-ignored, never published) with the Effects and Gun menus; the owner tests on this one

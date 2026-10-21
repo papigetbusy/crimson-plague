@@ -23,6 +23,9 @@ t('Every animation any preset asks for is on the list of sheets to pack', (() =>
 t('Frame picking stays inside the animation and runs from the first frame to the last', Plan.frameIndex(10, 0, 1) === 0 && Plan.frameIndex(10, 0.99, 1) === 9 && Plan.frameIndex(10, 5, 1) === 9 && Plan.frameIndex(10, -1, 1) === 0);
 t('Muzzle flashes stay small enough not to fill the screen (under 0.7 of a world unit)', ids.every((i) => Plan.plan(i, 'muzzle', {}).every((e) => e.size < 0.7)));
 
+t('Legendary effects are 15% smaller than they were: the first legendary kill sprite is 4.4 x 0.85, the muzzle flash 0.5 x 0.85, the streak 15% thinner', (() => { const k = Plan.plan('legendary', 'kill', { scale: 1 })[0], m = Plan.plan('legendary', 'muzzle', {})[0]; return Math.abs(k.size - 4.4 * 0.85) < 0.001 && Math.abs(m.size - 0.5 * 0.85) < 0.001 && Math.abs(Plan.tracer('legendary').width - 0.07 * 0.85) < 0.001; })());
+t('The cut is only for legendary: an epic kill keeps its size', Math.abs(Plan.plan('epic', 'kill', { scale: 1 })[0].size - 3.6) < 0.001);
+
 // ---- shots follow the gun you hold
 const RW = require('../src/referee_weapons.js');
 t('Every gun status colour has an element, so no gun is left without its look', RW.STATUSES.every((st) => Plan.STATUS_EL[st] && Plan.ELEMENTS[Plan.STATUS_EL[st]]));
