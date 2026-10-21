@@ -5,7 +5,7 @@ const MonsterRigs = (function () {
   const MODEL = 0.72;
   function create(THREE) {
     const glowMat = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
-    const SOURCES = { fiend: HornedFiendV2, golem: RockGolem, demon: DemonLordV2, hound: BoneHoundV2, goblin: Goblin, skeleton: Skeleton, mushroom: Mushroom, eyeball: Eyeball, flame: FlameSpirit, bat: BatLord, lich: LichKing, dragon: ElderDragon };   // the signed-off versions (the demon lord v2 is a candidate until the owner signs it off); horned_fiend.js, bone_hound.js and demon_lord.js stay as the fallback
+    const SOURCES = { fiend: HornedFiendV2, golem: RockGolem, demon: DemonLordV3, hound: BoneHoundV2, goblin: Goblin, skeleton: Skeleton, mushroom: Mushroom, eyeball: Eyeball, flame: FlameSpirit, bat: BatLord, lich: LichKing, dragon: ElderDragon };   // the signed-off versions (the demon lord v2 is a candidate until the owner signs it off); horned_fiend.js, bone_hound.js and demon_lord.js stay as the fallback
     const SMOOTH = { relax: 0.6, passes: 5, soft: 0.9 };
     const cache = {};       // kind -> { model, geo: { part: { solid, glow } } }  (built once, shared by every monster of that kind)
     // a kind's geometry is cut part by part, so a kind can be prepared a slice at a time in the background (warmStep) or all at once when its first monster appears

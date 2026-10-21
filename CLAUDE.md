@@ -70,6 +70,7 @@ Keep the code neat: small focused files and functions in clear folders, never on
 - `node tools/preview_models.js rifle|fiend out.json` then `python3 tools/preview_models.py out.json out.png side|front|back|three|top` : draws a model with no GPU
 - `node tools/skin_dump.js out.json [gun]` then `python3 tools/skin_sheet.py out.json out.png front|three|back` : draws the 7 player skins holding a real gun with no GPU
 - `python3 tools/wall_sets_sheet.py out.png` : draws every wall set's textures large; `WALLSET=<id> python3 tools/hall_shot.py ...` draws the hall in one set; `FLOOR=<n> python3 tools/hall_shot.py out gate sign station both socket` draws the gold gate, boss door sign and puzzle with the game's own code
+- `node tools/gun_sheet.js out.png ext cy id [id ...]` : draws catalog guns side and three-quarter with no GPU; `node tools/pack_guns.js <Quaternius OBJ dir>` rebuilds `src/models/guns_packed_data.js` from the CC0 pack
 - `node tools/guard.js` : architecture guard
 - `node tools/build.js` : builds `site/index.html` (one playable page, the real game: no Effects or Gun menu)
 - `node tools/build.js x --cheat` : builds the private cheat page `cheat/index.html` (git-ignored, never published) with the Effects and Gun menus; the owner tests on this one

@@ -1,4 +1,6 @@
 # Changelog (newest first, one plain line each)
+- 2026-10-21: The 20 guns are now made from the free CC0 Quaternius pack models, with your colours and glow, a thinner red-dot border, and unique details on every gun (not pushed yet).
+- 2026-10-21: Demon Lord remade from scratch in code (v3): black and gold plate, horned helm, ember sigil, bat wings, cape; the game now uses it.
 - 2026-10-21: Boss moves rebuilt (3 to 4 extra moves each picked at random, faster winds, open moment after a big move), Ember/Frost/Venom monsters and bosses that burn, freeze or poison you, and scarier Goblin, Skeleton and Mushroom models.
 - 2026-10-21: Six new level-up gifts: Lucky Drops, Thick Skin, Gold Rush, Overcharge, Bounce Pad and Second Wind.
 - 2026-10-21: Any mod now fits any gun with a free place; the jump is about twice as high, and while you are high enough small monsters (hounds, goblins, mushrooms, eyeballs) cannot hit you.

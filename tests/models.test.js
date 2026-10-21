@@ -47,6 +47,13 @@ t('Horned fiend v2 has the same nine parts and joints as v1, so the walk and att
 t('Horned fiend v2 is no more than 0.3 taller than v1 (the horns), has glowing eyes, and stays under 60,000 faces', tallest(fiend2) - tallest(fiend1) < 0.3 && tallest(fiend2) >= tallest(fiend1) && fiend2.grids.head.glow.size > 0 && total(fiend2) < 60000);
 t('Horned fiend v2 keeps its feet on the floor', Math.min(...Object.values(fiend2.grids).flatMap((g) => [...g.solid.values()].map((v) => v.y))) === 0);
 console.log('     (fiend v1 ' + total(fiend1) + ', fiend v2 ' + total(fiend2) + ' faces, tallest ' + tallest(fiend1).toFixed(2) + ' -> ' + tallest(fiend2).toFixed(2) + ')');
+// ---- demon lord v3: built by hand in code, the one the game uses ----
+const demon3 = require('../src/models/demon_lord_v3.js').build();
+t('Demon lord v3 has the same eleven parts and joints as v1, so the walk, attacks and wing flap do not change', Object.keys(demon3.grids).sort().join() === Object.keys(demon.grids).sort().join() && Object.keys(demon3.joints).length >= 10);
+t('Demon lord v3 stands on the floor and, horns and wing tips included, is taller than the fiend and no taller than 5 units', (() => { const h = tallest(demon3); return h > tallest(Fiend.build()) + 0.5 && h < 5.0; })());
+t('Demon lord v3 has burning eyes, a glowing chest sigil, and two wings that mirror each other', demon3.grids.head.glow.size > 20 && demon3.grids.torso.glow.size > 5 && demon3.grids.wingR.count() > 1500 && demon3.grids.wingR.count() === demon3.grids.wingL.count());
+t('Demon lord v3 stays light enough for a boss on a phone (under 80,000 faces)', total(demon3) < 80000);
+console.log('     (demon lord v3 ' + total(demon3) + ' faces)');
 // ---- demon lord v2 (candidate) ----
 global.DemonLord = require('../src/models/demon_lord.js');
 const demon2 = require('../src/models/demon_lord_v2.js').build();

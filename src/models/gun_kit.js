@@ -42,13 +42,13 @@ const GunKit = (function () {
   const glowSide = (g, x, y0, y1, z0, z1, col) => { g.box(x, y0, z0, x + 1, y1, z1, col || C.GL, 0.04, 'glow'); g.box(-x - 1, y0, z0, -x, y1, z1, col || C.GL, 0.04, 'glow'); };
   const glowTop = (g, y, z0, z1, hw, col) => g.box(-(hw || 1), y, z0, hw || 1, y + 1, z1, col || C.GL, 0.04, 'glow');
   // thin open red-dot frame sitting on a flat top at topY, with its rear post at z. Returns the red dot spot. The window is empty.
-  function sight(g, topY, z, halfW) {
-    const hw = halfW || 6, y0 = topY + 1, y1 = topY + 9;
-    g.box(-hw - 1, topY, z - 1, hw + 1, y0, z + 3, C.DARK, 0.04);
-    g.box(-hw - 1, y0, z, -hw, y1 + 1, z + 2, C.DARK, 0.04); g.box(hw, y0, z, hw + 1, y1 + 1, z + 2, C.DARK, 0.04);
-    g.box(-hw - 1, y1, z, hw + 1, y1 + 1, z + 2, C.DARK, 0.04);
-    g.box(-hw - 1, y1, z, -hw + 1, y1 + 1, z + 2, C.TRIM, 0.05); g.box(hw - 1, y1, z, hw + 1, y1 + 1, z + 2, C.TRIM, 0.05);
-    g.erase(-hw, y0, z, hw, y1, z + 2);
+  function sight(g, topY, z, halfW) {                 // as thin and small as it can be: a one-voxel border, one voxel deep
+    const hw = halfW || 6, y0 = topY + 1, y1 = topY + 7;
+    g.box(-hw - 1, topY, z, hw + 1, y0, z + 2, C.DARK, 0.04);
+    g.box(-hw - 1, y0, z, -hw, y1 + 1, z + 1, C.DARK, 0.04); g.box(hw, y0, z, hw + 1, y1 + 1, z + 1, C.DARK, 0.04);
+    g.box(-hw - 1, y1, z, hw + 1, y1 + 1, z + 1, C.DARK, 0.04);
+    g.box(-hw - 1, y1, z, -hw + 1, y1 + 1, z + 1, C.TRIM, 0.05); g.box(hw - 1, y1, z, hw + 1, y1 + 1, z + 1, C.TRIM, 0.05);
+    g.erase(-hw, y0, z, hw, y1, z + 1);
     return { dot: [0, topY + 5, z], win: { y0, y1, halfW: hw } };
   }
 

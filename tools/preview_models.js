@@ -23,8 +23,8 @@ if (which.startsWith('gun:')) {      // any gun in the catalog, with the two glo
   const mp = m.anchors.magPivot;
   parts.push(dump(m.parts.mag.grid, m.parts.mag.pivot, m.vox, mp, m.parts.mag.scale > 1 ? { passes: 2 * m.parts.mag.scale } : undefined));
   parts.push(dump(m.parts.bolt.grid, m.parts.bolt.pivot, m.vox, m.anchors.boltRest, m.parts.bolt.scale > 1 ? { passes: 2 * m.parts.bolt.scale } : undefined));
-} else if (which === 'hound' || which === 'hound2' || which === 'demon2' || which === 'golem' || which === 'demon') {
-  const m = require({ hound: '../src/models/bone_hound.js', hound2: '../src/models/bone_hound_v2.js', demon2: '../src/models/demon_lord_v2.js', golem: '../src/models/rock_golem.js', demon: '../src/models/demon_lord.js' }[which]).build();
+} else if (which === 'hound' || which === 'hound2' || which === 'demon2' || which === 'demon3' || which === 'golem' || which === 'demon') {
+  const m = require({ hound: '../src/models/bone_hound.js', hound2: '../src/models/bone_hound_v2.js', demon2: '../src/models/demon_lord_v2.js', demon3: '../src/models/demon_lord_v3.js', golem: '../src/models/rock_golem.js', demon: '../src/models/demon_lord.js' }[which]).build();
   for (const p of m.pose) parts.push(dump(p.grid, p.pivot, p.vox || m.vox, p.off));
 } else if (['goblin', 'skeleton', 'mushroom', 'eyeball', 'flame_spirit', 'bat_lord', 'lich_king', 'elder_dragon'].includes(which)) {
   const m = require('../src/models/' + which + '.js').build();

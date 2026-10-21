@@ -2,7 +2,7 @@
 // Plain sentences. Run: node tests/rigs.test.js
 global.Voxel = require('../src/models/voxel.js'); global.VoxelSmooth = require('../src/models/voxel_smooth.js'); global.BestiaryKit = require('../src/models/bestiary_kit.js');
 global.DemonLordSheet = require('../src/models/demon_lord_data.js'); global.HornedFiendSheet = require('../src/models/horned_fiend_data.js');
-global.HornedFiendV2 = require('../src/models/horned_fiend_v2.js'); global.RockGolem = require('../src/models/rock_golem.js'); global.DemonLordV2 = require('../src/models/demon_lord_v2.js'); global.BoneHoundV2 = require('../src/models/bone_hound_v2.js');
+global.HornedFiendV2 = require('../src/models/horned_fiend_v2.js'); global.RockGolem = require('../src/models/rock_golem.js'); global.DemonLordV2 = require('../src/models/demon_lord_v2.js'); global.DemonLordV3 = require('../src/models/demon_lord_v3.js'); global.BoneHoundV2 = require('../src/models/bone_hound_v2.js');
 for (const [g, f] of [['Goblin', 'goblin'], ['Skeleton', 'skeleton'], ['Mushroom', 'mushroom'], ['Eyeball', 'eyeball'], ['FlameSpirit', 'flame_spirit'], ['BatLord', 'bat_lord'], ['LichKing', 'lich_king'], ['ElderDragon', 'elder_dragon']]) global[g] = require('../src/models/' + f + '.js');
 const MonsterRigs = require('../src/screen/monster_rigs.js'), D = require('../src/referee_data.js');
 let bad = 0;
