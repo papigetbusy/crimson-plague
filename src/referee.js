@@ -689,7 +689,9 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       if (!W.slots[other]) {
         W.slots[W.held].ammo = P.ammo; W.held = other; W.slots[other] = it;
       } else {
-        dropGun(P.x, P.z, 0, W.slots[W.held]); pickups[pickups.length - 1].noPick = WP.DROP.noPick;
+        const sx = P.x + Math.cos(P.yaw) * 1.1, sz = P.z + Math.sin(P.yaw) * 1.1, ok = !collides(sx, sz, 0.3);      // the gun from your hands drops beside you (to your right), not under the one you reach for
+        W.slots[W.held].ammo = P.ammo;
+        dropGun(ok ? sx : P.x, ok ? sz : P.z, 0, W.slots[W.held]); pickups[pickups.length - 1].noPick = WP.DROP.noPick;
         W.slots[W.held] = it;
       }
       P.ammo = it.ammo; P.reloading = false; P.reloadT = 0; P.fireCd = 0.3;
@@ -715,7 +717,13 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     // pick up: take the nearest gun or piece of gear lying within reach (with manualGuns on, only this press picks things up, so nothing is ever taken by accident; hearts and flames are still automatic)
     function pickUpGun() {
       let best = null, bd = cfg.gunReach;
-      for (const q of pickups) { if ((q.kind !== 'gun' && q.kind !== 'gear' && q.kind !== 'mod') || q.noPick > 0 || q.life <= 0) continue; const d = Math.hypot(P.x - q.x, P.z - q.z); if (d < bd) { bd = d; best = q; } }
+      let bs = Infinity; const fx = Math.sin(P.yaw), fz = -Math.cos(P.yaw);
+      for (const q of pickups) {
+        if ((q.kind !== 'gun' && q.kind !== 'gear' && q.kind !== 'mod') || q.noPick > 0 || q.life <= 0) continue;
+        const d = Math.hypot(P.x - q.x, P.z - q.z); if (d >= bd) continue;
+        const ahead = d < 0.01 ? 1 : ((q.x - P.x) * fx + (q.z - P.z) * fz) / d;      // 1 = straight ahead of you, -1 = behind: with several on the floor, the one you are looking at wins
+        const score = d * (1.6 - 0.6 * ahead); if (score < bs) { bs = score; best = q; }
+      }
       if (!best) return;
       if (best.kind === 'gun') takeGun(best); else if (best.kind === 'mod') takeMod(best); else { best.life = -1; wearBought(best.gear); }   // a piece you picked up on purpose goes on, even over a better one
     }

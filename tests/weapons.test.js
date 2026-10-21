@@ -125,4 +125,32 @@ const killOne = (r, kind) => { r.spawnAt(kind || 'fiend', r.map.start.x, r.map.s
   const old = mk(); old.giveGun('smg_compact', 2); go(old, 0.2);
   t('With manual pickup off (the old way) walking over a gun still takes it, so older tests stay valid', old.snapshot().player.gun.id === 'smg_compact');
 }
+// ---- two guns on the floor, and the one from your hands dropping
+{
+  const r = mk({ manualGuns: true }); const p0 = r.snapshot().player;
+  r.giveGun('smg_compact', 1); r.step(1 / 60, { pickup: true });
+  t('The first gun you pick up goes in your free hand and the pistol stays in the other', (() => { const g = r.snapshot().player.gun; return g.id === 'smg_compact' && g.other && g.other.card.name === 'Service Pistol'; })());
+  r.giveGun('rifle', 2); r.step(1 / 60, {});
+  const before = r.snapshot().player;
+  r.step(1 / 60, { pickup: true });
+  const after = r.snapshot(), floor = after.pickups.filter((q) => q.kind === 'gun');
+  t('With both hands full, picking up a gun puts it in your hands and the gun that was in your hands drops', after.player.gun.id === 'rifle' && floor.length === 1 && floor[0].gun.name === 'Compact SMG');
+  t('The gun from your hands drops beside you, not under the spot you reached for', floor.length === 1 && Math.hypot(floor[0].x - before.x, floor[0].z - before.z) > 0.8);
+  t('The gun that drops keeps the ammo it had', (() => { const q = mk({ manualGuns: true }); q.giveGun('smg_compact', 1); q.step(1 / 60, { pickup: true }); for (let i = 0; i < 40; i++) q.step(1 / 60, { fire: true }); const ammo = q.snapshot().player.ammo; q.giveGun('rifle', 2); q.step(1 / 60, {}); q.step(1 / 60, { pickup: true }); const f = q.snapshot().pickups.find((x) => x.kind === 'gun'); return ammo < q.snapshot().player.magSize && f && f.gun.name === 'Compact SMG'; })());
+}
+{
+  const r = mk({ manualGuns: true }), S = r.map.start;
+  let yaw = null;
+  for (let k = 0; k < 8 && yaw === null; k++) {      // find a direction with open floor for 3 units
+    const a = k * Math.PI / 4, fx = Math.sin(a), fz = -Math.cos(a); r.place(S.x, S.z, a); r.giveGun('smg_compact', 1);
+    r.place(S.x + fx * 2, S.z + fz * 2, a); if (Math.hypot(r.snapshot().player.x - (S.x + fx * 2), r.snapshot().player.z - (S.z + fz * 2)) < 0.01) yaw = a;
+    r.clearWave(); if (yaw === null) { r.reset(); }
+  }
+  const fx = Math.sin(yaw || 0), fz = -Math.cos(yaw || 0);
+  const q = mk({ manualGuns: true }); q.place(S.x, S.z, yaw || 0); q.giveGun('smg_compact', 1);                      // a gun at the start spot
+  q.place(S.x + fx * 2, S.z + fz * 2, yaw || 0); q.giveGun('rifle', 2);                                           // a rifle two steps ahead
+  q.place(S.x + fx * 0.8, S.z + fz * 0.8, yaw || 0); q.step(1 / 60, {});                                           // you stand between them, looking at the rifle; the smg is nearer
+  q.step(1 / 60, { pickup: true });
+  t('With two guns on the floor, pick up takes the one you are looking at, not just the nearest', q.snapshot().player.gun.id === 'rifle');
+}
 console.log(bad ? bad + ' FAILED' : 'all weapon checks passed'); process.exit(bad ? 1 : 0);

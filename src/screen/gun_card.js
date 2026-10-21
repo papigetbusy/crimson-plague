@@ -39,9 +39,15 @@ const GunCard = (function () {
   }
   // the nearest gun on the floor within reach of the eye, or null
   function nearest(state, range) {
-    const p = state.player; let best = null, bd = range * range;
-    for (const q of state.pickups) { if (!q.gun && !q.gear && !q.mod) continue; const d = (q.x - p.x) ** 2 + (q.z - p.z) ** 2; if (d < bd) { bd = d; best = q; } }
-    return best;
+    const p = state.player, fx = Math.sin(p.yaw || 0), fz = -Math.cos(p.yaw || 0); let best = null, bs = Infinity, reachBest = null, rs = Infinity;
+    for (const q of state.pickups) {
+      if (!q.gun && !q.gear && !q.mod) continue;
+      const d = Math.hypot(q.x - p.x, q.z - p.z); if (d >= range) continue;
+      const ahead = d < 0.01 ? 1 : ((q.x - p.x) * fx + (q.z - p.z) * fz) / d, score = d * (1.6 - 0.6 * ahead);   // the same rule the referee uses to pick: the one you look at wins
+      if (score < bs) { bs = score; best = q; }
+      if (q.inReach && score < rs) { rs = score; reachBest = q; }
+    }
+    return reachBest || best;
   }
   // project(x, y, z) gives the screen spot of a world point ({ x, y, ok }); tap() is what a tap on the card does (pick the gun up)
   function create($, project, tap) {
