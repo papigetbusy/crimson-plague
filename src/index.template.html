@@ -1,4 +1,5 @@
 <title>Crimson Plague</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Pirata+One&display=swap">
 <style>
@@ -41,6 +42,42 @@ body {
 @keyframes pop { 0% { transform: scale(1.35); color: var(--gold); } 100% { transform: scale(1); } }
 #killbox span { font-weight: 700; letter-spacing: 0.22em; font-size: 13px; color: var(--gold); text-transform: uppercase; text-shadow: 0 1px 0 #000; }
 #hpBar { margin-top: 6px; width: clamp(110px, 24vw, 190px); height: 9px; background: rgba(0, 0, 0, 0.65); border: 1px solid var(--gold-dim); padding: 1px; }
+#party { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; width: clamp(110px, 24vw, 190px); }
+#party .pm b { display: block; font: 700 11px var(--body); letter-spacing: 0.08em; color: var(--ink); text-shadow: 0 1px 0 #000; }
+#party .pm i { display: block; height: 5px; background: rgba(0, 0, 0, 0.65); border: 1px solid var(--gold-dim); padding: 1px; }
+#party .pm u { display: block; height: 100%; background: linear-gradient(#5aa0e8, #2a5aa0); text-decoration: none; }
+#party .pm.dn b { color: #ff6a6a; } #party .pm.dn u { background: #7a1a1a; }
+#downMsg { position: absolute; left: 50%; top: 24%; transform: translateX(-50%); text-align: center; font-family: var(--display); font-size: clamp(26px, 7vh, 46px); color: #ff6a6a; text-shadow: 0 2px 0 #000, 0 0 18px rgba(200, 30, 30, 0.7); pointer-events: none; }
+#downMsg span { display: block; font-family: var(--body); font-weight: 700; font-size: clamp(13px, 3vh, 18px); letter-spacing: 0.08em; color: var(--ink); }
+#coopBtn { margin-top: 6px; font-family: var(--body); font-weight: 700; font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; color: #bfe0ff; background: transparent; border: 1px solid #4a7aa8; padding: 8px 16px; cursor: pointer; touch-action: manipulation; }
+#coopPanel { margin: 8px auto 4px; max-width: 520px; padding: 8px 10px; border: 1px solid #4a7aa8; background: rgba(10, 20, 34, 0.55); }
+#coopMenu { display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap; }
+#coopPanel button, #coopPanel input { font-family: var(--body); font-weight: 700; font-size: 14px; color: var(--ink); background: #12202e; border: 1px solid #4a7aa8; padding: 7px 12px; }
+#coopPanel input { width: 7em; text-transform: uppercase; letter-spacing: 0.2em; text-align: center; }
+#coopPanel #coopName { width: 9em; text-transform: none; letter-spacing: 0; }
+#coopPanel button { cursor: pointer; touch-action: manipulation; }
+#coopInfo { margin: 8px 0 2px; font-size: 14px; font-weight: 700; color: #bfe0ff; min-height: 1.2em; }
+#coopRow { display: flex; gap: 8px; align-items: center; justify-content: center; margin-bottom: 6px; font-size: 13px; }
+#play:disabled { opacity: 0.5; cursor: default; }
+/* a phone held sideways is short (about 320 to 400 px of page): the start card scrolls instead of being cut off, and gets compact so the buttons are in view */
+#start { overflow-y: auto; align-items: flex-start; -webkit-overflow-scrolling: touch; }
+#start .card { margin: auto; }
+@media (max-height: 460px) {
+  #start { padding: 6px 10px; }
+  #start .card { gap: 4px; max-width: 760px; flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: center; }
+  #start .card > * { flex: 0 0 100%; }
+  #start .card > #play, #start .card > #coopBtn, #start .card > #codexBtn { flex: 0 0 auto; margin: 2px 4px; }
+  #start .card > #play { order: 2; } #start .card > #coopBtn { order: 3; } #start .card > #codexBtn { order: 4; } #start .card > #coopPanel { order: 5; } #start .card > .cheatTag { flex: 0 0 auto; }
+  #start .card h1 { font-size: 34px; text-shadow: 0 2px 0 #000; }
+  #start .card p { font-size: 11px; line-height: 1.25; }
+  #start .cheatTag, #start .buildTag { margin: 0; font-size: 9px; padding: 1px 6px; }
+  #classPick { margin: 0; gap: 6px; } #classPick button { padding: 4px 4px; gap: 1px; } #classPick b { font-size: 16px; } #classPick span { display: none; } #classPick em { font-size: 10px; }
+  #startLists { max-height: 9vh; margin: 0; } #startLists * { font-size: 10px; }
+  #play { font-size: 20px; padding: 6px 22px 4px; } #coopBtn, #codexBtn { font-size: 11px; padding: 6px 10px; margin-top: 0; }
+  #coopPanel { margin: 2px auto; padding: 4px 6px; } #coopPanel button, #coopPanel input { font-size: 12px; padding: 4px 8px; } #coopInfo { margin: 4px 0 0; font-size: 12px; } #coopRow { margin-bottom: 3px; font-size: 11px; }
+  body.touch .touchhelp { display: none !important; }
+  #start .card h1 { font-size: 30px; }
+}
 #hpFill { height: 100%; width: 100%; background: linear-gradient(#e23a42, #8c1119); transition: width 0.1s linear; }
 
 #ammo { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 10px); text-align: center; text-shadow: 0 2px 0 #000; min-width: 90px; }
@@ -286,12 +323,14 @@ body.pad .card3.sel { border-color: var(--gold); background: linear-gradient(#3c
 
 <canvas id="gl"></canvas>
 
+<div id="downMsg" hidden></div>
 <div id="mapOverlay" class="overlay" hidden><canvas id="bigMap" width="640" height="640"></canvas><p>Tap to close</p></div>
 <canvas id="miniMap" width="170" height="170" aria-label="Map"></canvas>
 <div id="hud">
   <div class="corner">
     <div id="killbox"><div id="kills">0</div><span>Slain</span></div>
     <div id="hpBar"><div id="hpFill"></div></div>
+    <div id="party" hidden></div>
     <div id="lvl"><span id="lvlN">LV 1</span><span id="goldN">0 G</span><div id="xpBar"><i id="xpFill"></i></div></div>
     <div id="clsName"></div>
     <div id="ultBox" hidden><span id="ultName"></span><div class="bar"><i id="ultFill"></i></div></div>
@@ -358,6 +397,13 @@ body.pad .card3.sel { border-color: var(--gold); background: linear-gradient(#3c
     <div id="startLists"><div id="bpBox"></div><div id="svBox"></div></div>
     <p class="padhelp"><b>Left stick</b> moves, <b>right stick</b> looks. <b>RT</b> fires, <b>LT</b> aims. <b>Click the left stick</b> to sprint. <b>B</b> slides while sprinting. <b>X</b> reloads. <b>Start</b> pauses. Press <b>A</b> to begin.</p>
     <p class="touchhelp"><b>Left thumb</b> moves. <b>Drag the right side</b> to look. Hold <b>Fire</b> and drag to shoot while turning. <b>Run</b> and <b>Aim</b> toggle, <b>Slide</b> and <b>Reload</b> are taps. <b>Tune</b> is top right.</p>
+    <button id="coopBtn" type="button">PLAY WITH FRIENDS</button>
+    <div id="coopPanel" hidden>
+      <div id="coopRow"><label for="coopName">Your name</label><input id="coopName" maxlength="12" autocomplete="off"></div>
+      <div id="coopMenu"><button id="coopHost" type="button">HOST A GAME</button><span>or</span><input id="coopCode" maxlength="5" placeholder="CODE" autocapitalize="characters" autocomplete="off" aria-label="Room code"><button id="coopJoin" type="button">JOIN</button></div>
+      <p id="coopInfo"></p>
+      <button id="coopLeave" type="button" hidden>LEAVE THE ROOM</button>
+    </div>
     <button id="play" type="button"><span id="playLabel">ENTER THE HALL</span></button>
     <button id="codexBtn" type="button">CODEX: how everything works</button>
   </div>
@@ -369,6 +415,7 @@ body.pad .card3.sel { border-color: var(--gold); background: linear-gradient(#3c
 <div class="overlay" id="fatal" hidden><div class="card"><h1 style="font-size:48px">No 3D here</h1><p>This browser could not start WebGL. Try Safari or Chrome directly.</p></div></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" onerror="window.__peerFailed=true"></script>
 <script>
 /*__REFEREE__*/
 </script>

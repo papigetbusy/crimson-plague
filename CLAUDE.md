@@ -41,6 +41,7 @@ Keep the code neat: small focused files and functions in clear folders, never on
 - `node tests/floorguns.test.js` : floor guns (one default pickup model per gun type, told apart by size and shape, shaded in the rarity colour)
 - `node tests/trail.test.js` : gold trail (the walking route from you to the Demon Lord that the minimap draws: starts at him, ends at you, stays on floor)
 - `node tests/bosses.test.js` : bosses (random pick per floor, tougher each floor, the Bat Lord dives and drains, the Lich King rings, fans, blinks and raises the dead, the Elder Dragon breathes and slams)
+- `node tests/coop.test.js` : co-op (a host and two friends over an in-memory link: join, shared monsters, own loot/gold/level-ups, scaling, down and revive, everyone down, shared doors and floors, menus do not stop the world)
 - `node tests/gunfx.test.js` : gun status effects (fire burns, poison, ice slows and freezes, electric arcs, radiation pulse, dark drains and withers, light smites, legendaries carry two)
 - `node tests/guns.test.js` : the 20 catalog guns (5 types x 4 versions: sight clear, hands on grip and fore-end, skin exists, face budget)
 - `node tests/world.test.js` : hall look checks (banners, floors, ribs, baked light)
@@ -57,6 +58,7 @@ Keep the code neat: small focused files and functions in clear folders, never on
 - `python3 tools/extract_ct_assets.py` then `python3 tools/pack_fx.py` : pull the owner's free art packs out of the CT page into git-ignored `assets-private/` (full packs never go in the repo), and pack the effect sheets into `src/screen/fx_data.js` (committed, credited in `docs/credits.md`) (without it the build just shows the plain voxel effects)
 - `python3 tools/smoke_mouse.py` : desktop mouse check (mouse captured while playing, released for a level-up so a click works, number keys pick, mouse taken back, aim and shoot buttons held together in either order)
 - `python3 tools/smoke_pad.py` : fake-controller run on phone and desktop sizes (connect, play, level-up, pause, unplug)
+- `python3 tools/smoke_coop.py` : two browser windows with a fake matchmaker: host a room, join by code, start together, see each other's monsters, revive a downed friend (needs the cheat build)
 - `node tools/preview_models.js rifle|fiend out.json` then `python3 tools/preview_models.py out.json out.png side|front|back|three|top` : draws a model with no GPU
 - `node tools/guard.js` : architecture guard
 - `node tools/build.js` : builds `site/index.html` (one playable page, the real game: no Effects or Gun menu)

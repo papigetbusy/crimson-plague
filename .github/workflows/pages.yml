@@ -64,6 +64,8 @@ jobs:
         run: node tests/trail.test.js
       - name: Boss checks
         run: node tests/bosses.test.js
+      - name: Co-op checks
+        run: node tests/coop.test.js
       - name: Gun status effect checks
         run: node tests/gunfx.test.js
       - name: Hall look tests

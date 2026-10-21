@@ -75,6 +75,7 @@ const Minimap = (function () {
         if (out) { if (!few || cv === big) continue; mx = Math.max(4, Math.min(cv.width - 4, mx)); mz = Math.max(4, Math.min(cv.height - 4, mz)); r = 3; }
         marker(ctx, mx, mz, r, BOSS[m.kind] ? '#ff2a2a' : m.elite && m.elite.length ? '#ff9a2a' : '#c8202a');
       }
+      for (const f of (st.coop && st.coop.peers) || []) marker(ctx, px(f.x), pz(f.z), Math.max(3, s * 1.1), f.down ? '#ff6a6a' : '#5aa0e8');     // your friends (red when downed: go stand next to them)
       arrow(ctx, px(st.player.x), pz(st.player.z), st.player.yaw, Math.max(3, s * 1.1));
     }
     function setOpen(v) { open = v; bigBox.hidden = !v; timer = 0; }

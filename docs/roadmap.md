@@ -122,6 +122,15 @@ One feature at a time, each tested on the phone. The safe room and the shop floo
 - [ ] **Reminder for the owner (asked 2026-10-20): when the game is done, try Meshy (the 3D model plugin) on Grok's two best gun pictures, `art-drop/gun/gun_side_master.jpg` and `gun_three_quarter_rear.jpg`. Claude's workspace cannot reach Meshy, so the owner runs Image to 3D on meshy.ai (PBR off, low or medium polygons), downloads a `.glb` and sends it; Claude then compares it with the voxel gun.**
 - **Gate:** friends can play it without help.
 
+## Multiplayer: early test (owner, 2026-10-20, brought forward from Phase 9)
+Decisions: join by a room code (no accounts, no server of ours); 3 players for the first test, 2 for the next; a downed friend is revived by a teammate standing next to them; each player keeps their OWN gun, loot, gold and level-up cards; monsters get tougher with the number of players; everyone fights the same monsters, floors and boss.
+How it is built: the host's game is the world (waves, monsters, boss, doors); each guest's game keeps everything personal (gun, gear, level, gold, drops, shop) and shoots at the host's monsters, sending the damage it deals; the host tells a guest when a monster hits them or dies (the guest then rolls its own loot). Single player is untouched (all of it sits behind a switch).
+- [x] Referee: host side (remote players as targets, damage from guests, scaling by player count) and guest side (world fed from the host, personal rewards on a kill, hurt from the host). Tested in `tests/coop.test.js`.
+- [x] Downed and revive, game over when everyone is down.
+- [x] Sync logic (`src/coop_link.js`, pure, tested with simulated players over a loopback), the room-code lobby and the real link (`src/screen/net_peer.js`: WebRTC through PeerJS and its free public broker), drawing the other players (`src/screen/peers_view.js`). A fake-broker two-window browser check is `tools/smoke_coop.py`; the real internet link has NOT been tried yet (the sandbox cannot reach it).
+- [ ] First real test: three friends join one room, see each other, shoot the same monsters, fight the same boss.
+- Later: stash/blueprint drops in friend sessions (the parked endgame idea), joining mid-run, more than 3 players.
+
 ## Parked (not forgotten)
 - **Endgame multiplayer (what the owner is most excited about):** guns stashed from solo runs, and the mods you added, become blueprints for fully kitted guns that drop in friend sessions. Everyone picks a class and survives as long as possible. Stashes appear after a certain boss or an easter egg.
 - Win condition and the ending (decided later, after everything else).

@@ -5,5 +5,6 @@ Crimson Plague uses free art packs the owner picked up online. The effect sheets
 - **Super Pixel Effects Gigapack** by Will Tice / unTied Games: bullet, muzzle, blood, smoke and explosion effects.
 - **Tiny Swords** by Pixel Frog: the wall stone (menu pieces to come).
 - **Raven Fantasy Icons**: icons for the menus (not used yet).
+- **PeerJS** (MIT licence): the WebRTC link for playing with friends, loaded from a CDN, with its free public matchmaking server.
 
 Thank you to the artists. Owner decision (2026-10-19): this is a private game for the owner and one friend; credit is given here.

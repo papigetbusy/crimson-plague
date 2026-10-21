@@ -1,0 +1,81 @@
+/* Playing with friends: the lobby on the start card (host a game, or join with a room code) and the link that runs while you play.
+   The rules live in the referee (host = the world, friends = their own gun, loot and level-ups); the talking is in coop_link.js; the internet part is net_peer.js.
+   This file only joins them to the buttons. */
+const Coop = (function () {
+  function create($, ref, hooks) {
+    // hooks: { toast(text), playLabel(text, disabled), begin() }
+    const btn = $('coopBtn'), panel = $('coopPanel'), hostBtn = $('coopHost'), joinBtn = $('coopJoin'), codeIn = $('coopCode'), nameIn = $('coopName'), info = $('coopInfo'), leaveBtn = $('coopLeave'), menu = $('coopMenu');
+    let mode = 'off', net = null, link = null, code = '', went = false, upSince = 0;
+    const NAME_KEY = 'crimsonplague.name';
+    try { nameIn.value = localStorage.getItem(NAME_KEY) || ('Player' + (10 + Math.floor(Math.random() * 90))); } catch (e) { nameIn.value = 'Player' + (10 + Math.floor(Math.random() * 90)); }
+    const myName = () => { const n = nameIn.value.replace(/[<>&]/g, '').trim().slice(0, 12) || 'Player'; try { localStorage.setItem(NAME_KEY, n); } catch (e) { /* not saved */ } return n; };
+    const say = (t) => { info.textContent = t; };
+    function show() {
+      menu.hidden = mode !== 'off'; leaveBtn.hidden = mode === 'off';
+      if (mode === 'host') {
+        const names = ref.snapshot().coop.peers.map((p) => p.name);
+        say(code ? 'ROOM CODE  ' + code + (names.length ? '  -  joined: ' + names.join(', ') : '  -  waiting for friends (up to 2)') + (went ? '' : '. Press ENTER THE HALL when everyone is in.') : 'Opening a room...');
+        hooks.playLabel('ENTER THE HALL', false);
+      } else if (mode === 'guest') {
+        const ready = link && link.ready;
+        say(ready ? 'Joined room ' + code + '. ' + (went ? 'The host has started!' : 'Waiting for the host to start...') : 'Joining room ' + code + '...');
+        hooks.playLabel(!ready ? 'JOINING...' : went ? 'THE HOST STARTED - ENTER' : 'WAITING FOR THE HOST', !ready || !went);
+      } else hooks.playLabel('ENTER THE HALL', false);
+    }
+    function off(text) {
+      if (net) { try { net.close(); } catch (e) { /* gone */ } }
+      net = null; link = null; mode = 'off'; code = ''; went = false;
+      ref.setCfg({ coop: false, guest: false, selfKey: 'host' }); ref.reset();
+      if (text) say(text); else say('');
+      show(); if (text) info.textContent = text;
+    }
+    function fail(text) { hooks.toast(text); off(text); }
+    function startHost() {
+      if (!NetPeer.available()) { say('Playing with friends needs the internet link library, and it did not load. Check your connection and reload.'); return; }
+      ref.setCfg({ coop: true, guest: false, selfKey: 'host', selfName: myName() }); ref.reset();
+      mode = 'host'; went = false; code = '';
+      link = CoopLink.host(ref, (key, msg) => net && net.send(key, msg));
+      net = NetPeer.host({
+        ready: (c) => { code = c; show(); },
+        join: () => show(),
+        msg: (key, m) => { link.onMessage(key, m); if (m.t === 'hello' && went) link.start(); show(); },
+        leave: (key) => { link.leave(key); hooks.toast('A friend left'); show(); },
+        error: (t) => fail(t)
+      });
+      show();
+    }
+    function startJoin() {
+      const c = NetPeer.clean(codeIn.value);
+      if (c.length !== 5) { say('Type the 5 letter room code your friend gave you.'); return; }
+      if (!NetPeer.available()) { say('Playing with friends needs the internet link library, and it did not load. Check your connection and reload.'); return; }
+      ref.setCfg({ coop: true, guest: true, selfKey: 'pending', selfName: myName() }); ref.reset();
+      mode = 'guest'; went = false; code = c;
+      link = CoopLink.guest(ref, (m) => net && net.send(m), myName(), (m) => {
+        if (m.t === 'welcome') { if (!m.ok) { fail('That room is full (3 players at most).'); return; } ref.setCfg({ selfKey: m.key }); }
+        if (m.t === 'go') { went = true; hooks.toast('The host has started - enter the hall!'); }
+        show();
+      });
+      net = NetPeer.join(c, {
+        open: () => { link.hello(); show(); },
+        msg: (m) => link.onMessage(m),
+        close: () => { hooks.toast('The host left the game'); off('The host left the game.'); },
+        error: (t) => fail(t)
+      });
+      show();
+    }
+    btn.addEventListener('click', () => { panel.hidden = !panel.hidden; });
+    hostBtn.addEventListener('click', startHost);
+    joinBtn.addEventListener('click', startJoin);
+    codeIn.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') startJoin(); });
+    nameIn.addEventListener('keydown', (e) => e.stopPropagation());
+    leaveBtn.addEventListener('click', () => { if (link && mode === 'guest') { try { link.bye(); } catch (e) { /* closing anyway */ } } off(''); });
+    return {
+      get mode() { return mode; },
+      get blocked() { return mode === 'guest' && !(went && link && link.ready); },     // a friend can not enter the hall until the host has
+      onBegin() { if (mode === 'host' && !went) { went = true; link.start(); show(); } },
+      tick(dt, events) { if (!link) return; if (mode === 'host') link.tick(dt, events); else if (mode === 'guest' && link.ready) link.tick(dt); },
+      off
+    };
+  }
+  return { create };
+})();

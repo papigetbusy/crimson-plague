@@ -238,6 +238,8 @@
   const smoothLight = (x, z) => worldView.light(x, 1.5, z, 0, 1, 0);
   const loot = LootView.create(THREE, scene, glowTex);       // XP orbs and pickups
   const bossFx = BossFx.create(THREE, scene);               // floor warnings for the boss attacks
+  const peersView = PeersView.create(THREE, scene);         // the friends you play with
+  const partyHud = PartyHud.create($);                      // their health, and the message while you are down
   const trapView = TrapView.create(THREE, scene, glowTex);   // spike patches, flame vents, rising spikes
   const fx = FxSprites.create(THREE, camera, scene);          // sprite explosions, sparks and lightning (look presets, see fx_plan.js)
   // the look of shots, hits and kills: it follows the gun in your hands (rarity picks the tier, each status colour adds its element). Only the private cheat build can force another look.
@@ -552,12 +554,12 @@
   const overlay = $('start'), playBtn = $('play'), playLabel = $('playLabel'), diedEl = $('died');
   let lastKills = -1, hitT = 0, hitKill = false, diedT = 0;
   const minimap = Minimap.create($, () => ref.map), compass = Compass.create($);
-  const hud = Hud.create($, { pick: (i) => { I.pick = i; }, pickClass: (i) => { I.pickClass = i; }, restart: () => { I.restart = true; } });
+  const hud = Hud.create($, { pick: (i) => { I.pick = i; }, pickClass: (i) => { I.pickClass = i; }, restart: () => { if (coop.mode === 'guest') toast('The host starts the next run'); else I.restart = true; } });
 
   function setRunning(v) {
     running = v;
     overlay.hidden = v;
-    classPick.hidden = started;
+    classPick.hidden = started; $('coopBtn').hidden = started && coop.mode === 'off';
     if (!v) {
       mouse.fire = mouse.ads = false; tch.fire = false; bFire.classList.remove('on');
       playLabel.textContent = started ? 'RESUME' : 'ENTER THE HALL';
@@ -565,15 +567,17 @@
   }
   // starts or resumes. A controller press is not a click, so it cannot ask for fullscreen or the mouse lock
   function begin(fromPad) {
+    if (coop.blocked) { toast('Waiting for the host to start'); return; }
     audioInit();
     if (!started) {
       started = true;
       if (isTouch && !fromPad) { try { const el = document.documentElement; (el.requestFullscreen || el.webkitRequestFullscreen).call(el); } catch (e) { /* ignore */ } try { screen.orientation.lock('landscape').catch(() => {}); } catch (e) { /* ignore */ } }
     }
-    setRunning(true);
+    setRunning(true); coop.onBegin();
     if (!fromPad) tryLock();
   }
   playBtn.addEventListener('click', () => begin(false));
+  const coop = Coop.create($, ref, { toast: (t) => toast(t), playLabel: (t, off) => { $('playLabel').textContent = t; playBtn.disabled = off; }, begin });
   // controller menus: Start pauses and resumes, A starts, picks the highlighted level-up card, and rises again after a fall
   function padMenus() {
     const r = pad.now; if (!r) return;
@@ -647,7 +651,7 @@
   svBox.addEventListener('click', svClick); svOver.addEventListener('click', svClick);
   // saving happens only when you press Save game at the chest in a safe room (never on its own)
   function saveHere() {
-    const d = ref.saveData(); if (!d) return 'finish picking your level-up first';
+    const d = ref.saveData(); if (!d) return coop.mode !== 'off' ? 'saving is off while playing with friends' : 'finish picking your level-up first';
     Saves.add(d, new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })); drawSaves();
     return '✔ Saved: Floor ' + d.floor + ' · Wave ' + d.wave;
   }
@@ -835,6 +839,8 @@
       else if (e.type === 'bossBreath') { sfx('fireball'); }
       else if (e.type === 'bossDive' || e.type === 'bossDrain') { sfx(e.type === 'bossDive' ? 'boss' : 'pickup'); }
       else if (e.type === 'dead') { diedT = 1.4; sfx('dead'); rlPrev = 0; }
+      else if (e.type === 'down') { diedT = 0.9; sfx('dead'); toast('You are down - a friend standing close brings you back'); }
+      else if (e.type === 'revived') { sfx('levelup'); toast('Back on your feet'); }
       else if (e.type === 'restart') { diedT = 0; rlPrev = 0; equipK = 0; inspK = 0; fx.clear(); }
       else if (e.type === 'reloadStart') { rlPrev = 0; }
     }
@@ -1089,6 +1095,7 @@
     diedT = Math.max(0, diedT - dt); diedEl.style.opacity = clamp(diedT / 0.6, 0, 1);
     shotsView.update(st.shots, st.t);
     hud.update(st, dt); minimap.update(st, dt); compass.update(st); loot.update(st, time); trapView.update(st, ref.map, time); bossFx.update(st, time);
+    peersView.update(st.coop.peers, dt); partyHud.update(st);
   }
 
   /* ============ main loop ============ */
@@ -1103,7 +1110,7 @@
     // each stage guards itself: one bad frame in the drawing code must never freeze the rules or the controller, and the first error is shown on screen so it can be read off a phone
     const stage = (name, fn) => { try { fn(); } catch (e) { if (!frameErr) { frameErr = name + ': ' + (e && e.message ? e.message : e); toastEl.textContent = 'Error in ' + frameErr; toastEl.classList.add('show'); toastT = 1e9; if (window.console) console.error(e); } } };
     if (running && !panelOpen) {
-      stage('rules', () => { const out = ref.step(dt, gatherInput()); state = out.state; stage('events', () => handleEvents(out.events)); });
+      stage('rules', () => { const out = ref.step(dt, gatherInput()); state = out.state; stage('events', () => handleEvents(out.events)); coop.tick(dt, out.events); });
     } else {
       I.lookX = I.lookY = I.touchX = I.touchY = 0; I.slide = false; I.reload = false;
     }
