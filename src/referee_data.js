@@ -25,30 +25,46 @@ const RefereeData = (function () {
     flame: { name: 'Flame Spirit', size: 1.0, hpMul: 0.7, speedMul: 0.85, dmgMul: 1.3, rate: 1.0, xp: 16, heavy: false, wind: 0.3, hover: 1.45,
       shoot: { range: 18, keep: 8, wind: 0.8, cd: 3.0, speed: 8.5, dmg: 1.3, r: 0.45, proj: 'fire', y: 1.5 },
       spheres: [{ y: 1.5, r: 0.5, f: 0 }, { y: 1.95, r: 0.32, f: 0, head: true }, { y: 1.0, r: 0.35, f: 0 }] },
-    demon: { name: 'Demon Lord', size: 1.4, hpMul: 78, speedMul: 0.85, dmgMul: 4.2, rate: 0.8, xp: 400, heavy: true, boss: true, wind: 0.45,
+    demon: { name: 'Demon Lord', size: 1.4, hpMul: 78, speedMul: 0.85, dmgMul: 4.2, rate: 0.8, xp: 400, heavy: true, boss: true, wind: 0.4,
       guard: { wake: 12 },                                                   // he waits at the door, and wakes when you come within this many units in sight (or hurt him)
-      charge: { every: 5.5, windup: 0.7, dur: 0.9, mult: 3.4, hit: 1.5 },     // seconds, then speed multiplier and damage multiplier on contact
-      shoot: { range: 22, min: 6, wind: 0.9, cd: 3.4, speed: 9, dmg: 1.1, r: 0.7, proj: 'fire', y: 2.4 },   // a slow, wide fireball he throws from range after rearing back
+      charge: { every: 5.0, windup: 0.55, dur: 0.9, mult: 3.4, hit: 1.5 },     // seconds, then speed multiplier and damage multiplier on contact
+      shoot: { range: 22, min: 6, wind: 0.7, cd: 3.0, speed: 9, dmg: 1.1, r: 0.7, proj: 'fire', y: 2.4 },   // a slow, wide fireball he throws from range after rearing back
       enrage: { below: 0.35, speed: 1.25, pace: 0.65 },                       // under this much health he speeds up and throws and charges more often
       summonAt: 0.5, summonKind: 'hound', summonN: 4,                        // calls hounds once, at half health
+      extra: {                                                               // more moves, picked at random from the ones that are ready (see referee_boss_extras.js)
+        leap:   { kind: 'leap', cd: 9, wind: 0.65, dur: 0.5, radius: 6, dmg: 1.6, rest: 0.9, min: 5, max: 22 },
+        fan:    { kind: 'fan', cd: 7, wind: 0.55, n: 5, spread: 0.22, speed: 10, dmg: 0.8, r: 0.55, proj: 'fire', rest: 0.6, min: 4, max: 24 },
+        quakes: { kind: 'strikes', cd: 8.5, wind: 1.0, n: 4, r: 2.0, dmg: 1.0, spread: 5, rest: 0.7, min: 0, max: 24 } },
       spheres: [{ y: 0.8, r: 0.6, f: 0 }, { y: 1.7, r: 0.78, f: 0 }, { y: 2.45, r: 0.4, f: -0.05, head: true }] },
     // the three bosses taken from Crusader Tactics. Every one has its own moves (see referee_bosses.js, which plays them); the numbers sit here.
     bat: { name: 'Bat Lord', size: 1.3, hpMul: 62, speedMul: 1.1, dmgMul: 3.0, rate: 1.0, xp: 420, heavy: true, boss: true, wind: 0.4, hover: 1.5,
       guard: { wake: 14 }, enrage: { below: 0.35, speed: 1.2, pace: 0.6 },
       summonAt: 0.5, summonKind: 'eyeball', summonN: 4, summonText: 'BATS CALLED',
-      moves: { dive: { cd: 4.2, min: 5, max: 26, wind: 0.9, speed: 4.6, maxT: 1.1, dmg: 1.7, drain: 0.6, rest: 0.9 }, orbit: { dist: 11, speed: 0.9 } },   // dive: rear up, then swoop through the spot where you stood; a hit heals him by `drain` of its damage
+      extra: {
+        screech: { kind: 'ring', cd: 8, wind: 0.55, n: 14, speed: 9, dmg: 0.55, r: 0.35, proj: 'bolt', rest: 0.7, min: 0, max: 30 },
+        barrage: { kind: 'fan', cd: 6, wind: 0.5, n: 5, spread: 0.3, speed: 12, dmg: 0.6, r: 0.4, proj: 'bolt', rest: 0.6, min: 3, max: 26 },
+        combo:   { kind: 'combo', cd: 12, wind: 0.65, gap: 0.3, n: 3, dur: 0.55, mult: 4.2, dmg: 1.1, rest: 1.1, min: 5, max: 24 } },
+      moves: { dive: { cd: 4.0, min: 5, max: 26, wind: 0.7, speed: 4.6, maxT: 1.1, dmg: 1.7, drain: 0.6, rest: 0.9 }, orbit: { dist: 11, speed: 0.9 } },   // dive: rear up, then swoop through the spot where you stood; a hit heals him by `drain` of its damage
       spheres: [{ y: 1.7, r: 0.8, f: 0 }, { y: 2.2, r: 0.45, f: 0.1, head: true }] },
     lich: { name: 'Lich King', size: 1.4, hpMul: 55, speedMul: 0.7, dmgMul: 3.4, rate: 1.0, xp: 440, heavy: true, boss: true, wind: 0.4, hover: 0.8,
       guard: { wake: 16 }, enrage: { below: 0.35, speed: 1.15, pace: 0.65 },
       summonAt: 0.6, summonKind: 'skeleton', summonN: 4, summonText: 'THE DEAD RISE',
-      moves: { volley: { cd: 2.6, wind: 0.8, n: 3, spread: 0.26, speed: 11, dmg: 0.9, r: 0.4, min: 3, max: 26 },
-        nova: { cd: 9, wind: 1.5, n: 18, speed: 7, dmg: 0.75, r: 0.4, min: 2, max: 22 },
+      extra: {
+        spiral:  { kind: 'spiral', cd: 10, wind: 0.8, dur: 2.6, every: 0.14, arms: 3, turn: 1.6, speed: 7.5, dmg: 0.6, r: 0.38, rest: 0.9, min: 0, max: 30 },
+        scatter: { kind: 'fan', cd: 7, wind: 0.6, n: 7, spread: 0.2, speed: 8, dmg: 0.7, r: 0.4, proj: 'soul', rest: 0.6, min: 3, max: 26 },
+        pillars: { kind: 'strikes', cd: 8, wind: 0.95, n: 5, r: 1.9, dmg: 0.9, spread: 5, rest: 0.7, min: 3, max: 24 } },
+      moves: { volley: { cd: 2.4, wind: 0.6, n: 3, spread: 0.26, speed: 11, dmg: 0.9, r: 0.4, min: 3, max: 26 },
+        nova: { cd: 8.5, wind: 1.15, n: 18, speed: 7, dmg: 0.75, r: 0.4, min: 2, max: 22 },
         blink: { cd: 6, near: 6.5, min: 12, max: 19, rest: 0.5 }, keep: 11 },     // volley: a fan of soul bolts; nova: a ring of bolts with gaps; blink: he vanishes when you get close
       spheres: [{ y: 1.0, r: 0.7, f: 0 }, { y: 1.9, r: 0.7, f: 0 }, { y: 2.6, r: 0.42, f: 0, head: true }] },
     dragon: { name: 'Elder Dragon', size: 1.9, hpMul: 110, speedMul: 0.7, dmgMul: 3.6, rate: 0.8, xp: 480, heavy: true, boss: true, wind: 0.6,
       guard: { wake: 13 }, enrage: { below: 0.35, speed: 1.2, pace: 0.7 },
-      moves: { breath: { cd: 7, min: 3, max: 18, wind: 1.0, dur: 1.9, arc: 1.3, every: 0.08, speed: 13, dmg: 0.32, r: 0.5, life: 1.3 },
-        slam: { cd: 5.5, near: 6, wind: 1.0, radius: 7, dmg: 1.8, rest: 0.8 } },    // breath: a fire cone sweeps across (step out of it or slide through); slam: a tail shockwave all round him
+      extra: {
+        rush:    { kind: 'rush', cd: 9, wind: 0.65, dur: 1.0, mult: 3.2, dmg: 1.4, rest: 1.1, min: 6, max: 24 },
+        flick:   { kind: 'flick', cd: 3.2, wind: 0.32, near: 4.5, dmg: 0.9, rest: 0.5, min: 0 },
+        meteors: { kind: 'strikes', cd: 10, wind: 1.15, n: 6, r: 2.2, dmg: 1.0, spread: 7, rest: 0.8, min: 4, max: 26 } },
+      moves: { breath: { cd: 6.5, min: 3, max: 18, wind: 0.8, dur: 1.9, arc: 1.3, every: 0.08, speed: 13, dmg: 0.32, r: 0.5, life: 1.3 },
+        slam: { cd: 5.0, near: 6, wind: 0.8, radius: 7, dmg: 1.8, rest: 0.8 } },    // breath: a fire cone sweeps across (step out of it or slide through); slam: a tail shockwave all round him
       spheres: [{ y: 0.9, r: 0.95, f: 0.1 }, { y: 1.7, r: 0.8, f: 0.3 }, { y: 2.5, r: 0.5, f: 0.7, head: true }] }
   };
 

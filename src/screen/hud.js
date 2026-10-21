@@ -4,7 +4,7 @@ const Hud = (function () {
   function create($, cb) {
     const el = {
       waveN: $('waveN'), floorN: $('floorN'), waveLeft: $('waveLeft'), lvlN: $('lvlN'), xpFill: $('xpFill'), boss: $('boss'), bossName: $('bossName'), bossFill: $('bossFill'),
-      banner: $('banner'), bannerT: $('bannerT'), bannerS: $('bannerS'), chips: $('chips'), frenzy: $('frenzy'), clsName: $('clsName'), ultBox: $('ultBox'), ultName: $('ultName'), ultFill: $('ultFill'),
+      banner: $('banner'), bannerT: $('bannerT'), bannerS: $('bannerS'), chips: $('chips'), ail: $('ail'), ailTint: $('ailTint'), frenzy: $('frenzy'), clsName: $('clsName'), ultBox: $('ultBox'), ultName: $('ultName'), ultFill: $('ultFill'),
       levelup: $('levelup'), gold: $('goldN'), luTitle: $('luTitle'), luHint: $('luHint'), cards: $('cards'), classCards: $('classCards'), classHead: $('clsHead'), cardHead: $('cardHead'), over: $('gameover'), overStats: $('overStats'), restart: $('restart')
     };
     let last = {}, chipKey = '', bannerT = 0;
@@ -84,6 +84,13 @@ const Hud = (function () {
       const showBoss = st.bossBar && st.bossBar.state !== 'guard';   // his bar waits until he wakes, so it does not cover the compass
       el.boss.hidden = !showBoss;
       if (showBoss) { setText('bn', el.bossName, st.bossBar.name); el.bossFill.style.width = (Math.max(0, st.bossBar.hp / st.bossBar.maxHp) * 100).toFixed(1) + '%'; el.boss.classList.toggle('charge', st.bossBar.state === 'windup' || st.bossBar.state === 'charge'); }
+      const ai = st.player.ail || {}, aik = (ai.burn > 0 ? 'b' : '') + (ai.freeze > 0 ? 'f' : '') + (ai.poison > 0 ? 'p' : '');       // burn, freeze and poison on you
+      if (aik !== last.aik) {
+        last.aik = aik; el.ail.textContent = '';
+        for (const [ch, id, label] of [['b', 'burn', 'BURNING'], ['f', 'freeze', 'FROZEN'], ['p', 'poison', 'POISONED']]) if (aik.includes(ch)) { const c = document.createElement('span'); c.className = id; c.textContent = label; el.ail.appendChild(c); }
+        el.ailTint.className = aik.includes('f') ? 'freeze' : aik.includes('b') ? 'burn' : aik.includes('p') ? 'poison' : '';
+      }
+      el.boss.classList.toggle('open', !!(st.bossBar && st.bossBar.exposed));
       const cl = st.cls, ck = st.skills.map((s) => s.id + s.n).join() + '|' + (cl ? cl.skills.map((s) => s.id + s.lvl).join() : '');
       if (ck !== chipKey) {
         chipKey = ck; el.chips.textContent = '';

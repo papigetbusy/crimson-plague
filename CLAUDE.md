@@ -41,6 +41,8 @@ Keep the code neat: small focused files and functions in clear folders, never on
 - `node tests/mods.test.js` : gun mods (lines by rarity, which guns each fits, mod places by gun rarity, bag of 6, fitting and removing, drops, the Gear menu bag)
 - `node tests/stash.test.js` : stash and blueprints (3 gun + 3 mod places, put in / take out / swap at the chest, the hall-door menu that lets you take one gun and any mods, stash kept between runs, 3 blueprints per type, starting a run from blueprints, the menus)
 - `node tests/gifts.test.js` : the six newer level-up gifts (Lucky Drops, Thick Skin, Gold Rush, Overcharge, Bounce Pad, Second Wind)
+- `node tests/variants.test.js` : Ember/Frost/Venom monsters, burn/freeze/poison on you, weak spots
+- `node tests/bossmoves.test.js` : the extra boss moves, the open moment, variant bosses, deeper-floor speed
 - `node tests/saves.test.js` : seeds and saves (map seed kept in a save, damage and item seeds fresh every time, what a save holds, the saves list)
 - `node tests/stuck.test.js` : never stuck (a level-up can always be picked, at the merchant, at the chest, after a save; random play never throws or stalls)
 - `node tests/floorguns.test.js` : floor guns (one default pickup model per gun type, told apart by size and shape, shaded in the rarity colour)

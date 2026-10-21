@@ -120,7 +120,7 @@ const aimFire = (rr, s, b, extra) => {
   t('The Elder Dragon slams his tail when you stand close', slams >= 1);
   const slam = (dist) => {                                              // the same slam against a fake referee: does the shockwave reach a player this far away?
     const hurts = []; const env = { player: () => ({ x: dist, z: 0, eye: 1.7 }), rng: () => 0.5, los: () => true, hurt: (d) => { hurts.push(d); return true; }, fire: () => { }, event: () => { }, speed: () => 4, spot: () => null };
-    const B = RB.create(env), k = D.KINDS.dragon, m = { kind: 'dragon', x: 0, z: 0, hp: 1, maxHp: 1, dmg: 10, scale: 1, enraged: false, state: 'chase' };
+    const B = RB.create(env), k = Object.assign({}, D.KINDS.dragon, { extra: undefined }), m = { kind: 'dragon', x: 0, z: 0, hp: 1, maxHp: 1, dmg: 10, scale: 1, enraged: false, state: 'chase' };
     for (let i = 0; i < 600 && !hurts.length; i++) B.step(m, k, 1 / 60, dist, dist, 0, 3);
     return hurts.length;
   };

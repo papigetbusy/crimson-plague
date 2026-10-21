@@ -134,6 +134,14 @@ body {
 #rlFill { display: block; height: 100%; width: 0; background: var(--gold); }
 #ammo em { display: block; font-style: normal; font-weight: 700; font-size: 11px; letter-spacing: 0.24em; color: var(--gold); opacity: 0; margin-top: 2px; }
 #ammo.rl em { opacity: 1; }
+#ailTint { position: absolute; inset: 0; opacity: 0; transition: opacity 0.25s; pointer-events: none; }
+#ailTint.burn { opacity: 1; box-shadow: inset 0 0 90px 18px rgba(255, 110, 20, 0.55); }
+#ailTint.freeze { opacity: 1; box-shadow: inset 0 0 110px 26px rgba(120, 200, 255, 0.6); background: rgba(150, 215, 255, 0.10); }
+#ailTint.poison { opacity: 1; box-shadow: inset 0 0 90px 18px rgba(110, 220, 60, 0.5); }
+#ail { display: flex; gap: 6px; margin-top: 4px; min-height: 0; }
+#ail span { font-size: 11px; font-weight: 700; letter-spacing: 0.14em; padding: 2px 6px; border-radius: 3px; background: rgba(0, 0, 0, 0.55); }
+#ail .burn { color: #ff9a3c; } #ail .freeze { color: #9fdcff; } #ail .poison { color: #9be05a; }
+#bossBox.open #bossName::after, #boss.open #bossName::after { content: ' · OPEN!'; color: #ffe070; }
 #hurt { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse at center, rgba(120, 0, 8, 0) 42%, rgba(160, 6, 16, 0.85) 100%); }
 #died { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--display); font-size: clamp(44px, 14vh, 96px); color: var(--crimson-hi); text-shadow: 0 3px 0 #000; opacity: 0; background: rgba(40, 0, 4, 0.35); letter-spacing: 0.04em; }
 
@@ -338,6 +346,7 @@ body.pad .card3.sel { border-color: var(--gold); background: linear-gradient(#3c
   <div class="corner">
     <div id="killbox"><div id="kills">0</div><span>Slain</span></div>
     <div id="hpBar"><div id="hpFill"></div></div>
+    <div id="ail"></div>
     <div id="party" hidden></div>
     <div id="lvl"><span id="lvlN">LV 1</span><span id="goldN">0 G</span><div id="xpBar"><i id="xpFill"></i></div></div>
     <div id="clsName"></div>
@@ -350,6 +359,7 @@ body.pad .card3.sel { border-color: var(--gold); background: linear-gradient(#3c
   <div id="cloakVeil"></div>
   <div id="banner"><b id="bannerT"></b><span id="bannerS"></span></div>
   <div id="frenzy" hidden></div>
+  <div id="ailTint"></div>
   <div id="hurt"></div>
   <div id="ammo"><div class="nums"><b id="ammoN">30</b><span id="ammoM">/ 30</span></div><div class="rlbar"><i id="rlFill"></i></div><em>RELOADING</em></div>
   <div id="cross"><i class="t u"></i><i class="t d"></i><i class="t l"></i><i class="t r"></i><i class="dot"></i></div>

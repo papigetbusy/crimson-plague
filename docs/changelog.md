@@ -1,4 +1,5 @@
 # Changelog (newest first, one plain line each)
+- 2026-10-21: Boss moves rebuilt (3 to 4 extra moves each picked at random, faster winds, open moment after a big move), Ember/Frost/Venom monsters and bosses that burn, freeze or poison you, and scarier Goblin, Skeleton and Mushroom models.
 - 2026-10-21: Six new level-up gifts: Lucky Drops, Thick Skin, Gold Rush, Overcharge, Bounce Pad and Second Wind.
 - 2026-10-21: Any mod now fits any gun with a free place; the jump is about twice as high, and while you are high enough small monsters (hounds, goblins, mushrooms, eyeballs) cannot hit you.
 - 2026-10-21: The stash is permanent: at the door of the hall you take a copy of one gun and any mods, and the stash keeps the originals even if you fall; guns can be named when put in the stash (or renamed at the chest).

@@ -37,7 +37,7 @@ const RefereeCoop = (function () {
   const worldEvents = (events) => events.filter((e) => WORLD_EVENTS.indexOf(e.type) >= 0);
   const r2 = (v) => Math.round(v * 100) / 100;
   // one monster as it travels over the net: just what a friend's screen and aim need
-  const compact = (m, atkK, castK) => ({ id: m.id, kind: m.kind, x: r2(m.x), z: r2(m.z), yaw: r2(m.yaw), hp: Math.round(m.hp), mhp: Math.round(m.maxHp), st: m.state, ph: r2(m.phase), sc: r2(m.scale), el: m.elite, en: !!m.enraged, ak: r2(atkK), ck: r2(castK) });
+  const compact = (m, atkK, castK) => ({ id: m.id, kind: m.kind, x: r2(m.x), z: r2(m.z), yaw: r2(m.yaw), hp: Math.round(m.hp), mhp: Math.round(m.maxHp), st: m.state, ph: r2(m.phase), sc: r2(m.scale), el: m.elite, en: !!m.enraged, va: m.variant || null, ex: m.exposed ? 1 : 0, ak: r2(atkK), ck: r2(castK) });
   // a friend's copy of a monster: it keeps its own status effects (fire, ice ...) and is pulled towards the host's position
   function puppet(c) {
     return { id: c.id, kind: c.kind, x: c.x, z: c.z, yaw: c.yaw, hp: c.hp, maxHp: c.mhp, state: c.st, phase: c.ph, scale: c.sc, elite: c.el || [], enraged: c.en, flash: 0, stun: 0, spd0: 1, spd: 1, dmg: 0, sv: 1, atk: 0, shW: 0, net: true, tx: c.x, tz: c.z, tyaw: c.yaw, atkKv: c.ak, castKv: c.ck };

@@ -2,6 +2,7 @@
    so every big attack can be seen coming and dodged. Presentation only: where and how far along they are comes from the snapshot's `bossFx` list. Look-only numbers live here. */
 const BossFx = (function () {
   const COLOUR = { lane: 0xff4a30, ring: 0xc070ff, slam: 0xff8a2a };
+  const ELEMENT = { ember: 0xff6a1a, frost: 0x7ac8ff, venom: 0x6be03a };                // the marked circles of a variant boss' blasts
   function create(THREE, scene) {
     const box = new THREE.BoxGeometry(1, 0.04, 1), cyl = new THREE.CylinderGeometry(1, 1, 0.04, 40, 1, true), disc = new THREE.CylinderGeometry(1, 1, 0.03, 40);
     const pool = [];
@@ -26,6 +27,7 @@ const BossFx = (function () {
           e.mesh.material.opacity = (0.18 + 0.4 * f.k) * pulse;
         } else {
           const kind = f.fill ? 'disc' : 'ring', e = get(n++, kind);
+          e.mesh.material.color.setHex(ELEMENT[f.fx] || (f.fill ? COLOUR.slam : COLOUR.ring));
           e.mesh.visible = true; e.mesh.position.set(f.x, 0.07, f.z); e.mesh.scale.set(f.r, 1, f.r); e.mesh.rotation.y = 0;
           e.mesh.material.opacity = (f.fill ? 0.12 + 0.3 * f.k : 0.3 + 0.4 * f.k) * pulse;
         }

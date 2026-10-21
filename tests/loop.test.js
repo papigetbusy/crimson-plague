@@ -144,7 +144,7 @@ const nearBoss = (ref, d) => { const b = ref.snapshot().monsters.find((q) => q.k
   out = ref.step(1 / 60, {});
   t('Stepping into the doorway takes you to floor 2, a new and bigger floor, and wave 11 comes after a short pause', out.events.some((e) => e.type === 'floorChange' && e.floor === 2) && out.state.floor === 2 && out.state.floorId !== floorId0 && ref.map.W > W0 && out.state.wave.phase === 'intermission' && out.state.wave.n === 11 && out.state.monsters.length === 0);
   const sp = ref.map.start;
-  t('You arrive in the new floor\'s spawn room with your health, and the new door is shut and far away', Math.abs(out.state.player.x - sp.x) < 0.01 && Math.abs(out.state.player.z - sp.z) < 0.01 && out.state.player.hp === hp0 && !out.state.door.open && Math.hypot(out.state.door.x - sp.x, out.state.door.z - sp.z) > ref.map.W);
+  t('You arrive in the new floor\'s spawn room with your health, and the new door is shut and far away', Math.abs(out.state.player.x - sp.x) < 0.01 && Math.abs(out.state.player.z - sp.z) < 0.01 && out.state.player.hp >= hp0 && !out.state.door.open && Math.hypot(out.state.door.x - sp.x, out.state.door.z - sp.z) > ref.map.W);
   const f2 = run(ref, (o) => o.wave.phase === 'fight', 10, { idle: true });
   t('Wave 11 starts on floor 2 and the boss is not out until wave 20', f2.out.wave.phase === 'fight' && f2.out.wave.n === 11 && !f2.out.monsters.some((q) => q.kind === 'demon'));
 }

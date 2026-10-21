@@ -892,6 +892,8 @@
       else if (e.type === 'bossBlink') { burst(e.x, 1.5, e.z, 14, [0xa050ff, 0xf0dcff], 5, 0.5, 4, 0.9); burst(e.x2, 1.5, e.z2, 14, [0xa050ff, 0xf0dcff], 5, 0.5, 4, 0.9); sfx('blast'); }
       else if (e.type === 'bossNova' || e.type === 'bossSlam') { burst(e.x, 0.6, e.z, 18, e.type === 'bossNova' ? [0xa050ff, 0xf0dcff] : [0xff8a2a, 0xffe070], 7, 0.5, 4, 0.9); sfx('blast'); }
       else if (e.type === 'bossBreath') { sfx('fireball'); }
+      else if (e.type === 'bossStrike') { burst(e.x, 0.5, e.z, 14, VariantLook.BURST[e.fx] || [0xa050ff, 0xf0dcff], 6, 0.5, 3.5, 0.8); sfx('blast'); }
+      else if (e.type === 'ailment') { sfx('hurt'); toast(e.kind === 'burn' ? 'You are burning! Slide to put it out' : e.kind === 'freeze' ? 'Frozen! You move slower' : 'Poisoned! No healing until it wears off'); }
       else if (e.type === 'bossDive' || e.type === 'bossDrain') { sfx(e.type === 'bossDive' ? 'boss' : 'pickup'); }
       else if (e.type === 'dead') { diedT = 1.4; sfx('dead'); rlPrev = 0; }
       else if (e.type === 'down') { diedT = 0.9; sfx('dead'); toast('You are down - a friend standing close brings you back'); }
@@ -1015,7 +1017,8 @@
       RIGS.animate(en, m, st.t);
       const lt = smoothLight(m.x, m.z), f = clamp(m.flash / 0.12, 0, 1), warn = m.state === 'windup' ? 0.35 + 0.25 * Math.sin(st.t * 30) : (m.castK > 0 ? 0.12 + 0.3 * m.castK : m.atkK > 0.4 ? 0.2 * m.atkK : 0) + (m.enraged ? 0.14 + 0.08 * Math.sin(st.t * 9) : 0);   // an enraged boss glows red
       const ge = eliteGlow(m.elite, st.t);                                    // elites glow the colour of their abilities
-      const sf = statusGlow(m, st.t);                                          // poison glows purple, bleed red, hex gold; a fresh hit pulses
+      const sf = statusGlow(m, st.t), vg = VariantLook.glow(m, st.t);          // poison glows purple, bleed red, hex gold; a fresh hit pulses; variants glow their element, an open boss glows gold
+      sf[0] += vg[0]; sf[1] += vg[1]; sf[2] += vg[2];
       en.skin.emissive.setRGB(Math.max(0, (lt[0] - 0.14)) * 0.22 + f * 0.7 + warn + ge[0] + sf[0], Math.max(0, (lt[1] - 0.1)) * 0.12 + f * 0.35 + ge[1] + sf[1], f * 0.3 + ge[2] + sf[2]);
       statusBadges(en, m, st); monsterEyes(en, m, st);
     }
