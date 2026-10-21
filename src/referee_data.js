@@ -64,7 +64,13 @@ const RefereeData = (function () {
     { id: 'blast',  name: 'Hellfire Rounds',  desc: 'Hits explode for 35% damage',     max: 5,  per: 0.35 },
     { id: 'magnet', name: 'Grave Magnet',     desc: '+60% pickup range',               max: 4,  per: 0.6 },
     { id: 'regen',  name: 'Dark Vigor',       desc: '+4 health per second regrowth',   max: 5,  per: 4 },
-    { id: 'mag',    name: 'Deep Magazine',    desc: '+8 rounds per magazine',          max: 5,  per: 8 }
+    { id: 'mag',    name: 'Deep Magazine',    desc: '+8 rounds per magazine',          max: 5,  per: 8 },
+    { id: 'luck',   name: 'Lucky Drops',      desc: 'Guns, armor and mods drop in better rarities', max: 4, per: 1 },
+    { id: 'thick',  name: 'Thick Skin',       desc: 'Take 7% less damage from every blow', max: 5, per: 0.07 },
+    { id: 'gold',   name: 'Gold Rush',        desc: '+25% gold from coins',            max: 5,  per: 0.25 },
+    { id: 'over',   name: 'Overcharge',       desc: 'Every 5th shot hits +75% harder', max: 4,  per: 0.75 },
+    { id: 'bounce', name: 'Bounce Pad',       desc: 'Jump 12% higher; landing slams monsters around you', max: 4, per: 1 },
+    { id: 'wind',   name: 'Second Wind',      desc: 'Once per floor, a killing blow leaves you alive with 40% health', max: 3, per: 1 }
   ];
 
   const LOOP = {
@@ -87,6 +93,9 @@ const RefereeData = (function () {
     volatileRadius: 3.6, volatileDmg: 1.0,              // an exploding elite hurts you within this far, for this times its damage
     goldPerXp: 0.4, goldWave: 0.06, goldElite: 3, coinMagnet: 4, coinPickup: 0.9, coinLife: 40,   // gold: a kill drops this much per point of its xp, a bit more every wave, triple from elites
     keeperHp: 6, keeperDmg: 1.4, keeperScale: 1.35, keeperWake: 11,   // the Key Keeper (a mini boss that holds a gate key): this many times the health and damage of his kind, this much bigger, wakes when you come this close in sight
+    luckWaves: 5,                                        // Lucky Drops: each stack rolls drop rarity as if it were this many waves later
+    overEvery: 5, bounceRadius: 3, bounceDmg: 1.2, bounceStun: 0.6, bounceMin: 0.9, bounceJump: 0.12, windHp: 0.4, windGrace: 1.5,   // Overcharge, Bounce Pad, Second Wind
+    hopMax: 2.0, hopFrac: 0.7,   // a monster whose body is lower than this can be hopped over; your feet must be this share of its height above the floor
     sealedAlive: 6, sealedGap: 3,   // while the boss door is sealed by its puzzle, up to this many ordinary monsters at a time, one every few seconds
     shopRadius: 3.2, shopHeal: 100, shopSkill: 150, shopSkillPer: 75, shopOffers: 3,   // the merchant: a full heal, and up to three class skill levels that cost more the higher the skill already is
     trapPct: 0.12, trapScale: 0.12, trapMax: 0.35, trapTick: 0.7,           // traps: a hit takes this share of your health, a bit more on deeper floors (up to the max), and again every so often while you stand in it

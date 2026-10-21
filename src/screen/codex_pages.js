@@ -80,7 +80,7 @@ const CodexPages = (function () {
     out.push({ id: 'mods', title: 'Gun Mods', sections: [
       sec('What they are', p('Mods are small parts that bolt onto a gun. They have their own lines and never carry the ordinary gun or gear lines. Pick one up with E, A or by tapping its card, then open the Gear menu (G) to fit it. Taking one off puts it back in your bag (' + MD.BAG + ' places). Mods drop ' + pct(MD.DROP.chance) + ' of the time from monsters, ' + pct(MD.DROP.eliteChance) + ' from elites, and a boss always leaves one.')),
       sec('Lines by rarity', table(['Rarity', 'Lines on a mod', 'Mod places on a gun of that rarity', 'Fits a gun of'], RAR.map((r, i) => ['<b style="color:' + hex(r.color) + '">' + esc(r.name) + '</b>', String(MD.COUNT[i]), String(MD.SLOTS[i]), esc(RAR[MD.window(i)[0]].name + (MD.window(i)[0] === MD.window(i)[1] ? '' : ' to ' + RAR[MD.window(i)[1]].name))]))),
-      sec('The rule that keeps mods useful', p('A mod only fits a gun one rarity below to one rarity above its own, so a purple gun never takes a common mod, and mods drop on the same waves as guns of that rarity, so you never find a top mod with nothing to put it on.')),
+      sec('Any mod on any gun', p('A mod of any rarity fits any gun that has a free mod place. Take a mod off one gun and bolt it on another whenever you like: a weaker gun with a mod line you love can be the better build for you. The only limit is the number of places on the gun.')),
       sec('Mod lines', table(['Line', 'Does', 'Common', 'Legendary'], MD.LIST.map((a) => [esc(a.name), esc(a.text), '+' + pct(a.base * 0.8) + ' to ' + pct(a.base * 1.2), '+' + pct(a.base * 2 * 0.8) + ' to ' + pct(a.base * 2 * 1.2)])))
     ] });
 

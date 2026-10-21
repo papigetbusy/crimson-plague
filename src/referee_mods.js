@@ -1,6 +1,6 @@
 /* Gun mods: small parts that bolt onto a gun. A mod is its own kind of item with its own lines (magazine size, fire rate, aim speed...): it never
    carries the plain gun or gear lines. How many lines it has follows rarity (common 1, uncommon 2, rare 3, epic 3, legendary 4). A gun has room for
-   a few mods by rarity, and a mod only fits a gun of nearly the same rarity (one step below to one step above), so a high mod always has a gun to go on.
+   a few mods by rarity, and (owner, 2026-10-21) ANY mod fits ANY gun that has a free place: you may take the hit on stats to keep a line you like.
    Pure data and functions (the referee hands in its seeded dice). A mod item is { rarity, wave, affixes[{id,stat,v}] }. */
 const RefereeMods = (function () {
   const COUNT = [1, 2, 3, 3, 4];             // lines per mod rarity
@@ -20,7 +20,7 @@ const RefereeMods = (function () {
   const clampR = (r) => Math.max(0, Math.min(4, r));
   const slotsFor = (gunRarity) => SLOTS[clampR(gunRarity)];
   // the mod rarities a gun can take: one step below to one step above its own
-  const window = (gunRarity) => [clampR(gunRarity - 1), clampR(gunRarity + 1)];
+  const window = () => [0, 4];                                                  // every mod rarity fits every gun (the only limit is the gun's free places)
   const fits = (gunRarity, modRarity) => { const [lo, hi] = window(gunRarity); return modRarity >= lo && modRarity <= hi; };
   function make(rarity, wave, rng) {
     const out = [], left = LIST.slice();

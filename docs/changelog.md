@@ -1,4 +1,6 @@
 # Changelog (newest first, one plain line each)
+- 2026-10-21: Six new level-up gifts: Lucky Drops, Thick Skin, Gold Rush, Overcharge, Bounce Pad and Second Wind.
+- 2026-10-21: Any mod now fits any gun with a free place; the jump is about twice as high, and while you are high enough small monsters (hounds, goblins, mushrooms, eyeballs) cannot hit you.
 - 2026-10-21: The stash is permanent: at the door of the hall you take a copy of one gun and any mods, and the stash keeps the originals even if you fall; guns can be named when put in the stash (or renamed at the chest).
 - 2026-10-21: The stash is kept between runs; at the door of the hall, if it holds anything, a menu opens so you can take one gun and as many mods as you like.
 - 2026-10-21: Bug batch: stash now has 3 gun and 3 mod places you can put in, take out and swap; mouse look turns on every move when the browser will not capture the mouse; common guns carry no status and wear a plain steel skin; frozen or smitten monsters no longer fight back, smite is not wiped by the next hit, bosses freeze only briefly.

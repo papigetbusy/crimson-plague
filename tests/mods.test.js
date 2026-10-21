@@ -14,10 +14,10 @@ t('A mod never carries the ordinary gun or gear lines, only its own', many(300, 
 t('A mod never repeats a line', many(200, () => M.make(4, 5, rng).affixes.map((a) => a.id)).every((ids) => new Set(ids).size === ids.length));
 t('Higher rarity mods have bigger numbers', (() => { const avg = (q) => many(300, () => { const a = M.make(q, 1, rng).affixes[0]; return a.v / M.BY_ID[a.id].base; }).reduce((x, y) => x + y, 0) / 300; return avg(4) > avg(2) && avg(2) > avg(0); })());
 t('Guns have 1, 1, 2, 2 and 3 mod places by rarity', [0, 1, 2, 3, 4].map(M.slotsFor).join() === '1,1,2,2,3');
-t('A common gun takes common and uncommon mods only', [0, 1, 2, 3, 4].map((m) => M.fits(0, m)).join() === 'true,true,false,false,false');
-t('An uncommon gun takes common, uncommon and rare mods', [0, 1, 2, 3, 4].map((m) => M.fits(1, m)).join() === 'true,true,true,false,false');
-t('An epic gun never takes a common mod, only rare and better', [0, 1, 2, 3, 4].map((m) => M.fits(3, m)).join() === 'false,false,true,true,true');
-t('A legendary gun only takes epic and legendary mods', [0, 1, 2, 3, 4].map((m) => M.fits(4, m)).join() === 'false,false,false,true,true');
+t('Any mod rarity fits a gun of any rarity (you may take the hit on stats for a line you like)', [0, 1, 2, 3, 4].every((g) => [0, 1, 2, 3, 4].every((m) => M.fits(g, m))));
+
+
+
 t('Every mod rarity has a gun it fits (nothing is ever stuck in the bag for good)', [0, 1, 2, 3, 4].every((m) => [0, 1, 2, 3, 4].some((g) => M.fits(g, m))));
 
 // ---- what a mod changes
@@ -35,8 +35,8 @@ t('A mod dropped by hand lies on the floor and is not picked up by walking over 
 t('Pressing pick up puts a mod in the bag', (() => { const r = mk({ manualGuns: true }); r.giveMod(1); go(r, 2); go(r, 0.1, { pickup: true }); const s = r.snapshot(); return s.player.mods.length === 1 && !s.pickups.some((p) => p.kind === 'mod'); })());
 t('The bag holds six mods and the seventh stays on the floor', (() => { const r = mk({ manualGuns: true }); for (let i = 0; i < 6; i++) r.addMod(mod(1)); r.giveMod(1); go(r, 2); const o = go(r, 0.1, { pickup: true }); return r.snapshot().player.mods.length === 6 && r.snapshot().pickups.some((p) => p.kind === 'mod') && o.ev.some((e) => e.type === 'bagFull'); })());
 t('A mod that fits goes from the bag onto the gun and the gun card shows it', (() => { const r = mk(); r.equipItem(W.make('pistol_service', 2, 1)); r.addMod(mod(2)); const why = r.attachMod(0, 0); const c = r.snapshot().player.gun.card; return why === '' && c.mods.length === 1 && c.slots === 2 && r.snapshot().player.mods.length === 0; })());
-t('A mod that is too strong for the gun is refused and stays in the bag', (() => { const r = mk(); r.equipItem(W.make('pistol_service', 0, 1)); r.addMod(mod(4)); const why = r.attachMod(0, 0); return why.includes('too strong') && r.snapshot().player.mods.length === 1; })());
-t('A mod that is too weak for the gun is refused', (() => { const r = mk(); r.equipItem(W.make('pistol_service', 3, 1)); r.addMod(mod(0)); return r.attachMod(0, 0).includes('too weak'); })());
+t('A legendary mod goes onto a common gun, and a common mod onto a legendary gun', (() => { const r = mk(); r.equipItem(W.make('pistol_service', 0, 1)); r.addMod(mod(4)); const a = r.attachMod(0, 0) === '' && r.snapshot().player.gun.card.mods.length === 1; const q = mk(); q.equipItem(W.make('pistol_service', 4, 1)); q.addMod(mod(0)); return a && q.attachMod(0, 0) === ''; })());
+t('A mod can still be refused when the gun has no free place left', (() => { const r = mk(); r.equipItem(W.make('pistol_service', 0, 1)); r.addMod(mod(1)); r.addMod(mod(1)); r.attachMod(0, 0); return r.attachMod(0, 0).length > 0 && r.snapshot().player.mods.length === 1; })());
 t('A gun with all its mod places full refuses another', (() => { const r = mk(); r.equipItem(W.make('pistol_service', 1, 1)); r.addMod(mod(1)); r.addMod(mod(1)); r.attachMod(0, 0); return r.attachMod(0, 0).includes('no free'); })());
 t('Taking a mod off puts it back in the bag, and a full bag refuses', (() => { const r = mk(); r.equipItem(W.make('pistol_service', 1, 1)); r.addMod(mod(1)); r.attachMod(0, 0); const ok = r.detachMod(0, 0) === '' && r.snapshot().player.mods.length === 1; for (let i = 0; i < 5; i++) r.addMod(mod(1)); r.attachMod(0, 0); r.addMod(mod(1)); return ok && r.detachMod(0, 0).includes('bag full'); })());
 t('A magazine mod raises the real magazine in a run and removing it trims the ammo back', (() => { const r = mk(); r.equipItem(W.make('pistol_service', 1, 1)); const m0 = r.snapshot().player.maxAmmo !== undefined ? r.snapshot().player.maxAmmo : r.snapshot().player.gun.card.mag; r.addMod(mod(1, [{ id: 'extmag', stat: 'mag', v: 1 }])); r.attachMod(0, 0); const m1 = r.snapshot().player.gun.card.mag; r.detachMod(0, 0); return m1 > m0 && r.snapshot().player.gun.card.mag === m0 && r.snapshot().player.ammo <= m0; })());
@@ -54,8 +54,8 @@ t('Mods drop on the same wave bands as guns, so a wave 5 mod is common or uncomm
 // ---- on screen
 const GunCard = require('../src/screen/gun_card.js'); global.GunCard = GunCard; const Menu = require('../src/screen/gear_menu.js');
 t('The gun card shows how many mod places a gun has and what is fitted', (() => { const r = mk(); r.equipItem(W.make('pistol_service', 2, 1)); r.addMod(mod(2)); r.attachMod(0, 0); return GunCard.html(r.snapshot().player.gun.card, null, true).includes('Mods 1/2'); })());
-t('The floor card for a mod says if it fits the gun in your hands', (() => { const r = mk({ manualGuns: true }); r.equipItem(W.make('pistol_service', 0, 1)); r.giveMod(4); const q = r.snapshot().pickups.find((p) => p.kind === 'mod'); return GunCard.html(q.mod, null).includes('too strong') && GunCard.nearest(r.snapshot(), 5).id === q.id; })());
+t('The floor card for a mod says when the gun in your hands has no free place for it', (() => { const r = mk({ manualGuns: true }); r.equipItem(W.make('pistol_service', 0, 1)); r.addMod(mod(1)); r.attachMod(0, 0); r.giveMod(1); const q = r.snapshot().pickups.find((p) => p.kind === 'mod'); return GunCard.html(q.mod, null).includes('no free mod place') && GunCard.nearest(r.snapshot(), 5).id === q.id; })());
 t('The Gear menu lists the bag with a fit button for each hand, and a take-off button for fitted mods', (() => { const r = mk(); r.equipItem(W.make('pistol_service', 2, 1)); r.addMod(mod(2)); r.addMod(mod(2)); r.attachMod(0, 0); const h = Menu.html(r.snapshot().player); return h.includes('Mod bag 1/6') && h.includes('data-act="attach:0:0"') && h.includes('data-act="detach:0:0"'); })());
-t('The Gear menu greys out a mod that does not fit the gun', Menu.html((() => { const r = mk(); r.equipItem(W.make('pistol_service', 0, 1)); r.addMod(mod(4)); return r.snapshot().player; })()).includes('disabled'));
+t('The Gear menu greys out a mod when the gun has no free place', Menu.html((() => { const r = mk(); r.equipItem(W.make('pistol_service', 0, 1)); r.addMod(mod(1)); r.attachMod(0, 0); r.addMod(mod(1)); return r.snapshot().player; })()).includes('disabled'));
 
 console.log(bad ? bad + ' FAILED' : 'all mod checks passed'); process.exit(bad ? 1 : 0);

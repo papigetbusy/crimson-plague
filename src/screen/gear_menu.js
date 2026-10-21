@@ -19,8 +19,8 @@ const GearMenu = (function () {
     }).join('') + stashBtn(player, 'mod', i) + '</div>').join('');
     return '<div class="gsec">Mod bag ' + player.mods.length + '/6</div><div class="ggrid">' + (cards || '<div class="gslot empty"><div class="sub">no loose mods</div></div>') + '</div>';
   }
-  // the same fit rules as the referee, read from the cards (rarity window and a free place); the referee still has the last word
-  const fitsCard = (c, m) => m.rarity >= Math.max(0, c.rarity - 1) && m.rarity <= Math.min(4, c.rarity + 1) && c.mods.length < c.slots;
+  // the same fit rules as the referee, read from the cards (any rarity, a free place); the referee still has the last word
+  const fitsCard = (c, m) => c.mods.length < c.slots;
   const stashBtn = () => '';                         // putting things away happens at the stash chest, not here
   // the stash: what you put away this run (it cannot be used until the run ends; then you can keep it as a blueprint)
   function stashHtml(player) {

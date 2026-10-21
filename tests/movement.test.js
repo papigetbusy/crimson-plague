@@ -36,4 +36,12 @@ function run(ref, sec, inp) { const ev = []; let st = null; for (let i = 0; i < 
   t('You cannot slide while you are in the air', !air.ev.some((e) => e.type === 'slide'));
 }
 t('The hall roof is 11.5 high, six higher than before', mk().map.WALL_H === 11.5);
+{ // hopping over small monsters
+  const fight = (kind, jumpy) => { const r = mk(); r.setCfg({ playerHp: 1000, regen: 0 }); r.reset(); const m = r.map; r.place(m.start.x, m.start.z, 0); for (let i = 0; i < 100; i++) r.step(1 / 60, {}); const hp0 = r.snapshot().player.hp; r.spawnAt(kind, m.start.x, m.start.z - 1.0); let hops = 0; for (let i = 0; i < 60 * 6; i++) { const o = r.step(1 / 60, jumpy ? { jump: true } : {}); hops += o.events.filter((e) => e.type === 'hop').length; } return { lost: hp0 - r.snapshot().player.hp, hops }; };
+  const stand = fight('goblin', false), hop = fight('goblin', true);
+  t('A goblin standing next to you hurts you, and a jumping player takes far less from it', stand.lost > 0 && hop.lost < stand.lost * 0.6 && hop.hops > 0);
+  t('The jump is about twice as high as it was', (() => { const g = mk(); let peak = 0; run(g, 0.05, { jump: true }); for (let i = 0; i < 80; i++) { const o = g.step(1 / 60, {}); peak = Math.max(peak, o.state.player.eye); } return peak - 1.6 > 1.8; })());
+  const big = fight('golem', true);
+  t('A big monster cannot be hopped: a golem still hurts a jumping player', big.hops === 0 && big.lost > 0);
+}
 console.log(bad ? bad + ' FAILED' : 'all movement checks passed'); process.exit(bad ? 1 : 0);

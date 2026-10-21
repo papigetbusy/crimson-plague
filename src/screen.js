@@ -857,6 +857,10 @@
       else if (e.type === 'playerHit') { sfx('hurt'); }
       else if (e.type === 'slide') { sfx('slide'); }
       else if (e.type === 'jump') { sfx('slide'); }
+      else if (e.type === 'hop') { sfx('slide'); }
+      else if (e.type === 'secondWind') { sfx('levelup'); toast('Second Wind! You cling to life'); }
+      else if (e.type === 'overcharge') { sfx('crit'); }
+      else if (e.type === 'bounceSlam') { sfx('blast'); }
       else if (e.type === 'gateOpen') { sfx('levelup'); toast(e.key ? 'Key used: gate unlocked' : 'Gate unlocked'); }
       else if (e.type === 'keyTaken') { sfx('levelup'); toast('You took the Keeper\'s key: find the key gate'); }
       else if (e.type === 'keeperWake') { sfx('hurt'); toast('The Key Keeper wakes!'); }
