@@ -39,7 +39,7 @@ Keep the code neat: small focused files and functions in clear folders, never on
 - `node tests/gear.test.js` : gear (armor and charms: affix counts and fit, class-only lines, drops, pickup rules, defense/health/speed in a run, the Gear menu and floor card)
 - `node tests/codex.test.js` : Codex (every class, skill, monster, gun, status, affix, rarity and gear piece explained from the game's own data; search)
 - `node tests/mods.test.js` : gun mods (lines by rarity, which guns each fits, mod places by gun rarity, bag of 6, fitting and removing, drops, the Gear menu bag)
-- `node tests/stash.test.js` : stash and blueprints (safe-room stash, 3 blueprints per type, starting a run from blueprints, the menus)
+- `node tests/stash.test.js` : stash and blueprints (3 gun + 3 mod places, put in / take out / swap at the chest, the hall-door menu that lets you take one gun and any mods, stash kept between runs, 3 blueprints per type, starting a run from blueprints, the menus)
 - `node tests/saves.test.js` : seeds and saves (map seed kept in a save, damage and item seeds fresh every time, what a save holds, the saves list)
 - `node tests/stuck.test.js` : never stuck (a level-up can always be picked, at the merchant, at the chest, after a save; random play never throws or stalls)
 - `node tests/floorguns.test.js` : floor guns (one default pickup model per gun type, told apart by size and shape, shaded in the rarity colour)
@@ -62,6 +62,7 @@ Keep the code neat: small focused files and functions in clear folders, never on
 - `python3 tools/extract_ct_assets.py` then `python3 tools/pack_fx.py` : pull the owner's free art packs out of the CT page into git-ignored `assets-private/` (full packs never go in the repo), and pack the effect sheets into `src/screen/fx_data.js` (committed, credited in `docs/credits.md`) (without it the build just shows the plain voxel effects)
 - `python3 tools/smoke_mouse.py` : desktop mouse check (mouse captured while playing, released for a level-up so a click works, number keys pick, mouse taken back, aim and shoot buttons held together in either order)
 - `python3 tools/smoke_pad.py` : fake-controller run on phone and desktop sizes (connect, play, level-up, pause, unplug)
+- `python3 tools/smoke_stash.py seed.json` : stash at the hall door (opens by itself when the browser stash holds something, take one gun and mods; seed.json is a list of stash entries)
 - `python3 tools/smoke_coop.py` : two browser windows with a fake matchmaker: host a room, join by code, start together, see each other's monsters, revive a downed friend (needs the cheat build)
 - `node tools/preview_models.js rifle|fiend out.json` then `python3 tools/preview_models.py out.json out.png side|front|back|three|top` : draws a model with no GPU
 - `node tools/skin_dump.js out.json [gun]` then `python3 tools/skin_sheet.py out.json out.png front|three|back` : draws the 7 player skins holding a real gun with no GPU

@@ -1,10 +1,10 @@
 /* The stash and blueprints (first, simple version; the finer rules come later).
-   STASH: in a safe room you can put a gun, a piece of gear or a mod away. A stashed item cannot be used for the rest of that run, but it is safe.
+   STASH: in a safe room, next to the chest, you can put a gun or a mod away (3 gun places, 3 mod places) and take it out again, or swap it for what you carry, as often as you like. A stashed item cannot be used until you take it out.
    BLUEPRINTS: when a run ends you can turn stashed items into blueprints. A blueprint is a saved copy (all its lines kept) that you can start every
    later run with: ONE gun (with the mods fitted on it) and one piece of each gear place. Loose mods are not blueprints; fit them to a gun first. You can keep 3 blueprints of each type (a gun type such as pistol or shotgun, a gear place such as head or charm, or mods).
    Pure data and functions. An entry is { kind: 'gun'|'gear'|'mod', item }; a library is a plain list of entries (the screen saves it). */
 const RefereeStash = (function () {
-  const RULES = { stashSize: 6, perType: 3 };      // places in the run stash; blueprints kept per type
+  const RULES = { stashSize: 6, gunSlots: 3, modSlots: 3, perType: 3 };      // the run stash: 3 places for guns and 3 for mods (6 in all); blueprints kept per type
   const GUN_TYPES = ['rifle', 'pistol', 'smg', 'shotgun', 'sniper', 'hmg'];
   const TYPE_NAMES = { rifle: 'Rifle', pistol: 'Pistol', smg: 'SMG', shotgun: 'Shotgun', sniper: 'Sniper', hmg: 'Heavy MG', head: 'Head gear', chest: 'Chest gear', boots: 'Boots', charm: 'Charm', mod: 'Gun mod' };
   // which type an entry counts as for the limit (guns by gun type, gear by its place, all mods together)

@@ -14,6 +14,8 @@ const GunSkins = (function () {
     { id: 'infernal', name: 'Infernal', hue: 356, sat: 1, val: 1.12, metal: [1.15, 0.65, 0.65], glow: 8, mode: 'flicker', shine: 45, spec: 0xff5030, light: 0xff2810, embers: true },
     // status colours (the weapon system: colour = what the gun does). Each normal gun has one; legendaries will mix two (plate colour from one, glow from the other)
     { id: 'silver', name: 'Silver', hue: 0, sat: 0, val: 0.78, metal: [3.4, 3.4, 3.6], glow: null, mode: 'steady', shine: 80, spec: 0xffffff, light: 0xffffff },
+    // the plain common look: dull gunmetal with a quiet steel glow, no colour and no effects, for every common gun of every type (a status colour has to be earned)
+    { id: 'plain', name: 'Plain steel', hue: 0, sat: 0, val: 0.6, metal: [1.5, 1.5, 1.55], glow: null, glowSat: 0, glowVal: 0.55, mode: 'steady', shine: 22, spec: 0x707070, light: 0xd0d0d0 },
     { id: 'radiation', name: 'Radiation', hue: 105, sat: 0.9, val: 1.05, metal: [0.8, 1.15, 0.8], glow: 108, mode: 'pulse', shine: 45, spec: 0x90ff60, light: 0x60ff30 },
     { id: 'poison', name: 'Poison', hue: 285, sat: 0.8, val: 1.0, metal: [1.05, 0.8, 1.2], glow: 290, mode: 'pulse', shine: 45, spec: 0xd070ff, light: 0xb040ff },
     { id: 'shock', name: 'Shock', hue: 52, sat: 0.95, val: 1.25, metal: [1.1, 1.05, 0.8], glow: 55, mode: 'flicker', shine: 70, spec: 0xfff070, light: 0xffe040 },
@@ -32,7 +34,7 @@ const GunSkins = (function () {
   }
   const byId = (id) => (typeof id === 'string' && id.indexOf('mix:') === 0 ? mix(id.split(':')[1], id.split(':')[2]) : SKINS.find((s) => s.id === id) || SKINS[0]);
   // which skin a gun wears: its own paint, or the two-colour mix when it is a legendary with two statuses
-  const forGun = (base, status, rarity) => (rarity >= 4 && status && status.length >= 2 && STATUS_SKIN[status[0]] && STATUS_SKIN[status[1]] ? 'mix:' + STATUS_SKIN[status[0]] + ':' + STATUS_SKIN[status[1]] : base);
+  const forGun = (base, status, rarity) => (rarity < 1 && !(status && status.length) && base !== 'silver' ? 'plain' : rarity >= 4 && status && status.length >= 2 && STATUS_SKIN[status[0]] && STATUS_SKIN[status[1]] ? 'mix:' + STATUS_SKIN[status[0]] + ':' + STATUS_SKIN[status[1]] : base);
 
   function rgb2hsv(r, g, b) {
     const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; let h = 0;

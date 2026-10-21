@@ -291,7 +291,8 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     let nextId = 1, kills = 0, deaths = 0, time = 0, spawnTimer = 0.4, events = [];
 
     /* ---------------- the run: waves, xp, level-ups, skills ---------------- */
-    const R = {};      // wave, phase ('intermission' | 'fight'), timer, level, xp, stacks, choices, frenzy, over
+    const taken = new Set();      // stash places already copied at the hall door this run
+    const R = { stash: [] };      // wave, phase ('intermission' | 'fight'), timer, level, xp, stacks, choices, frenzy, over
     let M = null;      // the skill bonuses, worked out from the stacks
     const skillOf = (id) => D.SKILLS.find((s) => s.id === id);
     const stackOf = (id) => R.stacks[id] || 0;
@@ -311,7 +312,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       R.wave = cfg.startWave; R.phase = 'intermission'; R.timer = L.firstDelay; R.level = 1; R.xp = 0;
       R.stacks = {}; R.choices = null; R.classChoices = null; R.pending = 0; R.fogOn = false; R.fogK = 0; R.frenzy = 0; R.over = null; R.down = false; R.reviveT = 0; R.time = 0; R.hold = null; R.gold = 0; R.keys = 0; R.safe = false; R.shop = null; R.shopShut = false;
       kit.reset(cfg.classId);
-      W.slots = [WP.make(cfg.startGun, 0, 1), null]; W.held = 0; W.mods = []; R.stash = []; GEAR.worn = [null, null, null, null, null]; applyLoadout();
+      W.slots = [WP.make(cfg.startGun, 0, 1), null]; W.held = 0; W.mods = []; R.entry = true; R.entryGun = false; taken.clear(); GEAR.worn = [null, null, null, null, null]; applyLoadout();
       grantStartKit();
       M = computeMods();
     }
@@ -353,7 +354,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
     function startWave() {
       spawnQ = D.waveKinds(R.wave, rng, bossKindFor(R.wave));
       if (coopN() > 1) spawnQ = RC.scaleQueue(spawnQ, coopN(), rng, (kd) => !!D.KINDS[kd].boss);      // more friends, more monsters
-      R.phase = 'fight'; spawnTimer = 0.2; R.fogOn = D.fogWave(R.wave, seed0);
+      R.phase = 'fight'; spawnTimer = 0.2; R.fogOn = D.fogWave(R.wave, seed0); R.entry = false;      // the hall's door closes behind you: the entry stash menu is over
       events.push({ type: 'waveStart', n: R.wave, boss: spawnQ.some((k) => D.KINDS[k].boss), bossName: (spawnQ.map((k) => D.KINDS[k]).find((k) => k.boss) || {}).name, count: spawnQ.length, fog: R.fogOn });
     }
     function endWave() {
@@ -564,7 +565,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       const died = m.hp <= 0 && !m.lifeTaken;                                    // the killing blow: you heal a flat amount of life for each kill (once per monster)
       if (died) { m.lifeTaken = true; const gain = M.steal + gunStats().leech; if (gain > 0) P.hp = Math.min(maxHp(), P.hp + gain); }
       if (cfg.guest) { outbox.push([m.id, dmg]); if (m.hp <= 0) m.hp = 0.001; }       // a friend's copy tells the host; the host decides when it dies
-      if (!quiet) { m.flash = 0.12; if (!splash) m.stun = 0.08; events.push({ type: 'hit', id: m.id, dmg: Math.round(dmg), crit, x, y, z, splash: !!splash }); }
+      if (!quiet) { m.flash = 0.12; if (!splash) m.stun = Math.max(m.stun || 0, 0.08); events.push({ type: 'hit', id: m.id, dmg: Math.round(dmg), crit, x, y, z, splash: !!splash }); }
       if (m.hp <= 0) killMonster(m);
     }
 
@@ -614,7 +615,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
 
     const gfx = GX.create({
       monsters: () => monsters, damage: (m, d, c, x, y, z, sp, q) => damageMonster(m, d, c, x, y, z, sp, q),
-      heal: (v) => { P.hp = Math.min(maxHp(), P.hp + v); }, event: (e) => events.push(e)
+      heal: (v) => { P.hp = Math.min(maxHp(), P.hp + v); }, event: (e) => events.push(e), boss: (m) => !!(D.KINDS[m.kind] && D.KINDS[m.kind].boss)
     });
 
 
@@ -806,24 +807,53 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       W.mods.push(gun.mods.splice(at, 1)[0]); if (hand === W.held) P.ammo = Math.min(P.ammo, maxMag()); return '';
     }
     // put something away in the safe-room stash (kind 'gun' = a hand 0/1, 'gear' = a worn place 0-4, 'mod' = a bag place). Returns '' when done, else the reason.
-    function stashItem(kind, at) {
+    function stashItem(kind, at, label) {
       if (!cfg.stashOpen) return 'the stash is not open yet';
       if (!nearChest()) return 'stand next to the stash chest in the safe room';
-      if (R.stash.length >= ST.RULES.stashSize) return 'the stash is full';
+      if (kind !== 'gun' && kind !== 'mod') return 'the stash holds guns and mods only';
+      const have = R.stash.filter((e) => e.kind === kind).length, cap = kind === 'gun' ? ST.RULES.gunSlots : ST.RULES.modSlots;
+      if (have >= cap) return kind === 'gun' ? 'the stash gun places are full (take one out first)' : 'the stash mod places are full (take one out first)';
       let item = null;
       if (kind === 'gun') {
         if (!W.slots[at]) return 'nothing there'; if (!W.slots[1 - at]) return 'keep at least one gun';
         if (at === W.held) swapGun();
-        item = W.slots[at]; W.slots[at] = null; delete item.ammo;
-      } else if (kind === 'gear') {
-        if (!GEAR.worn[at]) return 'nothing there'; item = GEAR.worn[at]; GEAR.worn[at] = null; M = computeMods(); P.hp = Math.min(P.hp, maxHp());
+        item = W.slots[at]; W.slots[at] = null; delete item.ammo; const nm = WP.cleanLabel(label); if (nm) item.label = nm; else if (label !== undefined) delete item.label;     // you may name the gun as you put it away; leave the name empty for its regular one
       } else if (kind === 'mod') {
         if (!W.mods[at]) return 'nothing there'; item = W.mods.splice(at, 1)[0];
       } else return 'unknown item';
       R.stash.push({ kind, item }); return '';
     }
+    // take a stashed gun or mod back out (edit your stash as often as you like at the chest). A gun goes into the hand you name; if that hand holds a gun, the two swap places.
+    function stashTake(i, hand) {
+      if (!cfg.stashOpen) return 'the stash is not open yet';
+      if (!nearChest() && !R.entry) return 'stand next to the stash chest in the safe room';
+      const e = R.stash[i]; if (!e) return 'nothing there';
+      const door = R.entry && !nearChest();                      // at the hall door you take a COPY and the stash keeps the original; at the chest you move the real thing
+      const copy = (x) => JSON.parse(JSON.stringify(x));
+      if (door && taken.has(i)) return 'you already took that';
+      if (e.kind === 'mod') { if (W.mods.length >= 6) return 'your mod bag is full'; if (door) { W.mods.push(copy(e.item)); taken.add(i); } else { W.mods.push(e.item); R.stash.splice(i, 1); } return ''; }
+      if (e.kind !== 'gun') return 'unknown item';
+      if (R.entry && R.entryGun) return 'you can only take one gun into the hall';
+      const h = hand === 1 ? 1 : 0, cur = W.slots[h];
+      if (h === W.held && cur) cur.ammo = P.ammo;
+      const it = door ? copy(e.item) : e.item; it.ammo = WP.stats(it, cfg).mag; W.slots[h] = it;
+      if (door) { taken.add(i); if (cur && !W.slots[1 - h]) W.slots[1 - h] = cur; }          // at the hall's door your starting gun just moves to your back; the stash keeps its gun
+      else if (cur && R.entry && !W.slots[1 - h]) { W.slots[1 - h] = cur; R.stash.splice(i, 1); }
+      else if (cur) { delete cur.ammo; R.stash[i] = { kind: 'gun', item: cur }; } else R.stash.splice(i, 1);
+      if (h === W.held) { P.ammo = maxMag(); P.reloading = false; P.reloadT = 0; P.fireCd = 0.35; }
+      if (R.entry) R.entryGun = true;
+      return '';
+    }
     const nearChest = () => !!(R.safe && M0.chest && Math.hypot(P.x - M0.chest.x, P.z - M0.chest.z) < cfg.stashReach);
-    const stashView = () => ({ near: nearChest(), open: !!cfg.stashOpen && nearChest(), chest: R.safe && M0.chest ? { x: M0.chest.x, z: M0.chest.z } : null, size: ST.RULES.stashSize, items: R.stash.map((e, i) => ({ i, kind: e.kind, card: e.kind === 'gun' ? WP.view(e.item, cfg) : e.kind === 'gear' ? GR.view(e.item, null) : WP.modView(e.item) })) });
+    // rename a gun that sits in the stash (an empty name goes back to the regular one)
+    function stashRename(i, label) {
+      const e = R.stash[i]; if (!e || e.kind !== 'gun') return 'nothing there'; if (!cfg.stashOpen) return 'the stash is not open yet'; if (!nearChest()) return 'stand next to the stash chest in the safe room';
+      const nm = WP.cleanLabel(label); if (nm) e.item.label = nm; else delete e.item.label; return '';
+    }
+    // the stash outlives a run: the screen keeps it in the browser and hands it back with setStash; the live copy stays through every new run
+    function setStash(list) { R.stash = (list || []).filter((e) => e && (e.kind === 'gun' || e.kind === 'mod') && e.item).map((e) => JSON.parse(JSON.stringify(e))); }
+    const stashList = () => R.stash.map((e) => JSON.parse(JSON.stringify(e)));
+    const stashView = () => ({ entry: !!R.entry, entryGun: !!R.entryGun, take: !!cfg.stashOpen && (nearChest() || !!R.entry), near: nearChest(), open: !!cfg.stashOpen && nearChest(), chest: R.safe && M0.chest ? { x: M0.chest.x, z: M0.chest.z } : null, size: ST.RULES.stashSize, gunSlots: ST.RULES.gunSlots, modSlots: ST.RULES.modSlots, items: R.stash.map((e, i) => ({ i, kind: e.kind, taken: taken.has(i), card: e.kind === 'gun' ? WP.view(e.item, cfg) : e.kind === 'gear' ? GR.view(e.item, null) : WP.modView(e.item) })) });
     function swapGun() {
       const other = 1 - W.held; if (!W.slots[other]) return;
       W.slots[W.held].ammo = P.ammo; W.held = other; P.ammo = W.slots[other].ammo;
@@ -955,6 +985,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
         if (m.hp < m.maxHp || (dist < (k.guard ? k.guard.wake : L.keeperWake) && hasLOS(m.x, m.z, P.x, P.z))) { m.state = 'chase'; m.shT = 0.4; events.push(m.mini ? { type: 'keeperWake' } : { type: 'bossWake', name: k.name }); }   // he opens the fight with a fireball
         else { m.yaw += clamp(angleDiff(m.yawT, m.yaw), -dt * 9, dt * 9); return; }
       }
+      if (!k.boss && (gfx.frozen(m) || m.stun > 0.1)) { m.state = 'chase'; m.atk = k.wind; return; }     // frozen solid or smitten: it stands there and cannot swing, throw or walk (bosses shrug it off)
       if (k.summonAt && !m.summoned && m.hp <= m.maxHp * k.summonAt) {
         m.summoned = true;
         for (let i = 0; i < k.summonN; i++) spawnQ.unshift(k.summonKind);
@@ -1270,7 +1301,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
           hp: p.hp, maxHp: maxHp(), hurt: p.hurt, kick: p.kick,
           ammo: p.ammo, magSize: maxMag(), reloading: p.reloading,
           stash: stashView(), gear: gearView(), mods: W.mods.map((m) => WP.modView(m, W.slots[W.held])),
-          gun: { id: W.slots[W.held].id, rarity: W.slots[W.held].rarity, name: WP.GUNS[W.slots[W.held].id].name, status: W.slots[W.held].status, held: W.held, card: WP.view(W.slots[W.held], cfg), other: W.slots[1 - W.held] ? { card: WP.view(W.slots[1 - W.held], cfg), id: W.slots[1 - W.held].id, rarity: W.slots[1 - W.held].rarity, ammo: W.slots[1 - W.held].ammo } : null },
+          gun: { id: W.slots[W.held].id, rarity: W.slots[W.held].rarity, name: W.slots[W.held].label || WP.GUNS[W.slots[W.held].id].name, status: W.slots[W.held].status, held: W.held, card: WP.view(W.slots[W.held], cfg), other: W.slots[1 - W.held] ? { card: WP.view(W.slots[1 - W.held], cfg), id: W.slots[1 - W.held].id, rarity: W.slots[1 - W.held].rarity, ammo: W.slots[1 - W.held].ammo } : null },
           reloadK: p.reloading ? clamp(p.reloadT / p.reloadDur, 0, 1) : 0,
           reloadEmpty: p.reloadEmpty, reloadDur: p.reloadDur
         },
@@ -1376,7 +1407,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
 
     newRun(); startFloor(); placePlayer();
     // first state, so the screen can draw before the first step
-    return { get map() { return M0; }, cfg, setCfg, place, spawnAt, spawnElite, clearWave, giveSkill, giveGold, giveXp, setHp, giveGun, equipGun, equipItem, giveGear, wearGear, seeds: () => Object.assign({}, SEEDS), setSeeds, saveData, loadData, giveMod, addMod, attachMod, detachMod, stashItem, setLoadout, stashEntry, monsterFx, step, snapshot, reset, remoteJoin, remoteLeave, remoteState, remoteDamage, worldView, remoteShots, shotsOut, remoteLocks, locksOut, solveLocks, lockState, selfState, guestOut, applyWorld, kinds: D.KINDS, defaults: Object.assign({}, DEFAULT_CFG) };
+    return { get map() { return M0; }, cfg, setCfg, place, spawnAt, spawnElite, clearWave, giveSkill, giveGold, giveXp, setHp, giveGun, equipGun, equipItem, stashTake, stashRename, setStash, stashList, giveGear, wearGear, seeds: () => Object.assign({}, SEEDS), setSeeds, saveData, loadData, giveMod, addMod, attachMod, detachMod, stashItem, setLoadout, stashEntry, monsterFx, step, snapshot, reset, remoteJoin, remoteLeave, remoteState, remoteDamage, worldView, remoteShots, shotsOut, remoteLocks, locksOut, solveLocks, lockState, selfState, guestOut, applyWorld, kinds: D.KINDS, defaults: Object.assign({}, DEFAULT_CFG) };
   }
 
   return { create };

@@ -61,7 +61,7 @@ const RefereeWeapons = (function () {
     return rng() < DROP.minorBase + DROP.minorPer * at ? band + 1 : band;
   }
   const make = (id, rarity, wave, rng, cls) => {
-    const g = GUNS[id] || GUNS.pistol_service, status = g.status.slice();
+    const g = GUNS[id] || GUNS.pistol_service, status = rarity >= 1 ? g.status.slice() : [];      // a common gun is plain: no status effect (uncommon and better carry the gun's own, legendaries a second)
     while (rarity >= 4 && rng && status.length < 2) { const rest = STATUSES.filter((s) => !status.includes(s)); status.push(rest[Math.floor(rng() * rest.length)]); }   // only legendaries carry two
     return { id: GUNS[id] ? id : 'pistol_service', rarity, wave: wave || 1, status, affixes: rng ? AF.roll(rarity, rng, cls || '') : [] };
   };
@@ -84,10 +84,12 @@ const RefereeWeapons = (function () {
   // everything the screen needs to show a gun in a card: name, colour, numbers, status and affix lines
   function view(item, cfg) {
     const st = stats(item, cfg), g = GUNS[item.id] || GUNS.pistol_service, r = RARITIES[item.rarity];
-    return { id: item.id, name: g.name, type: g.type, rarity: item.rarity, rarityName: r.name, color: r.color, status: item.status.slice(),
+    return { id: item.id, name: item.label || g.name, baseName: g.name, label: item.label || '', type: g.type, rarity: item.rarity, rarityName: r.name, color: r.color, status: item.status.slice(),
       dmg: Math.round(st.dmg), rate: Math.round(st.rate * 10) / 10, mag: st.mag, reload: Math.round(st.reload * 10) / 10, pellets: st.pellets,
       affixes: (item.affixes || []).map(AF.describe), slots: MD.slotsFor(item.rarity), mods: (item.mods || []).map((m) => modView(m)) };
   }
-  return { RARITIES, TYPES, GUNS, DROPPABLE, STATUSES, DROP, SHOP, price, rarityFor, make, roll, stats, view, modView, AF, MD };
+  // the name you give a gun: letters, numbers and a few marks, 24 at most; empty means the regular name
+  const cleanLabel = (s) => String(s == null ? '' : s).replace(/[^\w .,'!?&+-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 24);
+  return { cleanLabel, RARITIES, TYPES, GUNS, DROPPABLE, STATUSES, DROP, SHOP, price, rarityFor, make, roll, stats, view, modView, AF, MD };
 })();
 if (typeof module !== 'undefined') module.exports = RefereeWeapons;

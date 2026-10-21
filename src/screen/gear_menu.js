@@ -46,9 +46,11 @@ const GearMenu = (function () {
     function setOpen(v, state) { open = v; el.hidden = !v; if (v && state) { el.querySelector('.gbody').innerHTML = render(state.player); focus.reset(); } if (hooks && hooks.onChange) hooks.onChange(v); }
     // tap a button to fit/remove a mod; tap "Close" or the dark space around the menu to leave
     el.addEventListener('pointerdown', (e) => {
+      if (e.target.tagName === 'INPUT') return;                                  // typing a gun's name: let the box take the tap
       const b = e.target.closest && e.target.closest('[data-act]'); e.preventDefault();
       if (!b) { if (e.target === el) setOpen(false); return; }
       const parts = b.dataset.act.split(':'), act = parts[0];
+      const nm = b.parentElement && b.parentElement.querySelector && b.parentElement.querySelector('input.gname'); if (nm) parts.push(nm.value);     // a name typed next to the button goes along as the last piece
       if (act === 'close') { setOpen(false); return; }
       if (b.disabled || !hooks || !hooks.act) return;
       const why = hooks.act(parts); draw(why ? (why[0] === '✔' ? why : 'Cannot: ' + why) : '');

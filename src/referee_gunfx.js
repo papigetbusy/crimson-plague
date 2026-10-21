@@ -10,7 +10,8 @@ const RefereeGunFx = (function () {
     arcFrac: 0.5, arcRange: 4, arcCount: 2,        // lightning jumps to this many other monsters within this range for this share of the damage
     radFrac: 0.35, radRadius: 3, radDot: 0.15, radDur: 3,   // a radiation pulse hurts everything in range, then keeps burning them
     drainFrac: 0.12, witherMul: 0.15, witherDur: 3,  // dark: heal this share of damage dealt; the target takes this much extra damage for a while
-    smiteStun: 0.8, shockShow: 0.35, tick: 0.25
+    smiteStun: 0.8, shockShow: 0.35, tick: 0.25,
+    bossFreeze: 0.35                                 // a boss is frozen for only this share of the time (it can never be locked down)
   };
   function create(env) {
     const g = (m) => m.gx || (m.gx = { burn: null, toxin: null, rad: null, chill: 0, chillT: 0, freezeT: 0, wither: 0, witherMul: 0, shock: 0, tick: 0 });
@@ -26,7 +27,7 @@ const RefereeGunFx = (function () {
         else if (st === 'ice' && alive) {
           if (!(f.chillT > 0)) landed(m, 'chill');
           f.chillT = FX.chillDur; f.chill++;
-          if (f.chill >= FX.freezeAt) { f.chill = 0; f.freezeT = FX.freezeDur * k; env.event({ type: 'freeze', id: m.id, x: m.x, z: m.z }); }
+          if (f.chill >= FX.freezeAt) { f.chill = 0; f.freezeT = FX.freezeDur * k * (env.boss && env.boss(m) ? FX.bossFreeze : 1); env.event({ type: 'freeze', id: m.id, x: m.x, z: m.z }); }
         } else if (st === 'electric') {
           f.shock = FX.shockShow;
           const near = env.monsters().filter((o) => o !== m && o.hp > 0 && Math.hypot(o.x - m.x, o.z - m.z) < FX.arcRange).sort((a, b) => Math.hypot(a.x - m.x, a.z - m.z) - Math.hypot(b.x - m.x, b.z - m.z)).slice(0, FX.arcCount);
@@ -60,7 +61,8 @@ const RefereeGunFx = (function () {
     }
     // for the snapshot: what is on this monster right now
     const view = (m) => { const f = m.gx; return f ? { burning: !!f.burn, toxic: !!f.toxin, chilled: f.chillT > 0 || f.freezeT > 0, frozen: f.freezeT > 0, irradiated: !!f.rad, withered: f.wither > 0, shocked: f.shock > 0, smitten: (m.stun || 0) > 0.3 } : null; };
-    return { hit, update, takenMul, slowOf, view };
+    const frozen = (m) => !!(m.gx && m.gx.freezeT > 0);
+    return { hit, update, takenMul, slowOf, frozen, view };
   }
   return { FX, create };
 })();

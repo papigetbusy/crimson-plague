@@ -14,7 +14,7 @@
 
   const ref = Referee.create((Date.now() & 0xffffff) | 1);
   const GAME_CFG = { startGun: 'pistol_service', gunDrops: true, gearDrops: true, modDrops: true, stashOpen: true, manualGuns: true, bossRandom: true };      // the game's rules: you start with the silver pistol and monsters drop guns, armor and charms (the referee's plain defaults keep the tests steady)
-  ref.setCfg(GAME_CFG);
+  ref.setCfg(GAME_CFG); ref.setStash(StashStore.read());          // what you put in the chest on earlier runs is still there
 
   // a link can start the run on a later wave, to try the boss: ...#wave10 (or ?wave=10)
   const startWaveFromLink = (() => { const m = /wave=?(\d+)/.exec(location.hash + location.search); return m ? Math.max(1, Math.min(60, +m[1])) : 1; })();
@@ -410,6 +410,7 @@
     if (!locked() && running && !noLock && !panelOpen && !isTouch && !menuUnlocked) setRunning(false);
   });
   document.addEventListener('keydown', (e) => {
+    if (e.target && e.target.tagName === 'INPUT' && e.code !== 'Escape') return;            // typing in a box (a gun's name, the codex search) is not a game key
     keys[e.code] = true;
     if (e.code === 'KeyC' || e.code === 'ControlLeft') { if (running) I.slide = true; e.preventDefault(); }
     if (e.code === 'Space' && running && !e.repeat) I.jump = true;
@@ -430,8 +431,21 @@
   document.addEventListener('keyup', (e) => { keys[e.code] = false; });
   document.addEventListener('mousemove', (e) => {
     if (!running) return;
-    if (locked() || (noLock && (mouse.fire || mouse.ads))) { I.lookX += e.movementX || 0; I.lookY += e.movementY || 0; }
+    mouseAt.x = e.clientX; mouseAt.y = e.clientY;
+    // with the mouse captured every move turns you. A browser that will not hand over the mouse (a page shown inside a frame) turns you on every move too, with no button held,
+    // and the edge of the window keeps turning you (see edgeTurn); menus and the game-over card keep their normal pointer.
+    if (locked() || (noLock && !wantsPointer() && !state.over && !panelOpen)) { I.lookX += e.movementX || 0; I.lookY += e.movementY || 0; }
   });
+  const mouseAt = { x: -1, y: -1 };
+  // no captured mouse: a pointer pushed against the left, right, top or bottom edge keeps turning you, so you are never stuck at the edge of the window
+  let edgeT = 0;
+  function edgeTurn() {
+    const now = performance.now(), dt = Math.min(0.05, (now - edgeT) / 1000); edgeT = now;
+    if (!noLock || isTouch || locked() || mouseAt.x < 0 || wantsPointer() || state.over || panelOpen) return;
+    const w = window.innerWidth, h = window.innerHeight, zone = 0.06, speed = 900 * dt;
+    const ex = mouseAt.x < w * zone ? -1 : mouseAt.x > w * (1 - zone) ? 1 : 0, ey = mouseAt.y < h * zone ? -1 : mouseAt.y > h * (1 - zone) ? 1 : 0;
+    I.lookX += ex * speed; I.lookY += ey * speed * 0.6;
+  }
   document.addEventListener('pointerdown', (e) => {
     if (e.pointerType !== 'mouse' || !running || panelOpen) return;
     if (e.target.closest && e.target.closest('#panel,#gear,.overlay')) return;
@@ -531,7 +545,7 @@
   bSlide.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') return; I.slide = true; bSlide.classList.add('on'); setTimeout(() => bSlide.classList.remove('on'), 180); e.preventDefault(); });
 
   function gatherInput() {
-    let mx = 0, mz = 0;
+    let mx = 0, mz = 0; edgeTurn();
     if (joy.id !== null) {
       const l = Math.hypot(joy.x, joy.y);
       if (l > 0.1) { const k = (l - 0.1) / 0.9 / l; mx = joy.x * k; mz = -joy.y * k; }
@@ -660,7 +674,7 @@
   const drawSaves = () => { const h = Saves.html(Saves.all()); svBox.innerHTML = h; svOver.innerHTML = Saves.all().length ? h : ''; bpFocusStart.apply(); bpKey = ''; };
   function continueSave(id) {
     const s = Saves.find(id); if (!s) return;
-    if (ref.loadData(s.data, newLuck())) { state = ref.snapshot(); if (!started) begin(true); toast('Back at your save with new luck'); }
+    if (ref.loadData(s.data, newLuck())) { state = ref.snapshot(); StashStore.write(ref.stashList()); if (!started) begin(true); toast('Back at your save with new luck'); }
   }
   const svClick = (e) => { const l = e.target.closest('[data-load]'), d = e.target.closest('[data-del]'); if (l) continueSave(l.dataset.load); if (d) { Saves.remove(d.dataset.del); drawSaves(); } };
   svBox.addEventListener('click', svClick); svOver.addEventListener('click', svClick);
@@ -777,8 +791,8 @@
   } });
   const toggleGear = () => { if (!running || (panelOpen && !gearMenu.isOpen) || stashMenu.isOpen) return; gearMenu.toggle(state); };
   // the stash chest in the safe room: press pick up next to it (when no gun, gear or mod lies in reach) or tap the hint
-  const stashMenu = GearMenu.create($, { state: () => state, act: (q) => { if (q[0] === 'save') return saveHere(); const why = ref.stashItem(q[1], +q[2]); state = ref.snapshot(); return why; }, onChange: menuChange }, 'stashMenu', StashMenu.html);
-  const stashHint = $('stashHint');
+  const stashMenu = GearMenu.create($, { state: () => state, act: (q) => { if (q[0] === 'save') return saveHere(); const why = q[0] === 'take' ? ref.stashTake(+q[1], +q[2]) : q[0] === 'rename' ? ref.stashRename(+q[1], q[2]) : ref.stashItem(q[1], +q[2], q[3]); state = ref.snapshot(); StashStore.write(ref.stashList()); return why; }, onChange: menuChange }, 'stashMenu', StashMenu.html);
+  const stashHint = $('stashHint'); let entryShown = false;
   const openStash = () => { if (running && !panelOpen && state.player.stash.near) stashMenu.setOpen(true, state); };
   stashHint.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); openStash(); });
   // the little box that shows up when you stand at a gold gate or the boss door's puzzle: what it is, and the buttons (the keys E and Z, LB and D-pad down, or a tap)
@@ -1161,6 +1175,10 @@
     }
     stage('menuPointer', menuPointer);
     stage('blueprints', drawOverBp);
+    stage('stashEntry', () => {          // at the door of the hall: if the stash holds anything, open it so you can take one gun and any mods
+      const st = state.player.stash; if (!st.entry) { entryShown = false; return; }
+      if (running && !panelOpen && !entryShown && !st.near && st.take && st.items.length && !state.over && !state.choices && !state.classChoices) { entryShown = true; stashMenu.setOpen(true, state); }
+    });
     stage('stashHint', () => { const near = running && !panelOpen && state.player.stash.near; stashHint.hidden = !near; });
     stage('floor', () => ensureFloor(state));
     stage('monsters', () => { syncMonsters(state, dt); syncThralls(state); });
