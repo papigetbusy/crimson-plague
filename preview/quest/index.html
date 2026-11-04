@@ -8559,21 +8559,26 @@ const XrMode = (function () {
         const s = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor'] });
         renderer.xr.enabled = true; renderer.xr.setReferenceSpaceType('local');
         await renderer.xr.setSession(s);
-        session = s; bodyYaw = o.playerYaw(); turn.reset(); hudMesh.visible = true; btn.textContent = 'EXIT VR';
+        session = s; bodyYaw = o.playerYaw(); turn.reset(); hudMesh.visible = true; btn.textContent = 'EXIT VR'; btn.hidden = true;
         s.addEventListener('end', () => {
           session = null; renderer.xr.enabled = false; hudMesh.visible = false; reticle.visible = false;
           dolly.position.set(0, 0, 0); dolly.rotation.set(0, 0, 0); if (gun.parent !== camera) camera.add(gun);
-          btn.textContent = 'ENTER VR'; if (onEnd) onEnd();
+          btn.textContent = 'ENTER VR'; btn.hidden = false; if (onEnd) onEnd();
         });
         if (onStart) onStart();
       } catch (e) { o.toast('Could not start VR: ' + (e && e.message ? e.message : e)); }
     }
     // the button: added to the start card only when this browser can really do immersive VR (Quest Browser can; phones and desktops without a headset do not)
     const btn = document.createElement('button'); btn.type = 'button'; btn.id = 'vrBtn'; btn.textContent = 'ENTER VR'; btn.hidden = true;
-    btn.style.cssText = 'margin-top:10px;padding:10px 22px;font:700 16px sans-serif;letter-spacing:.12em;color:#f3e6d8;background:#5a0c14;border:1px solid #c9a35a;border-radius:6px;cursor:pointer';
+    // big, fixed on top of everything (start card, menus, HUD) so it can never be scrolled away or covered
+    btn.style.cssText = 'position:fixed;z-index:2147483000;left:50%;top:14px;transform:translateX(-50%);padding:18px 44px;font:800 28px sans-serif;letter-spacing:.14em;color:#fff;background:#b0101e;border:3px solid #ffd27a;border-radius:12px;box-shadow:0 0 24px #ff3040;cursor:pointer';
     btn.addEventListener('click', enter);
+    const show = (note) => { if (!btn.isConnected) document.body.appendChild(btn); btn.hidden = false; if (note) btn.title = note; };
     try {
-      if (navigator.xr && navigator.xr.isSessionSupported) navigator.xr.isSessionSupported('immersive-vr').then((ok) => { if (ok) { const play = $('play'); (play && play.parentNode ? play.parentNode : document.body).appendChild(btn); btn.hidden = false; } }).catch(() => {});
+      if (navigator.xr) {
+        show();                                                     // shown straight away whenever WebXR exists (the Quest browser), not after a slow check
+        if (navigator.xr.isSessionSupported) navigator.xr.isSessionSupported('immersive-vr').then((ok) => { if (!ok) { if (/OculusBrowser|Quest/i.test(navigator.userAgent)) btn.textContent = 'ENTER VR (allow VR in browser settings)'; else btn.hidden = true; } }).catch(() => {});
+      } else if (/OculusBrowser|Quest/i.test(navigator.userAgent)) { show(); btn.textContent = 'VR needs https'; }
     } catch (e) { /* no WebXR here */ }
 
     // in VR, put the camera back at the head pose the headset gave last frame (the game's flat-screen camera code is skipped)
