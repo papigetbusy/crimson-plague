@@ -110,6 +110,7 @@
   const voxelPart = (part, vox, parent) => { const g = new THREE.Group(); parent.add(g); rigParts.push(g); return gunLook.part(part, vox, g); };
   const MAG_BASE = new THREE.Vector3(), SIGHT = { y: 0, z: 0 };
   let charge, mag, CHARGE_Z = 0, muzzle;
+  const CHARGE_REST = new THREE.Vector3(), GP = { gunBody: null, magBase: null, chargeRest: CHARGE_REST, fore: null };   // the gun's parts for the VR hand reload
   // the red dot floats between the scope rings; ADS lines it up with the eye
   const EYE_RELIEF = 0.5;
   const dotMat = new THREE.MeshBasicMaterial({ color: 0xff2424, fog: false });
@@ -161,7 +162,7 @@
     const G = entry.build(), A = G.anchors, H = entry.hands || G.hands || { grip: A.handGrip || [0, -0.15, 0.15], fore: A.handFore || [0, -0.12, -0.45], mag: A.handMag || [0, -0.15, -0.13] };
     gunLook.release(); rigParts.forEach((g) => gunRig.remove(g)); rigParts.length = 0;
     voxelPart(G.parts.body, G.vox, gunRig);
-    charge = voxelPart(G.parts.bolt, G.vox, gunRig); charge.position.set(A.boltRest[0], A.boltRest[1], A.boltRest[2]); CHARGE_Z = A.boltRest[2];
+    charge = voxelPart(G.parts.bolt, G.vox, gunRig); charge.position.set(A.boltRest[0], A.boltRest[1], A.boltRest[2]); CHARGE_Z = A.boltRest[2]; CHARGE_REST.copy(charge.position);
     mag = voxelPart(G.parts.mag, G.vox, gunRig); mag.rotation.x = 0.1; MAG_BASE.set(A.magPivot[0], A.magPivot[1], A.magPivot[2]); mag.position.copy(MAG_BASE);
     SIGHT.y = A.sightDot[1]; SIGHT.z = A.sightDot[2];
     dotMesh.position.set(0, SIGHT.y, SIGHT.z); dotGlow.position.set(0, SIGHT.y, SIGHT.z + 0.004);
@@ -198,7 +199,9 @@
   }
   let rlPrev = 0;
   // returns gun offsets for this frame and poses the hands, mag and charging handle
+  const NO_RL = { px: 0, py: 0, pz: 0, rx: 0, ry: 0, rz: 0 };
   function animateReload(p) {
+    if (xr && xr.presenting()) { xr.poseGun(); return NO_RL; }      // VR: your own hands do the reload; the gun's real magazine and slide follow them (xr_mode.js)
     const ins = !p.reloading && inspK > 0 && inspKind === 'mag';
     const gtype = RefereeWeapons.GUNS[p.gun.id].type, shells = gtype === 'shotgun';
     const R = ins ? INSPECT_MAG : shells ? RL_SHELLS : (p.reloadEmpty || gtype === 'sniper') ? RL_EMPTY : RL_NORMAL;   // a sniper works its bolt after every magazine
@@ -384,7 +387,7 @@
     }
     toastT -= dt; if (toastT <= 0) toastEl.classList.remove('show');
     pad.now = p ? pad.input.read(p) : null;
-    if (pad.now && xr && xr.presenting()) { pad.now.nav = 0; pad.now.navY = 0; pad.now.confirm = false; }   // VR menus use the laser pointer, not the sticks
+    if (pad.now && xr && xr.presenting()) { pad.now.nav = 0; pad.now.navY = 0; pad.now.confirm = false;  if (pad.now.start && state.shop) { pad.now.start = false; pad.now.map = true; } }   // at the merchant, Y leaves the shop (the flat game uses Back)   // VR menus use the laser pointer, not the sticks
   }
 
   const locked = () => document.pointerLockElement === canvas;
@@ -1187,8 +1190,10 @@
   }   // a new floor (or a new run) is baked and drawn here
   ensureFloor(state);
   chooseClass(0);
+  GP.gunBody = gunBody; GP.magBase = MAG_BASE; GP.fore = HOLD;
   xr = XrMode.create({ THREE, renderer, scene, camera, gun, $, gunHome: GUN_DEFAULTS, toast: (t) => toast(t), started: () => started, menuOpen: () => gearMenu.isOpen || stashMenu.isOpen,
-    turnSpeed: () => ref.cfg.padTurn, playerYaw: () => state.player.yaw });
+    turnSpeed: () => ref.cfg.padTurn, arms: [handL, handR, limbL, limbR],
+    gunParts: () => { if (!mag || !charge) return null; GP.id = curGun; GP.type = (RefereeWeapons.GUNS[state.player.gun.id] || {}).type; GP.mag = mag; GP.charge = charge; GP.gunScale = view.gunScale; return GP; }, playerYaw: () => state.player.yaw });
   xr.on(() => { renderer.setAnimationLoop(frame); if (!running) begin(true); }, () => { renderer.setAnimationLoop(null); requestAnimationFrame(frame); });   // a headset drives the frames while in VR
   function frame(now) {
     if (!(xr && xr.presenting())) requestAnimationFrame(frame);
