@@ -371,12 +371,13 @@
 
   // ---- controller: any standard gamepad that is connected is picked up by itself; the touch controls hide while one is ----
   const pad = { on: false, input: PadInput.create(), now: null };
+  let xr = null;                                                  // Meta Quest / WebXR mode (src/screen/xr_mode.js), made once the gun and menus exist
   const currentPad = () => { try { return PadInput.pick(navigator.getGamepads ? Array.from(navigator.getGamepads()) : []); } catch (e) { return null; } };
   const toastEl = $('padToast'); let toastT = 0;
   function toast(msg) { toastEl.textContent = msg; toastEl.classList.add('show'); toastT = 2.6; }
   // once a frame: find the pad, switch the touch controls on or off, and read its input (null when there is no pad)
   function pollPad(dt) {
-    const p = currentPad();
+    const p = (xr && xr.pad()) || currentPad();                    // in VR the Quest controllers act as one standard pad
     if (!!p !== pad.on) {
       pad.on = !!p; document.body.classList.toggle('pad', pad.on); pad.input.reset();
       toast(pad.on ? 'Controller connected' : (isTouch ? 'Controller lost. Touch controls are back' : 'Controller disconnected'));
@@ -562,6 +563,10 @@
       fire: mouse.fire || tch.fire || !!(pr && pr.fire), ads: mouse.ads || tch.ads || !!(pr && pr.ads),
       sprint: !!(keys.ShiftLeft || keys.ShiftRight) || tch.sprint || !!(pr && pr.sprint), slide: I.slide || !!(pr && pr.slide), jump: I.jump || !!(pr && pr.jump), reload: I.reload || !!(pr && pr.reload), swap: I.swap || !!(pr && pr.swap), pickup: I.pickup, lockUse: I.lockUse !== undefined ? I.lockUse : pr && pr.lockUse, seeds: I.restart ? { map: rnd(), damage: rnd(), item: rnd() } : undefined, pick: I.pick, pickClass: I.pickClass, shopClose: I.shopClose, restart: I.restart
     };
+    if (xr && xr.presenting()) {                                    // VR: aim follows the right controller's ray (or your head), sent like a mouse move
+      const a = xr.aim(), pl = state.player, c = ref.cfg;
+      if (a) { const lk = XrInput.lookToward(pl, a, c.lookSens, 1 - pl.adsT * (1 - c.adsLookMul)); out.lookX += lk.lookX; out.lookY += lk.lookY; }
+    }
     I.lookX = I.lookY = I.touchX = I.touchY = 0; I.slide = false; I.jump = false; I.reload = false; I.swap = false; I.pickup = false; I.lockUse = undefined; I.pick = undefined; I.pickClass = undefined; I.shopClose = false; I.restart = false;
     return out;
   }
@@ -1046,16 +1051,19 @@
     cloakVeil.classList.toggle('on', cloakK > 0.3);
   }
   const cloakVeil = $('cloakVeil');
+  const camWorld = new THREE.Vector3();
   function updateView(st, dt, time) {
     const p = st.player;
-    camera.position.set(p.x, p.eye, p.z);
+    const inVr = !!(xr && xr.presenting());
+    if (inVr) xr.headPose(); else camera.position.set(p.x, p.eye, p.z);   // in VR the headset places the camera
     const planar = clamp(p.speed / 6, 0, 1.6);
     bob += dt * (p.sprinting ? 13 : 9) * (p.speed > 0.5 ? 1 : 0) * (p.sliding ? 0 : 1);
     const bobAmt = (p.sliding ? 0 : planar) * (1 - p.adsT * 0.7);
     const strafe = (p.vx * Math.cos(p.yaw) + p.vz * Math.sin(p.yaw)) / 8;
     roll += ((p.sliding ? 0.09 : -strafe * 0.025) - roll) * Math.min(1, dt * 10);
-    camera.rotation.set(p.pitch + Math.sin(bob * 2) * 0.0035 * bobAmt, -p.yaw, roll);
-    camera.position.y += Math.abs(Math.sin(bob)) * 0.05 * bobAmt;
+    if (!inVr) camera.rotation.set(p.pitch + Math.sin(bob * 2) * 0.0035 * bobAmt, -p.yaw, roll);
+    if (!inVr) camera.position.y += Math.abs(Math.sin(bob)) * 0.05 * bobAmt;
+    if (shakeT > 0 && inVr) shakeT = 0;                            // no camera shake or bob in a headset (sickness)
     if (shakeT > 0) { shakeT = Math.max(0, shakeT - dt); const k = shakeAmp * (shakeT / 0.22); camera.position.x += (Math.random() - 0.5) * k; camera.position.y += (Math.random() - 0.5) * k; if (shakeT === 0) shakeAmp = 0; }
     if (Math.abs(camera.fov - p.fov) > 0.01) { camera.fov = p.fov; camera.updateProjectionMatrix(); }
 
@@ -1106,7 +1114,7 @@
     // world brightness: flicker + muzzle flash
     const fl = 1 + 0.035 * Math.sin(time * 17) + 0.025 * Math.sin(time * 31 + 1.3), fb = flashT / 0.06;
     const br = view.brightness * fl;
-    worldView.update(time, camera.position, dt, br, fb, st.door.open);
+    worldView.update(time, camera.getWorldPosition(camWorld), dt, br, fb, st.door.open);
     locksView.sync(st.locks, ref.map, time, dt); lockHud(st.locks);
     scene.fog.far = view.fogFar * st.fog.mul; fogGlow.intensity = 1.7 * st.fog.k;   // a fog wave shrinks the view, and your gun lights a small circle around you
 
@@ -1169,8 +1177,11 @@
   }   // a new floor (or a new run) is baked and drawn here
   ensureFloor(state);
   chooseClass(0);
+  xr = XrMode.create({ THREE, renderer, scene, camera, gun, $, gunHome: GUN_DEFAULTS, toast: (t) => toast(t), started: () => started, menuOpen: () => gearMenu.isOpen || stashMenu.isOpen,
+    turnSpeed: () => ref.cfg.padTurn, playerYaw: () => state.player.yaw });
+  xr.on(() => { renderer.setAnimationLoop(frame); if (!running) begin(true); }, () => { renderer.setAnimationLoop(null); requestAnimationFrame(frame); });   // a headset drives the frames while in VR
   function frame(now) {
-    requestAnimationFrame(frame);
+    if (!(xr && xr.presenting())) requestAnimationFrame(frame);
     const dt = Math.min((now - clock.last) / 1000, 0.05); clock.last = now;
     try { pollPad(dt); padMenus(); } catch (e) { /* a controller hiccup must not stop the frame */ }
     // each stage guards itself: one bad frame in the drawing code must never freeze the rules or the controller, and the first error is shown on screen so it can be read off a phone
@@ -1189,6 +1200,7 @@
     stage('stashHint', () => { const near = running && !panelOpen && state.player.stash.near; stashHint.hidden = !near; });
     stage('floor', () => ensureFloor(state));
     stage('monsters', () => { syncMonsters(state, dt); syncThralls(state); });
+    stage('xr', () => xr.update(state, running && !panelOpen, dt));
     stage('view', () => updateView(state, running && !panelOpen ? dt : 0, now / 1000));
     stage('draw', () => renderer.render(scene, camera));
   }

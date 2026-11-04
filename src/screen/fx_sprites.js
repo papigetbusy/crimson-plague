@@ -37,7 +37,7 @@ const FxSprites = (function () {
       const mesh = new THREE.Mesh(geo, mat); mesh.visible = false; mesh.frustumCulled = false; mesh.renderOrder = 20; scene.add(mesh);
       slots.push({ mesh, mat, on: false, age: 0, delay: 0, dur: 1, size: 1, fx: '', x: 0, y: 0, z: 0, ground: false });
     }
-    const toCam = new THREE.Vector3();
+    const toCam = new THREE.Vector3(), camPos = new THREE.Vector3(), camQuat = THREE.Quaternion ? new THREE.Quaternion() : null;   // the camera in world space (in VR it sits inside a moving rig)
     let total = 0;
     const art = () => !!data;
     const ready = () => !!data && Object.keys(base).length > 0;
@@ -76,6 +76,7 @@ const FxSprites = (function () {
       return tr.trail;
     }
     function update(dt) {
+      const cp = camera.getWorldPosition && camQuat ? (camera.getWorldPosition(camPos), camera.getWorldQuaternion(camQuat), camPos) : camera.position, cq = cp === camPos ? camQuat : camera.quaternion;
       for (const s of slots) {
         if (!s.on) continue;
         s.age += dt;
@@ -87,10 +88,10 @@ const FxSprites = (function () {
         s.mat.uniforms.uScale.value.set(d.w / W, d.h / H);
         const h = s.size * d.h / d.w;
         // face the camera and sit a little in front of the spot so a wall does not cut the picture in half
-        toCam.set(camera.position.x - s.x, camera.position.y - s.y, camera.position.z - s.z);
+        toCam.set(cp.x - s.x, cp.y - s.y, cp.z - s.z);
         const dist = toCam.length() || 1, push = Math.min(0.5, s.size * 0.22) / dist;
         s.mesh.position.set(s.x + toCam.x * push, s.y + (s.ground ? h * 0.5 : 0) + toCam.y * push, s.z + toCam.z * push);
-        s.mesh.quaternion.copy(camera.quaternion);
+        s.mesh.quaternion.copy(cq);
         s.mesh.scale.set(s.size, h, 1);
         s.mesh.visible = true;
       }
