@@ -25,6 +25,7 @@ Keep the code neat: small focused files and functions in clear folders, never on
 - `python3 tools/smoke_loop.py` : level-up / game over / boss HUD on a phone-sized page
 - `node tests/models.test.js` : model checks (sight clear, anchors, face budget)
 - `node tests/pad.test.js` : controller checks (Hypershot layout, dead zones, right-stick turn)
+- `node tests/xr.test.js` : Meta Quest controller checks (Touch controllers become one standard pad, snap/smooth turn, aim maths)
 - `node tests/touch.test.js` : touch button settings checks (size range, what can be hidden)
 - `node tests/fx.test.js` : effect checks (look presets escalate common to legendary, sprite pool)
 - `node tests/gun.test.js` : gun look checks (smoothed shape, skins, motion)
