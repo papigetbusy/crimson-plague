@@ -48,7 +48,7 @@ In VR every menu is a copy of the game's own panel, hung in front of you on a wo
 | Stash chest | Store items between runs | Put in, Take, Rename, Save game, "Enter the hall" | Laser on the buttons. Renaming needs the Quest keyboard (untested) |
 | Game over | See the run summary, keep stash items as blueprints, load or delete saves, rise again | Keep, blueprint and save buttons, and RISE AGAIN | Laser on any of them |
 | Pause | Stop the game | Resume, Codex | Tap Y; Y again resumes |
-| Map | Overview of the floor | Flat overlay (M / Back) | Raise your free left hand in front of your eyes (wrist glance): the map opens above it, facing you |
+| Map | Overview of the floor | Flat overlay (M / Back) | Double-tap Y: the map opens above your left hand, facing you. Double-tap again, or tap Y once, to close it |
 
 ## Research round 3 (Nov 2026): what real VR shooters and Meta's own guidelines do, and the decisions we took
 
@@ -59,7 +59,7 @@ A polished, mid-spectrum VR shooter: **Contractors / Pavlov handling with Half-L
 3. Sticks: pure move + turn. Jump off the stick (A). Sprint on stick click or full forward. Smooth and snap turn. No accidental jumps.
 4. Menus: world-locked, laser point-and-click only, whole cards/buttons highlight only, scroll by stick or laser, a clear exit everywhere (Y backs out), clean, centred, readable, no lock-in.
 5. Keep: X instant reload, the reload animation on the gun, the test map.
-Because the left grip is the support hand again, the map moved to a wrist glance (row 16).
+Because the left grip is the support hand again, the map moved off it: first to a wrist glance, then (owner, after playing: "the map keeps randomly popping up... causing problems in gun fights") to a double-tap of Y (row 16).
 
 ### Sources read
 - Meta Horizon OS design docs: *Locomotion input maps* (developers.meta.com/horizon/design/locomotion-input-maps), *Locomotion user preferences*, *Controllers best practices*, *Ray casting specs* (developers.meta.com/vr/design/raycasting_specs), *Hands UI best practices* (sizing, scrolling, feedback), *Panels*, and the IWSDK *Locomotion Slide* doc.
@@ -87,7 +87,7 @@ Because the left grip is the support hand again, the map moved to a wrist glance
 | 12 | **Laser:** white beam, gold when over a button, a cursor dot on the panel, and a buzz when you hover a new button | Meta's raycast spec uses distinct hover and select colours and a constant-size cursor. Haptics confirm the target. |
 | 13 | **Panel placement:** 1.6 m away, centred at eye height (−10 cm), about 1.5 m × 0.95 m. It re-centres itself if you turn more than 70° away from it. | Meta says ray UI is comfortable from 0.46 to 3 m and panels should not make you turn your head to see the edges. Re-centring means a menu can never get lost behind you. |
 | 15 | **Left grip near the gun = support hand.** Close the left grip anywhere along the gun ahead of the trigger hand (within 20 cm of that line; a buzz confirms). The right hand keeps the position; the barrel turns toward the left hand (pull: pistol 30% (a cupped hand), SMG 75%, rifle/shotgun 80%, sniper/HMG 85%), with extra smoothing. Release the grip to let go. | Pavlov and Contractors: two-hand rotation is what makes long guns steady. A whole-line grab zone because the voxel guns are long and a real reach is 30–45 cm, so you never fish for a spot. Position stays on the primary hand (the owner's rule), so the gun never pulls out of your hand. |
-| 16 | **Map = wrist glance.** Raise your free left hand into the middle of your view (within 32° of where you look, 12–60 cm away) for 0.2 s and the floor map opens just above it, always facing you. Lower it and it closes. Never while the left grip holds the gun or you aim. | Contractors' wrist menu and Alyx's wrist health readout: a glance, no button. Buttons are all taken, and the left grip is the support hand again. |
+| 16 | **Map = double-tap Y** (toggle). A single tap of Y while the map is open closes it instead of pausing. Menus close it. It never opens by itself, not even when your hand passes your face. A single Y tap now pauses 0.3 s after release (the wait for a possible second tap); in menus Y still backs out at once. | The wrist glance (Contractors/Alyx style) fired by accident in gunfights, because a support hand on a long gun sits right in front of your face. Options weighed: **hold X** would delay or misfire the instant reload the owner wants kept, and X is a combat button. **Left stick click** is sprint. **Right stick click** is swap. Y is already the non-combat "system" button (pause, Gear, back), so a double tap there conflicts with nothing in a fight; the only cost is the 0.3 s later pause. Toggle instead of hold, so you can walk and turn while reading it. |
 | 17 | **Per-gun grab point.** Every gun model already has a hand spot (its grip); the gun is placed so that spot sits exactly in the controller grip (the test measures a 0 mm gap on all six guns). The game's own right glove is drawn there and the left glove on the fore-end while supporting or aiming. No forearms. | The owner: "no floating, no arm models". Alyx and Contractors show hands only. |
 | 18 | **Virtual stock (option, `?vstock`).** While two-handing, if your right hand is within 30 cm of your right shoulder the gun pivots on the shoulder instead of the hand. Off by default. | H3VR and Pavlov offer it as a setting; some players love it, some hate it, so it's opt-in. |
 | 14 | Text inputs (stash rename, codex search, co-op name) are left out of the VR panel | The Quest keyboard over WebXR is unreliable, and an input you can't finish is a trap. Renaming stays a flat-screen feature. |
@@ -99,9 +99,9 @@ Because the left grip is the support hand again, the map moved to a wrist glance
 | Left stick click / stick fully forward | Sprint |
 | Left trigger | Aim down sights (per gun; the sniper shows a 4x picture in its scope) |
 | Left grip near the gun | Support hand: steady and steer the barrel with both hands |
-| Raise free left hand to your eyes | Map (wrist glance). A small corner map is always in the HUD |
+| Double-tap Y | Map on / off (a tap of Y also closes it). A small corner map is always in the HUD |
 | X | Reload (animation on the gun) |
-| Tap Y | Pause / resume. In any menu: back / close (at the merchant: leave) |
+| Tap Y | Pause / resume (0.3 s after release). In any menu: back / close (at the merchant: leave) |
 | Hold Y (0.5 s) | Gear menu |
 | Right stick left/right | Smooth turn, 4.5 rad/s with a curve (`?turn=6`), or snap (`?snap` = 45 degrees, `?snap=30`) |
 | Right stick up/down | Scrolls menus only. A hard push down works a gold gate / boss door puzzle |
@@ -111,7 +111,7 @@ Because the left grip is the support hand again, the map moved to a wrist glance
 | A | Jump |
 | B | Slide |
 
-Why this layout: see rows 1–5 and 15–18 above. Jump is on a button so a drifting or diagonal stick can never jump; the left grip is the support hand like in Pavlov and Contractors; the map is a wrist glance like Contractors' wrist menu. There is no D-pad anywhere.
+Why this layout: see rows 1–5 and 15–18 above. Jump is on a button so a drifting or diagonal stick can never jump; the left grip is the support hand like in Pavlov and Contractors; the map is on a double tap of Y, the non-combat system button, so it can never pop up in a fight. There is no D-pad anywhere.
 
 **VR test map:** open the game with `?sandbox`, or press **VR TEST MAP** on the start card. You get a small 44x44 floor (the normal first floor is 80x80) with all the normal systems, only 2 weak monsters at a time, 400 HP and the gold gates open. One of each gun type lies at your feet (pump shotgun, rifle, SMG, bolt sniper, belt HMG, hand cannon), along with 500 gold, two mods and a helmet. Press the button again to go back to the normal game.
 

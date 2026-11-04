@@ -6,7 +6,8 @@
      Left stick                            -> move (toward your head's facing), radial deadzone
      Left stick click / stick fully fwd    -> sprint
      Left trigger                          -> aim down sights (xr_mode raises the gun to your eye)
-     Left grip near the gun (xr_mode)      -> support hand: steadies and steers the barrel (map = raise the free left hand to your eyes)
+     Left grip near the gun (xr_mode)      -> support hand: steadies and steers the barrel
+     Double-tap Y (xr_mode)                -> floor map on / off (a tap of Y also closes it)
      X                                     -> reload
      Y  tap / hold 0.5 s                   -> pause / Gear menu      (in any VR menu: back)
      Right stick left/right (xr_mode)      -> turn (only when sideways is clearly the main direction)
@@ -41,15 +42,21 @@ const XrInput = (function () {
     return { x: sx, y: sy };
   }
   // Y: a tap pauses (fires on release), a 0.5 s hold opens Gear (fires once while held). Returns { tap, hold } for this frame.
+  // Y: tap = pause, hold 0.5 s = Gear, double-tap = map. A single tap waits DOUBLE_GAP after release to be sure no second tap follows
+  // (pausing 0.3 s late is harmless; a map that pops up uninvited is not). `up` is the raw release, used for "back" inside menus.
+  const DOUBLE_GAP = 0.3;
   function createY() {
-    let t = 0, down = false, held = false;
+    let t = 0, down = false, held = false, wait = -1, second = false;
     function step(on, dt) {
-      let tap = false, hold = false;
-      if (on) { if (!down) { down = true; t = 0; held = false; } t += dt; if (!held && t >= Y_HOLD) { held = true; hold = true; } }
-      else if (down) { down = false; if (!held) tap = true; }
-      return { tap, hold, holding: down && !held, progress: down && !held ? Math.min(1, t / Y_HOLD) : 0 };
+      let tap = false, hold = false, dbl = false, up = false;
+      if (wait >= 0) { wait += dt; if (wait > DOUBLE_GAP && !down) { wait = -1; tap = true; } }
+      if (on) {
+        if (!down) { down = true; t = 0; held = false; second = wait >= 0 && wait <= DOUBLE_GAP; if (second) wait = -1; }
+        t += dt; if (!held && !second && t >= Y_HOLD) { held = true; hold = true; }
+      } else if (down) { down = false; if (!held) { up = true; if (second) dbl = true; else wait = 0; } second = false; }
+      return { tap, hold, double: dbl, up, holding: down && !held && !second, progress: down && !held && !second ? Math.min(1, t / Y_HOLD) : 0 };
     }
-    return { step, reset: () => { down = false; held = false; t = 0; } };
+    return { step, reset: () => { down = false; held = false; t = 0; wait = -1; second = false; } };
   }
   // sources: list of { handedness: 'left'|'right', gamepad }. o: { y: createY output for this frame, menu: a VR menu is open }.
   // Returns a Gamepad-shaped object pad_input.js can read, or null.
@@ -69,7 +76,7 @@ const XrInput = (function () {
     b[5] = btn(!menu && y.hold);                    // RB (Gear menu): hold Y
     b[6] = btn(!menu && pressed(L, XR.TRIGGER), menu ? 0 : value(L, XR.TRIGGER));   // LT (aim)
     b[7] = btn(!menu && pressed(R, XR.TRIGGER), menu ? 0 : value(R, XR.TRIGGER));   // RT (fire)
-    b[8] = btn(false);                              // Back (big map): in VR the map is a wrist glance, raise the free left hand to your eyes (xr_mode.js)
+    b[8] = btn(false);                              // Back (big map): in VR double-tap Y toggles the map (xr_mode.js)
     b[9] = btn(!menu && y.tap);                     // Start (pause): tap Y. In a menu xr_mode turns Y into "back"
     b[10] = btn(pressed(L, XR.STICK));              // L3 (sprint)
     b[11] = btn(false);                             // R3

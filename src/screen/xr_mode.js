@@ -291,7 +291,7 @@ const XrMode = (function () {
       const fc = $('floorCard'); if (fc && fc.offsetParent !== null && txt('floorCard')) center('Right grip: pick up  ' + txt('floorCard').slice(0, 50), 22, '#ecdfc6');
       const sh = $('stashHint'); if (sh && !sh.hidden) center('STASH CHEST: right grip', 22, '#cfa54a');
       const mm = o.map && o.map.small;                                // the corner map, bottom left of the view (hold the LEFT GRIP for the whole floor in your hand)
-      if (mm && mm.width) { hx.shadowBlur = 0; hx.globalAlpha = 0.9; hx.drawImage(mm, 40, 250, 170, 170); hx.globalAlpha = 1; hx.strokeStyle = '#6a2a2e'; hx.lineWidth = 3; hx.strokeRect(40, 250, 170, 170); hx.shadowBlur = 8; line('Raise left hand: map', 40, 222, 20, '#cfa54a'); }
+      if (mm && mm.width) { hx.shadowBlur = 0; hx.globalAlpha = 0.9; hx.drawImage(mm, 40, 250, 170, 170); hx.globalAlpha = 1; hx.strokeStyle = '#6a2a2e'; hx.lineWidth = 3; hx.strokeRect(40, 250, 170, 170); hx.shadowBlur = 8; line('Double-tap Y: map', 40, 222, 20, '#cfa54a'); }
       const toastE = $('padToast'); if (toastE && toastE.classList.contains('show')) center(questText(toastE.textContent), 24, '#e8c890');
     }
 
@@ -352,21 +352,14 @@ const XrMode = (function () {
     const mapFrame = new THREE.Mesh(new THREE.PlaneGeometry(0.36, 0.36), new THREE.MeshBasicMaterial({ color: 0x2a0d10, depthTest: false, depthWrite: false, fog: false, side: THREE.DoubleSide }));
     mapFrame.renderOrder = 996; mapFrame.position.z = -0.001; mapMesh.add(mapFrame);
     let mapHeld = false, mapT = 0, mapHost = null;
-    // the map moved off the left grip (that is the support hand now): raise your free LEFT hand in front of your eyes, like checking a
-    // wrist display (Contractors' wrist menu, Alyx's wrist health), and the floor map opens above it, turned to face you.
-    // Not while that hand holds the gun or you aim; a short hold-off stops it flickering as the hand passes your face.
-    let glanceT = 0; const mv3 = new THREE.Vector3(), hf = new THREE.Vector3();
+    // the map: double-tap Y toggles it, a single Y tap (or any menu) closes it. A button and nothing else: the old wrist-glance gesture
+    // opened it in the middle of gunfights. It floats above the left controller, turned to face you, so the gun's sight line stays clear.
+    let mapOpen = false;
     function mapHand(dt, running) {
       const L = hands.left;
-      let want = false;
-      if (running && !menuMesh.visible && L && mapTex && !twoHand && adsK < 0.1 && !btnOn(L.gamepad, 1, 0.35)) {
-        mv3.copy(L.grip.position).sub(camera.position); const d = mv3.length();
-        hf.set(0, 0, -1).applyQuaternion(camera.quaternion);
-        want = d > 0.12 && d < 0.6 && mv3.normalize().dot(hf) > Math.cos(32 * Math.PI / 180);   // in front of your eyes, within arm's bend
-      }
-      glanceT = want ? Math.min(0.5, glanceT + dt) : Math.max(0, glanceT - dt * 2);
-      const show = mapHeld ? glanceT > 0.05 : glanceT >= 0.2;
-      if (show !== mapHeld) { mapHeld = show; if (o.map) o.map.open(show); if (show) pulse('left', 0.2, 15); }
+      if (!running || menuMesh.visible || !L || !mapTex) mapOpen = false;
+      const show = mapOpen;
+      if (show !== mapHeld) { mapHeld = show; if (o.map) o.map.open(show); pulse('left', show ? 0.25 : 0.12, 15); }
       if (mapHost !== dolly) { dolly.add(mapMesh); mapHost = dolly; }
       mapMesh.visible = show;
       if (!show) return;
@@ -412,7 +405,9 @@ const XrMode = (function () {
       const src = sources(), L = hands.left, yOn = btnOn(L && L.gamepad, 5);
       yNow = yBtn.step(yOn, lastDt);
       const menu = menuMesh.visible;
-      if (menu && yNow.tap) back();                                    // Y in a menu = back / close / leave / resume: no menu can trap you
+      if (menu) { if (yNow.up) { yBtn.reset(); back(); } yNow = { tap: false, hold: false, double: false, up: false, progress: 0 }; }   // Y in a menu = back at once: no menu can trap you
+      else if (yNow.double) mapOpen = !mapOpen;                        // double-tap Y: map on / off
+      else if (yNow.tap && mapOpen) { mapOpen = false; yNow = Object.assign({}, yNow, { tap: false }); }   // a tap with the map open just closes it (no pause)
       if (yNow.hold && !menu) pulse('left', 0.4, 30);
       return XrInput.toPad(src, { y: yNow, menu });
     }
