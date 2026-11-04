@@ -13,16 +13,16 @@ const FloorGen = (function () {
   const sizeFor = (floor) => Math.min(SIZES.max, SIZES.first + SIZES.grow * (floor - 1));
 
   // tier is how advanced the traps are (the floor number unless a test asks for more)
-  function generate(floor, rng, tier) {
+  function generate(floor, rng, tier, size) {      // size: a test-only override (the VR sandbox link asks for a small floor)
     for (let attempt = 0; attempt < 20; attempt++) {
-      const f = tryGenerate(floor, rng, tier || floor);
+      const f = tryGenerate(floor, rng, tier || floor, size);
       if (f) return f;
     }
     throw new Error('floor generator could not connect a floor');
   }
 
-  function tryGenerate(floor, rng, tier) {
-    const W = sizeFor(floor), H = W;
+  function tryGenerate(floor, rng, tier, size) {
+    const W = size || sizeFor(floor), H = W;
     const g = []; for (let z = 0; z < H; z++) g.push(new Array(W).fill('#'));
     const ri = (a, b) => a + Math.floor(rng() * (b - a + 1));
     const rooms = [];

@@ -140,7 +140,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       AIL.clear();
       R.windUsed = 0;                                                  // Second Wind comes back on every floor
       floorNo = n;
-      setMap(FG.generate(n, makeRng((seed0 * 2654435761 + n * 40503) >>> 0), cfg.trapTier || n));   // its own random stream, so a floor never depends on how the fight went
+      setMap(FG.generate(n, makeRng((seed0 * 2654435761 + n * 40503) >>> 0), cfg.trapTier || n, cfg.floorSize));   // floorSize: unset in the game; only the ?sandbox test link sets a small one   // its own random stream, so a floor never depends on how the fight went
     }
     function setMap(map) {
       M0 = map;
