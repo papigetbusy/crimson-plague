@@ -384,6 +384,7 @@
     }
     toastT -= dt; if (toastT <= 0) toastEl.classList.remove('show');
     pad.now = p ? pad.input.read(p) : null;
+    if (pad.now && xr && xr.presenting()) { pad.now.nav = 0; pad.now.navY = 0; pad.now.confirm = false; }   // VR menus use the laser pointer, not the sticks
   }
 
   const locked = () => document.pointerLockElement === canvas;
@@ -567,6 +568,9 @@
       const a = xr.aim(), pl = state.player, c = ref.cfg;
       if (a) { const lk = XrInput.lookToward(pl, a, c.lookSens, 1 - pl.adsT * (1 - c.adsLookMul)); out.lookX += lk.lookX; out.lookY += lk.lookY; }
       if (XrInput.autoSprint(out.mz, out.mx) && !out.ads) out.sprint = true;   // stick fully forward runs
+      if (!xr.canFire(state, out.fire)) out.fire = false;            // physical reload: the trigger waits for your hands (an empty gun clicks instead of reloading itself)
+      if (xr.takeReload()) out.reload = true;                         // the magazine was dropped: the game's own reload timer starts now
+      if (xr.menuOpen()) out.fire = false;
       const hy = xr.headYaw();                                        // walk where your head faces, not where the gun points
       if (hy !== null && (out.mx || out.mz)) { const mv = XrInput.headMove(out.mx, out.mz, hy - (a ? a.yaw : pl.yaw)); out.mx = mv.mx; out.mz = mv.mz; }
     }
@@ -844,6 +848,7 @@
   function handleEvents(events) {
     for (const e of events) {
       hud.event(e);
+      if (e.type === 'reloadStart' && xr) xr.onReloadStart();      // VR hand reload: an automatic reload (last round fired) still needs your hands
       if (e.type === 'shot') {
         if (!e.extra && xr && xr.presenting()) xr.pulse('right', 0.45, 35);   // a kick in the gun hand
         if (!e.extra) { flashT = 0.06; kickG = 1; kickDir = [Math.random() * 2 - 1, Math.random() * 2 - 1]; inspK = 0; sfx('shot'); ejectShell(); if (fxOn()) { muzzle.getWorldPosition(tmpV); if (xr && xr.presenting()) xr.aimDir(tmpV2); else camera.getWorldDirection(tmpV2); fx.play(fxId(), 'muzzle', tmpV.x + tmpV2.x * 0.12, tmpV.y + tmpV2.y * 0.12, tmpV.z + tmpV2.z * 0.12); } }
