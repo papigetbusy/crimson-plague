@@ -13,7 +13,9 @@
   if (!window.THREE) { $('fatal').hidden = false; return; }
 
   const ref = Referee.create((Date.now() & 0xffffff) | 1);
+  const SANDBOX = /sandbox/.test(location.hash + location.search);   // ?sandbox: the VR test map (a small floor, a few weak monsters, one of each gun type at your feet). Test link only, the normal game is unchanged
   const GAME_CFG = { startGun: 'pistol_service', gunDrops: true, gearDrops: true, modDrops: true, stashOpen: true, manualGuns: true, bossRandom: true };      // the game's rules: you start with the silver pistol and monsters drop guns, armor and charms (the referee's plain defaults keep the tests steady)
+  if (SANDBOX) Object.assign(GAME_CFG, { floorSize: 44, monsterCount: 2, monsterDamage: 2, playerHp: 400, locks: false });
   ref.setCfg(GAME_CFG); ref.setStash(StashStore.read());          // what you put in the chest on earlier runs is still there
 
   // a link can start the run on a later wave, to try the boss: ...#wave10 (or ?wave=10)
@@ -201,7 +203,7 @@
   // returns gun offsets for this frame and poses the hands, mag and charging handle
   const NO_RL = { px: 0, py: 0, pz: 0, rx: 0, ry: 0, rz: 0 };
   function animateReload(p) {
-    if (xr && xr.presenting()) { xr.poseGun(); return NO_RL; }      // VR: your own hands do the reload; the gun's real magazine and slide follow them (xr_mode.js)
+    const vr = !!(xr && xr.presenting());                           // VR plays the same reload on the gun (the hands are hidden, so the magazine and shells are what you see)
     const ins = !p.reloading && inspK > 0 && inspKind === 'mag';
     const gtype = RefereeWeapons.GUNS[p.gun.id].type, shells = gtype === 'shotgun';
     const R = ins ? INSPECT_MAG : shells ? RL_SHELLS : (p.reloadEmpty || gtype === 'sniper') ? RL_EMPTY : RL_NORMAL;   // a sniper works its bolt after every magazine
@@ -214,7 +216,13 @@
       magHidden = k > R.pullEnd && k < R.newStart;
       mag.position.x += handPos.x - MAGH.x; mag.position.y += handPos.y - MAGH.y; mag.position.z += handPos.z - MAGH.z;
     }
+    if (vr && magHidden && !magWasHidden && p.reloading) xr.dropMag(mag);   // VR: the old magazine falls away from the gun
+    magWasHidden = magHidden;
     mag.visible = !magHidden;
+    // VR: a shell rides from the belt into the loading port on each push (the flat game shows it in the glove)
+    let sh = false;
+    if (vr && shells && p.reloading) for (let i = 0; i < 4; i++) { const a = 0.08 + i * 0.16; if (k > a && k < a + 0.08) sh = true; }
+    vrShell.visible = sh; if (sh) vrShell.position.copy(handPos);
     charge.position.z = CHARGE_Z + ((p.reloading && R.bolt && k >= R.bolt[0] && k <= R.bolt[1]) ? (handPos.z - CH_F.z) : 0);
     tB.copy(handPos); tB.y -= 0.02; tB.z += 0.1;
     placeLimb(limbL, ELBOW_L, tB, 0.12);
@@ -222,7 +230,7 @@
     placeLimb(limbR, ELBOW_R, tB, 0.12);
     // sounds on the way through
     if (p.reloading || ins) {
-      for (const n in R.snd) if (rlPrev < R.snd[n] && k >= R.snd[n]) sfx(n.replace(/\d+$/, ''));
+      for (const n in R.snd) if (rlPrev < R.snd[n] && k >= R.snd[n]) { sfx(n.replace(/\d+$/, '')); if (vr) xr.pulse(/bolt/.test(n) ? 'right' : 'left', /bolt/.test(n) ? 0.55 : 0.35, /bolt/.test(n) ? 40 : 25); }   // VR: a buzz on every magazine seat, shell and rack
     }
     rlPrev = p.reloading || ins ? k : 0;
     mag.rotation.set(0.1 + (ins ? 0.5 * smooth01((k - 0.3) / 0.1) * (1 - smooth01((k - 0.74) / 0.08)) : 0), ins ? GunMotion.magSpin(k) : 0, 0);   // the held magazine turns so you see both faces
@@ -232,6 +240,10 @@
     return { px: -0.1 * tilt, py: -0.05 * tilt, pz: 0.03 * tilt + bump * 0.035, rx: 0.28 * tilt + bump * 0.06, ry: -0.12 * tilt, rz: -0.5 * tilt };
   }
   const shellV = V3(0, 0, 0);
+  let magWasHidden = false;
+  const vrShell = new THREE.Group(); vrShell.visible = false; gunBody.add(vrShell);   // a red shotgun shell with a brass end (VR reload only)
+  { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.07, 10), new THREE.MeshLambertMaterial({ color: 0xa8121c, emissive: 0x300406 })); c.rotation.x = Math.PI / 2; vrShell.add(c);
+    const r = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.015, 10), new THREE.MeshLambertMaterial({ color: 0xc89a3a, emissive: 0x302008 })); r.rotation.x = Math.PI / 2; r.position.z = 0.035; vrShell.add(r); }
 
   /* ============ monsters: four voxel kinds, built and posed by src/screen/monster_rigs.js ============ */
   const RIGS = MonsterRigs.create(THREE), MODEL = RIGS.MODEL;
@@ -571,8 +583,6 @@
       const a = xr.aim(), pl = state.player, c = ref.cfg;
       if (a) { const lk = XrInput.lookToward(pl, a, c.lookSens, 1 - pl.adsT * (1 - c.adsLookMul)); out.lookX += lk.lookX; out.lookY += lk.lookY; }
       if (XrInput.autoSprint(out.mz, out.mx) && !out.ads) out.sprint = true;   // stick fully forward runs
-      if (!xr.canFire(state, out.fire)) out.fire = false;            // physical reload: the trigger waits for your hands (an empty gun clicks instead of reloading itself)
-      if (xr.takeReload()) out.reload = true;                         // the magazine was dropped: the game's own reload timer starts now
       if (xr.menuOpen()) out.fire = false;
       const hy = xr.headYaw();                                        // walk where your head faces, not where the gun points
       if (hy !== null && (out.mx || out.mz)) { const mv = XrInput.headMove(out.mx, out.mz, hy - (a ? a.yaw : pl.yaw)); out.mx = mv.mx; out.mz = mv.mz; }
@@ -617,10 +627,17 @@
       started = true;
       if (isTouch && !fromPad) { try { const el = document.documentElement; (el.requestFullscreen || el.webkitRequestFullscreen).call(el); } catch (e) { /* ignore */ } try { screen.orientation.lock('landscape').catch(() => {}); } catch (e) { /* ignore */ } }
     }
-    setRunning(true); coop.onBegin();
+    setRunning(true); coop.onBegin(); sandboxGifts();
     if (!fromPad) tryLock();
   }
   playBtn.addEventListener('click', () => begin(false));
+  { const sb = $('sandboxBtn'); if (sb) { if (SANDBOX) sb.textContent = 'VR TEST MAP IS ON (back to the normal game)'; sb.addEventListener('click', () => { const u = new URL(location.href); if (SANDBOX) u.searchParams.delete('sandbox'); else u.searchParams.set('sandbox', '1'); location.href = u.toString(); }); } }
+  let sandboxGiven = -1;
+  function sandboxGifts() {                                          // one gun of each type lies at your feet, plus gold and a couple of mods, so every reload and menu can be tried
+    if (!SANDBOX || sandboxGiven === state.floorId) return; sandboxGiven = state.floorId;
+    for (const id of ['shotgun_pump', 'rifle', 'smg_compact', 'sniper_bolt', 'hmg_belt', 'pistol_cannon']) ref.giveGun(id, 1);
+    ref.giveGold(500); ref.giveMod(1); ref.giveMod(2); ref.giveGear('head', 2); state = ref.snapshot();
+  }
   const coop = Coop.create($, ref, { toast: (t) => toast(t), playLabel: (t, off) => { $('playLabel').textContent = t; playBtn.disabled = off; }, begin });
   // controller menus: Start pauses and resumes, A starts, picks the highlighted level-up card, and rises again after a fall
   function padMenus() {
@@ -851,7 +868,6 @@
   function handleEvents(events) {
     for (const e of events) {
       hud.event(e);
-      if (e.type === 'reloadStart' && xr) xr.onReloadStart();      // VR hand reload: an automatic reload (last round fired) still needs your hands
       if (e.type === 'shot') {
         if (!e.extra && xr && xr.presenting()) xr.pulse('right', 0.45, 35);   // a kick in the gun hand
         if (!e.extra) { flashT = 0.06; kickG = 1; kickDir = [Math.random() * 2 - 1, Math.random() * 2 - 1]; inspK = 0; sfx('shot'); ejectShell(); if (fxOn()) { muzzle.getWorldPosition(tmpV); if (xr && xr.presenting()) xr.aimDir(tmpV2); else camera.getWorldDirection(tmpV2); fx.play(fxId(), 'muzzle', tmpV.x + tmpV2.x * 0.12, tmpV.y + tmpV2.y * 0.12, tmpV.z + tmpV2.z * 0.12); } }
@@ -916,7 +932,7 @@
       else if (e.type === 'dead') { diedT = 1.4; sfx('dead'); rlPrev = 0; }
       else if (e.type === 'down') { diedT = 0.9; sfx('dead'); toast('You are down - a friend standing close brings you back'); }
       else if (e.type === 'revived') { sfx('levelup'); toast('Back on your feet'); }
-      else if (e.type === 'restart') { diedT = 0; rlPrev = 0; equipK = 0; inspK = 0; fx.clear(); }
+      else if (e.type === 'restart') { sandboxGiven = -1; setTimeout(sandboxGifts, 0); diedT = 0; rlPrev = 0; equipK = 0; inspK = 0; fx.clear(); }
       else if (e.type === 'reloadStart') { rlPrev = 0; }
     }
   }
@@ -1192,7 +1208,7 @@
   chooseClass(0);
   GP.gunBody = gunBody; GP.magBase = MAG_BASE; GP.fore = HOLD;
   xr = XrMode.create({ THREE, renderer, scene, camera, gun, $, gunHome: GUN_DEFAULTS, toast: (t) => toast(t), started: () => started, menuOpen: () => gearMenu.isOpen || stashMenu.isOpen,
-    turnSpeed: () => ref.cfg.padTurn, arms: [handL, handR, limbL, limbR],
+    turnSpeed: () => ref.cfg.padTurn, arms: [handL, handR, limbL, limbR], map: { open: (v) => minimap.setOpen(v), big: $('bigMap'), small: $('miniMap') },
     gunParts: () => { if (!mag || !charge) return null; GP.id = curGun; GP.type = (RefereeWeapons.GUNS[state.player.gun.id] || {}).type; GP.mag = mag; GP.charge = charge; GP.gunScale = view.gunScale; return GP; }, playerYaw: () => state.player.yaw });
   xr.on(() => { renderer.setAnimationLoop(frame); if (!running) begin(true); }, () => { renderer.setAnimationLoop(null); requestAnimationFrame(frame); });   // a headset drives the frames while in VR
   function frame(now) {
@@ -1221,5 +1237,5 @@
   }
   requestAnimationFrame((t) => { clock.last = t; frame(t); });
   setRunning(false);
-  window.__game = { ref, view, THREE, fx, mouse, xr };   // handy for poking at numbers from the console
+  window.__game = { ref, view, THREE, fx, mouse, xr, vrShell };   // handy for poking at numbers from the console
 })();

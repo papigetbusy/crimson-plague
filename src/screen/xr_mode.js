@@ -6,7 +6,7 @@ const XrMode = (function () {
   function create(o) {
     const { THREE, renderer, scene, camera, gun, $, gunHome } = o;
     const q = location.search + location.hash;
-    const opts = { snap: /[?&#]snap\b/.test(q), gaze: /[?&#]gaze\b/.test(q), perf: /[?&#]perf\b/.test(q), vignette: /[?&#]vignette\b/.test(q), aimMove: /[?&#]aimmove\b/.test(q), easyReload: /[?&#]easyreload\b/.test(q), rack: /[?&#]rack\b/.test(q),
+    const opts = { snap: /[?&#]snap\b/.test(q), gaze: /[?&#]gaze\b/.test(q), perf: /[?&#]perf\b/.test(q), vignette: /[?&#]vignette\b/.test(q), aimMove: /[?&#]aimmove\b/.test(q),  rack: /[?&#]rack\b/.test(q),
       turn: (() => { const m = /[?&#]turn=([0-9.]+)/.exec(q); return m ? Math.max(0.5, Math.min(10, +m[1])) : 4.5; })(),
       snapDeg: (() => { const m = /[?&#]snap=([0-9]+)/.exec(q); return m ? Math.max(10, Math.min(90, +m[1])) : 45; })(),
       scale: (() => { const m = /[?&#]xrscale=([0-9.]+)/.exec(q); return m ? Math.max(0.5, Math.min(1, +m[1])) : 0.8; })() };   // ?xrscale=0.7 trades sharpness for speed
@@ -73,10 +73,10 @@ const XrMode = (function () {
     }
     let menuCard = null, menuKey = '', menuBusy = false, menuT = 0, menuOk = false, h2cTried = false;
     // the page's controller prompts name Xbox buttons and a D-pad; the Quest Touch controllers have neither, so VR shows Quest names
-    const QUEST_WORDS = [[/<b>X<\/b> reloads/g, '<b>A</b> drops the magazine (reload by hand)'], [/\bX\b reloads/g, 'A drops the magazine (reload by hand)'], [/Press <b>A<\/b> to (begin|resume)/g, 'Point and pull the trigger to $1'], [/Press A to (begin|resume)/g, 'Point and pull the trigger to $1'],
+    const QUEST_WORDS = [[/Press <b>A<\/b> to (begin|resume)/g, 'Point and pull the trigger to $1'], [/Press A to (begin|resume)/g, 'Point and pull the trigger to $1'],
       [/D-pad down/g, 'right stick down'], [/(the )?D-pad( or (the )?left stick)?( to choose)?/g, 'the laser'], [/up and down to change row,?/g, ''],
       [/\bRT\b( \(R2\))?/g, 'right trigger'], [/\bLT\b( \(L2\))?/g, 'left trigger'], [/\bRB\b/g, 'right stick click'], [/\bLB\b/g, 'right grip'],
-      [/\bStart\b( \(Options\))?/g, 'Y'], [/\bBack\b( \(View \/ Share\))?/g, 'X + Y'], [/Triangle|\bY\b(?= swaps)/g, 'X'], [/\bCross\b/g, 'A'], [/\bSquare\b/g, 'X'], [/\bCircle\b/g, 'B'],
+      [/\bStart\b( \(Options\))?/g, 'Y'], [/\bBack\b( \(View \/ Share\))?/g, 'hold the left grip'], [/Triangle|\bY\b(?= swaps)/g, 'A'], [/\bCross\b/g, 'A'], [/\bSquare\b/g, 'X'], [/\bCircle\b/g, 'B'],
       [/\bA\b to (take|pick|press|confirm)/g, 'the trigger to $1'],
       [/Click the left stick/g, 'Click the left stick (or push it all the way forward)'], [/right stick<\/b> looks/g, 'right stick</b> turns']];
     const questText = (t) => { for (const [re, w] of QUEST_WORDS) t = t.replace(re, w); return t; };
@@ -184,7 +184,8 @@ const XrMode = (function () {
       const lb = $('lockBox'); if (lb && getComputedStyle(lb).display !== 'none' && lb.offsetParent !== null) { center(txt('lockTxt'), 24, '#cfa54a'); const b0 = txt('lockB0'), b1 = txt('lockB1'); center((b0 ? 'Right grip: ' + b0 : '') + (b1 ? '    Right stick down: ' + b1 : ''), 22); }
       const fc = $('floorCard'); if (fc && fc.offsetParent !== null && txt('floorCard')) center('Right grip: pick up  ' + txt('floorCard').slice(0, 50), 22, '#ecdfc6');
       const sh = $('stashHint'); if (sh && !sh.hidden) center('STASH CHEST: right grip', 22, '#cfa54a');
-      if (RELOAD_HINT[relStep]) { center(RELOAD_HINT[relStep], 26, '#ffd27a'); if (relStep === 'loading' || relStep === 'shell') center('Shells ' + relInfo.loaded + ' / ' + relInfo.need, 24, '#ecdfc6'); } 
+      const mm = o.map && o.map.small;                                // the corner map, bottom left of the view (hold the LEFT GRIP for the whole floor in your hand)
+      if (mm && mm.width) { hx.shadowBlur = 0; hx.globalAlpha = 0.9; hx.drawImage(mm, 40, 250, 170, 170); hx.globalAlpha = 1; hx.strokeStyle = '#6a2a2e'; hx.lineWidth = 3; hx.strokeRect(40, 250, 170, 170); hx.shadowBlur = 8; line('Hold L grip: map', 40, 222, 20, '#cfa54a'); }
       const toastE = $('padToast'); if (toastE && toastE.classList.contains('show')) center(questText(toastE.textContent), 24, '#e8c890');
     }
 
@@ -203,129 +204,58 @@ const XrMode = (function () {
       dolly.position.set(p.x, p.eye, p.z);
       dolly.rotation.set(0, -bodyYaw, 0);
       dolly.updateMatrixWorld(true);
-      leftHand(st, dt);
+      fall(dt); mapHand(dt, running);
       placeGun();
       menuPanel(running, dt);
       laser(dt);
       hudT -= dt; if (hudT <= 0) { hudT = 0.1; drawHud(st, running); hudTex.needsUpdate = true; }
     }
-    // ---- aim: the right controller's ray, steadied by the left hand when it holds the foregrip (left grip held, hands 15cm+ apart) ----
-    const rP = new THREE.Vector3(), lP = new THREE.Vector3(), up = new THREE.Vector3(), aimFwd = new THREE.Vector3(), aimUp = new THREE.Vector3(), m4 = new THREE.Matrix4(), tgtQ = new THREE.Quaternion();
-    const foregrip = new THREE.Vector3(), magwell = new THREE.Vector3(), rackPt = new THREE.Vector3(), headP = new THREE.Vector3(), headF = new THREE.Vector3();
-    let twoHand = false;
-    // where the left hand can grab, in the rig's space, from this gun's own model anchors (gun_kit / gun_list: magPivot, boltRest, fore hand)
+    // ---- aim: the right controller's ray (smoothed) ----
+    const rP = new THREE.Vector3(), magwell = new THREE.Vector3(), tgtQ = new THREE.Quaternion();
     const gl = new THREE.Vector3();
     function toRig(obj, local, out) { gl.copy(local); obj.localToWorld(gl); return dolly.worldToLocal(out.copy(gl)); }
-    function aimPoints() {
-      aimFwd.set(0, 0, -1).applyQuaternion(aimLocal); aimUp.set(0, 1, 0).applyQuaternion(aimLocal);
-      const g = o.gunParts && o.gunParts();
-      if (g && g.mag && gun.parent === gunAnchor) {
-        gunAnchor.updateMatrixWorld(true);
-        toRig(g.gunBody, g.fore, foregrip); toRig(g.mag.parent, g.magBase, magwell); toRig(g.charge.parent, g.chargeRest, rackPt);
-      } else {
-        foregrip.copy(rP).addScaledVector(aimFwd, 0.28).addScaledVector(aimUp, -0.03);
-        magwell.copy(rP).addScaledVector(aimFwd, 0.05).addScaledVector(aimUp, -0.12);
-        rackPt.copy(rP).addScaledVector(aimFwd, -0.03).addScaledVector(aimUp, 0.07);
-      }
-    }
     function aim() {
       if (!session) return null;
       const h = !opts.gaze && hands.right;
-      if (h) {
-        rP.copy(h.grip.position);
-        if (twoHand && hands.left) {
-          lP.copy(hands.left.grip.position); up.set(0, 1, 0).applyQuaternion(h.ray.quaternion);
-          m4.lookAt(rP, lP, up); tgtQ.setFromRotationMatrix(m4);   // the barrel runs from the right hand through the left
-        } else tgtQ.copy(h.ray.quaternion);
-      } else { camera.matrixWorld.decompose(v3, q4, tmpS); dollyInv.copy(dolly.quaternion).invert(); tgtQ.copy(dollyInv).multiply(q4); rP.copy(camera.position); }
-      if (!aimInit) { aimLocal.copy(tgtQ); aimInit = true; } else aimLocal.slerp(tgtQ, Math.min(1, (twoHand ? AIM_SMOOTH * 0.6 : AIM_SMOOTH) * lastDt));
+      if (h) { rP.copy(h.grip.position); tgtQ.copy(h.ray.quaternion); }
+      else { camera.matrixWorld.decompose(v3, q4, tmpS); dollyInv.copy(dolly.quaternion).invert(); tgtQ.copy(dollyInv).multiply(q4); rP.copy(camera.position); }
+      if (!aimInit) { aimLocal.copy(tgtQ); aimInit = true; } else aimLocal.slerp(tgtQ, Math.min(1, AIM_SMOOTH * lastDt));
       aimQ.copy(dolly.quaternion).multiply(aimLocal);                // world aim
-      aimPoints();
       fwd.set(0, 0, -1).applyQuaternion(aimQ);
       v3.copy(rP).applyMatrix4(dolly.matrixWorld);
       reticle.visible = !menuMesh.visible; reticle.position.copy(v3).addScaledVector(fwd, 6); reticle.quaternion.copy(aimQ);
       return XrInput.dirToAngles(fwd.x, fwd.y, fwd.z);
     }
-    // ---- left hand: steady the gun, or reload by hand on the real gun model ----
-    const reload = XrInput.createReload({ rack: opts.rack });
-    const shellMat = new THREE.MeshLambertMaterial({ color: 0xa8121c, emissive: 0x300406 }), brassMat = new THREE.MeshLambertMaterial({ color: 0xc89a3a, emissive: 0x302008 });
-    const shellMesh = new THREE.Group(); { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.06, 10), shellMat); c.rotation.x = Math.PI / 2; shellMesh.add(c); const r = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.012, 10), brassMat); r.rotation.x = Math.PI / 2; r.position.z = 0.03; shellMesh.add(r); }
-    shellMesh.visible = false;
-    let inHand = null, inHandKey = '', dropMag = null, dropV = 0, seatK = 1, lGripWas = false, aWas = false, xWas = false, pendingReload = false, gunId = '', relStep = 'ready', trigWas = false, pull = 0, relInfo = { need: 0, loaded: 0 };
-    const btnOn = (g, i, th) => { const b = g && g.buttons && g.buttons[i]; return !!b && (b.pressed || b.value > (th || 0.5)); };
-    const arr = (v) => [v.x, v.y, v.z], hand3 = [0, 0, 0];
-    const kindOf = (g) => (g && g.type === 'shotgun' ? 'shell' : 'mag');
-    // the magazine falls out of the real gun: a copy of the gun's own magazine part drops from the magwell, the gun's one is hidden
-    function ejectMag(g) {
-      if (!g || !g.mag || kindOf(g) === 'shell') return;
+    // ---- reload: the game's own reload animation plays on the gun (screen.js animateReload); here only the old magazine falling away ----
+    let dropMag = null, dropV = 0, dropN = 0;
+    function dropMagFrom(mag) {                                       // a copy of the gun's own magazine part drops from the magwell and tumbles to the floor
+      if (!session || !mag) return;
       if (dropMag) dolly.remove(dropMag);
-      g.mag.updateMatrixWorld(true); dropMag = g.mag.clone(); dropMag.matrixAutoUpdate = true;
-      g.mag.matrixWorld.decompose(dropMag.position, dropMag.quaternion, dropMag.scale);
+      mag.updateMatrixWorld(true); dropMag = mag.clone(); dropMag.visible = true; dropMag.matrixAutoUpdate = true;
+      mag.matrixWorld.decompose(dropMag.position, dropMag.quaternion, dropMag.scale);
       dolly.worldToLocal(dropMag.position); dropMag.quaternion.premultiply(dollyInv.copy(dolly.quaternion).invert());
-      dolly.add(dropMag); dropV = 0; g.mag.visible = false;
+      dolly.add(dropMag); dropV = 0.4; dropN++;
+      toRig(mag.parent, mag.position, magwell);
     }
-    // what the left hand holds: a copy of this gun's magazine, or a shotgun shell
-    function holdInHand(g, what) {
-      const L = hands.left; if (!L) return;
-      const key = what + (g ? g.id : '');
-      if (inHandKey !== key) {
-        if (inHand && inHand !== shellMesh) L.grip.remove(inHand);
-        inHand = what === 'shell' ? shellMesh : (g && g.mag ? g.mag.clone() : null); inHandKey = key;
-        if (inHand) { L.grip.add(inHand); inHand.position.set(0, -0.03, -0.03); inHand.rotation.set(what === 'shell' ? 0 : -0.3, 0, 0); if (what !== 'shell') { inHand.position.set(0, 0, 0); inHand.scale.multiplyScalar(gunAnchor.scale.x * (g.gunScale || 1)); } }
-      }
-      if (inHand) inHand.visible = true;
+    function fall(dt) { if (dropMag) { dropV += 9.8 * dt; dropMag.position.y -= dropV * dt; dropMag.rotation.x += dt * 4; dropMag.rotation.z += dt * 2; if (dropMag.position.y < -2.2) { dolly.remove(dropMag); dropMag = null; } } }
+    const btnOn = (g, i, th) => { const b = g && g.buttons && g.buttons[i]; return !!b && (b.pressed || b.value > (th || 0.5)); };
+    // ---- map: hold the LEFT GRIP and the floor map appears in your left hand (the game's own big map, live) ----
+    const mapCv = o.map && o.map.big, mapTex = mapCv ? new THREE.CanvasTexture(mapCv) : null;
+    const mapMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.34), new THREE.MeshBasicMaterial({ map: mapTex, transparent: true, opacity: 0.97, depthTest: false, depthWrite: false, fog: false, side: THREE.DoubleSide }));
+    mapMesh.renderOrder = 997; mapMesh.visible = false;
+    const mapFrame = new THREE.Mesh(new THREE.PlaneGeometry(0.36, 0.36), new THREE.MeshBasicMaterial({ color: 0x2a0d10, depthTest: false, depthWrite: false, fog: false, side: THREE.DoubleSide }));
+    mapFrame.renderOrder = 996; mapFrame.position.z = -0.001; mapMesh.add(mapFrame);
+    let mapHeld = false, mapT = 0, mapHost = null;
+    function mapHand(dt, running) {
+      const L = hands.left, held = running && !menuMesh.visible && btnOn(L && L.gamepad, 1, 0.35) && !!mapTex;
+      if (held !== mapHeld) { mapHeld = held; if (o.map) o.map.open(held); if (held) pulse('left', 0.2, 15); }
+      if (held && L && mapHost !== L.grip) { L.grip.add(mapMesh); mapHost = L.grip; }
+      mapMesh.visible = held;
+      if (!held) return;
+      mapMesh.position.set(0.02, 0.17, -0.06); mapMesh.rotation.set(-0.55, 0, 0);   // above the controller, tipped toward your face, like reading a paper map
+      mapT -= dt; if (mapT <= 0) { mapT = 0.2; mapTex.needsUpdate = true; }
     }
-    function dropHand() { if (inHand) inHand.visible = false; }
-    function resetGunLook(g) { if (g && g.mag) { g.mag.visible = true; g.mag.position.copy(g.magBase); } if (g && g.charge) g.charge.position.copy(g.chargeRest); seatK = 1; pull = 0; dropHand(); }
-    function leftHand(st, dt) {
-      const L = hands.left, R = hands.right, g = o.gunParts && o.gunParts();
-      const lg = L && L.gamepad, held = btnOn(lg, 1, 0.35), down = held && !lGripWas; lGripWas = held;
-      const a = btnOn(R && R.gamepad, 4), aDown = a && !aWas; aWas = a;
-      const x = btnOn(lg, 4), xDown = x && !xWas; xWas = x;
-      const p = st.player;
-      if (p.gun && p.gun.id !== gunId) { gunId = p.gun.id; reload.reset(); resetGunLook(g); relStep = 'ready'; }
-      if (xDown && relStep !== 'ready') { reload.reset(); relStep = 'ready'; resetGunLook(g); pulse('left', 0.4, 30); }   // X: the instant-reload shortcut also clears a half-done hand reload
-      if (L) { lP.copy(L.grip.position); hand3[0] = lP.x; hand3[1] = lP.y; hand3[2] = lP.z; }
-      headP.copy(camera.position); headF.set(0, 0, -1).applyQuaternion(camera.quaternion);
-      const rel = (lP.x - headP.x) * headF.x + (lP.z - headP.z) * headF.z;
-      const hip = !!L && (lP.y < headP.y - 0.3 || rel < 0.0);         // anywhere below the chest, or reaching back over the shoulder
-      if (!opts.easyReload && R && g) {
-        const r = reload.step({ kind: kindOf(g), eject: aDown, gripDown: down, gripHeld: held, hand: hand3, hip, port: arr(magwell), rack: arr(rackPt), back: [-aimFwd.x, -aimFwd.y, -aimFwd.z], ammo: p.ammo, mag: p.magSize });
-        if (r.reload) { pendingReload = true; ejectMag(g); }
-        if (r.seated && g.mag) { g.mag.visible = true; seatK = 0; }
-        if (r.buzz) pulse(r.buzz, r.shell ? 0.35 : 0.6, r.shell ? 25 : 45);
-        relStep = r.step; pull = r.pull; relInfo = r;
-      } else relStep = 'ready';
-      if (relStep === 'mag') holdInHand(g, 'mag'); else if (relStep === 'shell') holdInHand(g, 'shell'); else dropHand();
-      if (dropMag) { dropV += 9.8 * dt; dropMag.position.y -= dropV * dt; dropMag.rotation.x += dt * 3; if (dropMag.position.y < -2.5) { dolly.remove(dropMag); dropMag = null; } }
-      // steady grip: only when the left grip closes near the foregrip (and the reload is not using the hand)
-      if (down && relStep !== 'mag' && relStep !== 'shell' && relStep !== 'rack' && lP.distanceTo(foregrip) < 0.22) twoHand = true;
-      if (!held || !L || lP.distanceTo(rP) < 0.15) twoHand = false;
-    }
-    // the real gun's parts during a hand reload: the empty magwell, the new mag sliding up into it, the slide / bolt / pump travelling back
-    function poseGun() {
-      const g = o.gunParts && o.gunParts(); if (!g || !g.mag) return;
-      if (relStep === 'ejected' || relStep === 'mag') g.mag.visible = kindOf(g) === 'shell';
-      else { g.mag.visible = true; seatK = Math.min(1, seatK + lastDt / 0.12); g.mag.position.copy(g.magBase); g.mag.position.y -= (1 - seatK) * 0.07; }
-      const open = relStep === 'rack' ? Math.max(0.35, pull) : 0;     // the slide stays locked back until you rack it
-      g.charge.position.copy(g.chargeRest); g.charge.position.z += open * 0.07;
-    }
-    // may the trigger fire? (hand reload holds it until the hands are done; an empty gun clicks)
-    function canFire(st, wantFire) {
-      if (!session || opts.easyReload) return true;
-      const ok = relStep === 'ready' && st.player.ammo > 0;
-      if (wantFire && !trigWas && !ok) pulse('right', 0.15, 15);   // dry click
-      trigWas = wantFire; return ok;
-    }
-    function onReloadStart() {
-      if (!session || opts.easyReload || pendingReload) return;
-      const g = o.gunParts && o.gunParts();
-      if (relStep === 'ready' && lastX()) return;                    // X was the shortcut: no hand steps
-      if (reload.autoEject(kindOf(g), g ? 4 : 4)) { relStep = reload.state; ejectMag(g); pulse('right', 0.5, 40); }
-    }
-    const lastX = () => xWas;
-    function takeReload() { const r = pendingReload; pendingReload = false; return r; }
-    const RELOAD_HINT = { ejected: 'Reach to your belt with the LEFT GRIP for a new magazine   (or press X)', mag: 'Bring the magazine to the bottom of the gun   (or press X)', rack: 'Grab the back of the gun with the LEFT GRIP and pull   (or press X)', loading: 'LEFT GRIP at your belt for a shell   (or press X)', shell: 'Push the shell in under the gun   (or press X)' };
+    const canFire = () => true, takeReload = () => false, onReloadStart = () => {}, poseGun = () => {};   // kept so older callers stay harmless
     const srcBuf = [];
     function sources() {
       if (!session) return [];
@@ -357,13 +287,12 @@ const XrMode = (function () {
       const e = on && !gripWas; gripWas = on; return e;
     }
     function aimDir(out) { return out.set(0, 0, -1).applyQuaternion(aimQ); }
-    const pad = () => (session ? XrInput.toPad(sources(), { easyReload: opts.easyReload }) : null);
+    const pad = () => (session ? XrInput.toPad(sources()) : null);
 
     let farWas = 120;
     async function enter() {
       if (session) { session.end(); return; }
       try {
-        reload.reset(); twoHand = false;
         const s = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor'] });
         renderer.xr.enabled = true; renderer.xr.setReferenceSpaceType('local'); renderer.xr.setFramebufferScaleFactor(opts.scale);   // ~80% resolution: holds 72/90 fps
         await renderer.xr.setSession(s);
@@ -374,7 +303,7 @@ const XrMode = (function () {
         s.addEventListener('end', () => {
           session = null; renderer.xr.enabled = false; vig.visible = false; hudMesh.visible = false; reticle.visible = false; menuMesh.visible = false;
           dolly.position.set(0, 0, 0); dolly.rotation.set(0, 0, 0); if (gun.parent !== camera) camera.add(gun);
-          for (const m of (o.arms || [])) m.visible = true; resetGunLook(o.gunParts && o.gunParts()); reload.reset(); relStep = 'ready';
+          for (const m of (o.arms || [])) m.visible = true; if (mapHeld && o.map) o.map.open(false); mapHeld = false; mapMesh.visible = false;
           btn.textContent = 'ENTER VR'; btn.hidden = false; if (onEnd) onEnd();
         });
         for (const m of (o.arms || [])) m.visible = false;          // no viewmodel hands or forearms in VR: just the gun
@@ -403,7 +332,7 @@ const XrMode = (function () {
       btn.style.left = on ? '10px' : '50%'; btn.style.top = on ? 'auto' : '14px'; btn.style.bottom = on ? '10px' : 'auto';
       btn.style.transform = on ? 'none' : 'translateX(-50%)'; btn.style.padding = on ? '8px 16px' : '18px 44px'; btn.style.fontSize = on ? '15px' : '28px';
     }
-    return { poseGun, update, aim, pad, headPose, headYaw, pulse, aimDir, corner, grab, questText, canFire, takeReload, onReloadStart, menuOpen: () => menuMesh.visible, debug: () => ({ pressN, lastHit, menuId: menuPlacedFor, drop: dropMag ? dropMag.position.toArray() : null, magwell: magwell.toArray(), foregrip: foregrip.toArray(), rackPt: rackPt.toArray(), armsHidden: (o.arms || []).every((m) => !m.visible), magVisible: !!(o.gunParts() && o.gunParts().mag.visible), dropping: !!dropMag, twoHand, relStep, hover: hoverEl && hoverEl.textContent.trim().slice(0, 30), menu: menuMesh.visible, menuPos: menuMesh.position.toArray(), menuScale: menuMesh.scale.toArray(), aim: aimLocal.toArray() }), menuShown: () => menuMesh.visible, vigOn: () => vig.visible, presenting: () => !!session, on: (start, end) => { onStart = start; onEnd = end; }, rig: dolly };
+    return { poseGun, dropMag: dropMagFrom, update, aim, pad, headPose, headYaw, pulse, aimDir, corner, grab, questText, canFire, takeReload, onReloadStart, menuOpen: () => menuMesh.visible, debug: () => ({ pressN, lastHit, menuId: menuPlacedFor, dropN, dropping: !!dropMag, magwell: magwell.toArray(), mapShown: mapMesh.visible, armsHidden: (o.arms || []).every((m) => !m.visible), magVisible: !!(o.gunParts() && o.gunParts().mag.visible), hover: hoverEl && hoverEl.textContent.trim().slice(0, 30), menu: menuMesh.visible, menuPos: menuMesh.position.toArray(), menuScale: menuMesh.scale.toArray(), aim: aimLocal.toArray() }), menuShown: () => menuMesh.visible, vigOn: () => vig.visible, presenting: () => !!session, on: (start, end) => { onStart = start; onEnd = end; }, rig: dolly };
   }
   return { create };
 })();
