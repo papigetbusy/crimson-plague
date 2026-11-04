@@ -44,31 +44,74 @@ In VR every menu is a copy of the game's own panel, hung in front of you on a wo
 | Codex | Reading about enemies and items | Text and a close button | Laser on the close button |
 | Level-up | Choose upgrades on level-up | A class card row and a gift row (take one of each) | Each card is one tile; trigger picks it |
 | Merchant (shop) | Spend gold on class training and supplies | Cards and your gold; the flat game leaves with Back | Laser picks cards; **Y leaves the merchant** (the hint is shown under the board) |
-| Gear | Fit or remove weapon mods and see your gear | Fit / Remove / Close buttons (`data-act`) | Laser on the buttons; right stick click opens or closes it |
+| Gear | Fit or remove weapon mods and see your gear | Fit / Remove / Close buttons (`data-act`) | Laser on the buttons; hold Y to open, Y to close |
 | Stash chest | Store items between runs | Put in, Take, Rename, Save game, "Enter the hall" | Laser on the buttons. Renaming needs the Quest keyboard (untested) |
 | Game over | See the run summary, keep stash items as blueprints, load or delete saves, rise again | Keep, blueprint and save buttons, and RISE AGAIN | Laser on any of them |
-| Pause | Stop the game | Y | Y again resumes |
-| Map | Overview of the floor | Flat overlay (M / Back) | Hold the left grip: the map is in your left hand |
+| Pause | Stop the game | Resume, Codex | Tap Y; Y again resumes |
+| Map | Overview of the floor | Flat overlay (M / Back) | Raise your free left hand in front of your eyes (wrist glance): the map opens above it, facing you |
+
+## Research round 3 (Nov 2026): what real VR shooters and Meta's own guidelines do, and the decisions we took
+
+### The owner's target (Nov 2026, authoritative)
+A polished, mid-spectrum VR shooter: **Contractors / Pavlov handling with Half-Life: Alyx polish** (not Onward milsim, not H3VR hyper-sim). His list:
+1. ADS / two hands: left trigger reliably brings the gun to the dominant eye with per-gun offsets (pistol high and close, rifles longer, shotgun different, sniper with zoom). The support hand (left grip on the fore-end) stabilises and steers the barrel: the primary hand owns position, the support hand influences rotation. Optional virtual-stock blend near the shoulder, as a toggle.
+2. Per-gun grab points and hand poses so the model sits correctly in the hand: no floating, no arm models.
+3. Sticks: pure move + turn. Jump off the stick (A). Sprint on stick click or full forward. Smooth and snap turn. No accidental jumps.
+4. Menus: world-locked, laser point-and-click only, whole cards/buttons highlight only, scroll by stick or laser, a clear exit everywhere (Y backs out), clean, centred, readable, no lock-in.
+5. Keep: X instant reload, the reload animation on the gun, the test map.
+Because the left grip is the support hand again, the map moved to a wrist glance (row 16).
+
+### Sources read
+- Meta Horizon OS design docs: *Locomotion input maps* (developers.meta.com/horizon/design/locomotion-input-maps), *Locomotion user preferences*, *Controllers best practices*, *Ray casting specs* (developers.meta.com/vr/design/raycasting_specs), *Hands UI best practices* (sizing, scrolling, feedback), *Panels*, and the IWSDK *Locomotion Slide* doc.
+- Pavlov: the UploadVR review (jump and crouch are physical, no buttons), the r/PSVR tips thread (auto sprint, virtual stock, "right controller at the chin, left hand straight out" ADS stance), and a Quest control list (B ejects the mag, right stick click opens the buy menu, left stick click sprints).
+- H3VR wiki *Gun Stabilization*: virtual stock, two-handed grip on the fore-end, palm grip for pistols, hand smoothing.
+- Contractors dev post *Inside the new weapon and damage model*: when aiming down sights, rifles pivot around the stock and shoulder contact, and pistols pivot around the wrist. Its Quest binds: jump on the right stick, crouch on left stick click, slide = sprint + crouch, weapons pulled from holsters, wrist menu.
+- Onward forum (*DIY gunstock*): players want the point of aim to come from the rear (trigger) hand only. A front hand that changes the aim "jerks the point of aim off".
+- Ghosts of Tabor and Into the Radius threads: jump on a stick press or flick, and players complain about it. Tabor moved jump to right stick up in 2025, and Into the Radius players ask for different bindings.
+- Reddit drift threads: worn Quest sticks drift and fire stick-based actions unasked, and Meta's help page tells people to enlarge the deadzone.
+
+### Decisions (with why)
+| # | Decision | Why |
+|---|---|---|
+| 1 | **A = jump.** Nothing on any stick ever jumps. | Meta's input map puts jump on the right A button, standing or moving. Stick-flick jumps fire by accident when the thumb drifts diagonally, the stick is worn, or you push the right stick while turning. That is the owner's "random jumping when I move forward". |
+| 2 | **Right stick click = swap guns** | A single, deliberate press, next to where the thumb already is. Pavlov puts its weapon or buy menu on the same click. |
+| 3 | **B = slide** (crouch-slide), as before | B is the usual crouch or back button, and Contractors makes the slide out of the crouch. |
+| 4 | **Tap Y = pause, hold Y (0.5 s) = Gear. In any menu, Y = back.** | Meta asks for one consistent menu button. The left ≡ button belongs to the browser in WebXR, so Y takes that role. There must always be one button that backs out, so no menu can trap you. |
+| 5 | **Left stick: radial deadzone 0.15** with rescale. **Right stick turns only when sideways is clearly the main direction** (axis dominance 1.3:1); up/down on the right stick only scrolls menus, or a hard push down (0.85+) works the gate puzzle. | Stops crosstalk: pushing forward on one stick no longer turns, jumps or scrolls. The deadzone hides small drift (Meta's own advice). |
+| 6 | **Left trigger = aim down sights, emulated.** The gun eases (smoothstep) from the hand onto your right eye's sight line, at a per-gun distance. Aim comes from the right controller, smoothed more while aiming; if the left grip also holds the gun, it steers too (row 15). The left glove is shown on the gun's fore-end. | The owner wants the trigger to bring the gun to the eye reliably. Physical ADS (Pavlov, H3VR) needs a stock and practice; an emulated snap with per-gun offsets is reliable from the first minute. |
+| 7 | **Per-gun ADS data** (distance from the eye, support-hand spot, smoothing, zoom) | Pistol: arms out at 46 cm, support hand cupped under the grip (H3VR palm grip), lightest smoothing. SMG: 38 cm, hand on the fore-grip. Rifle: 34 cm, hand on the fore-end. Shotgun: 36 cm, hand on the pump. Sniper: 22 cm behind the scope, with a 4x picture in the lens and the most smoothing. HMG: 40 cm, sits 1.5 cm lower and swings slowest. The voxel guns are drawn bigger than real guns, so these distances were tuned on fake-XR screenshots until each sight takes up about as much of the view as a real optic at a real cheek weld. |
+| 8 | **Sniper scope = magnified picture inside the lens** (a small 4x camera rendered only while aiming the sniper) | VR can't zoom the whole view without making you sick, so H3VR-style scopes show the zoom in the glass only. |
+| 9 | **Menus are drawn by the game for VR, not photographed.** A clean layout built from the same menu data, with the same fonts and colours: centred title, even spacing, whole-tile buttons in a centred grid, and a fixed footer with the exit. | Photographing the flat page (html2canvas) carried over flat-screen spacing, clipped rows and stray boxes. Meta: 48 dp hit targets with 12 mm gaps, a clear hover state on the whole target, no hover-driven layout changes, and content filling the panel. |
+| 10 | **Scrolling: right stick up/down, or hold the trigger and drag.** Content cut off at the edge plus ▲/▼ markers show there is more. No scroll bars. | Meta says users fail with ray-and-drag scroll bars and should get swipe or drag on the content instead, with visible clipping as the cue. The owner got locked out of a menu he could not scroll. |
+| 11 | **Click on release, not on press**, and a drag cancels the click | Lets you drag to scroll without pressing whatever was under the laser. This is how Quest system panels behave. |
+| 12 | **Laser:** white beam, gold when over a button, a cursor dot on the panel, and a buzz when you hover a new button | Meta's raycast spec uses distinct hover and select colours and a constant-size cursor. Haptics confirm the target. |
+| 13 | **Panel placement:** 1.6 m away, centred at eye height (−10 cm), about 1.5 m × 0.95 m. It re-centres itself if you turn more than 70° away from it. | Meta says ray UI is comfortable from 0.46 to 3 m and panels should not make you turn your head to see the edges. Re-centring means a menu can never get lost behind you. |
+| 15 | **Left grip near the gun = support hand.** Close the left grip anywhere along the gun ahead of the trigger hand (within 20 cm of that line; a buzz confirms). The right hand keeps the position; the barrel turns toward the left hand (pull: pistol 30% (a cupped hand), SMG 75%, rifle/shotgun 80%, sniper/HMG 85%), with extra smoothing. Release the grip to let go. | Pavlov and Contractors: two-hand rotation is what makes long guns steady. A whole-line grab zone because the voxel guns are long and a real reach is 30–45 cm, so you never fish for a spot. Position stays on the primary hand (the owner's rule), so the gun never pulls out of your hand. |
+| 16 | **Map = wrist glance.** Raise your free left hand into the middle of your view (within 32° of where you look, 12–60 cm away) for 0.2 s and the floor map opens just above it, always facing you. Lower it and it closes. Never while the left grip holds the gun or you aim. | Contractors' wrist menu and Alyx's wrist health readout: a glance, no button. Buttons are all taken, and the left grip is the support hand again. |
+| 17 | **Per-gun grab point.** Every gun model already has a hand spot (its grip); the gun is placed so that spot sits exactly in the controller grip (the test measures a 0 mm gap on all six guns). The game's own right glove is drawn there and the left glove on the fore-end while supporting or aiming. No forearms. | The owner: "no floating, no arm models". Alyx and Contractors show hands only. |
+| 18 | **Virtual stock (option, `?vstock`).** While two-handing, if your right hand is within 30 cm of your right shoulder the gun pivots on the shoulder instead of the hand. Off by default. | H3VR and Pavlov offer it as a setting; some players love it, some hate it, so it's opt-in. |
+| 14 | Text inputs (stash rename, codex search, co-op name) are left out of the VR panel | The Quest keyboard over WebXR is unreliable, and an input you can't finish is a trap. Renaming stays a flat-screen feature. |
 
 ## What Crimson Plague does in VR
 | Control | Action |
 |---|---|
 | Left stick | Move (toward where your head faces; `?aimmove` = toward the gun) |
 | Left stick click / stick fully forward | Sprint |
-| Left trigger | Aim down sights |
-| **Left grip (hold)** | **Map**: the whole floor map appears in your left hand, live, for as long as you hold it. A small corner map is always in the HUD, bottom left |
+| Left trigger | Aim down sights (per gun; the sniper shows a 4x picture in its scope) |
+| Left grip near the gun | Support hand: steady and steer the barrel with both hands |
+| Raise free left hand to your eyes | Map (wrist glance). A small corner map is always in the HUD |
 | X | Reload (animation on the gun) |
-| Y | Pause / resume (at the merchant: leave) |
+| Tap Y | Pause / resume. In any menu: back / close (at the merchant: leave) |
+| Hold Y (0.5 s) | Gear menu |
 | Right stick left/right | Smooth turn, 4.5 rad/s with a curve (`?turn=6`), or snap (`?snap` = 45 degrees, `?snap=30`) |
-| Right stick up | Jump |
-| Right stick down | Second action at a gold gate / boss door puzzle |
-| Right stick click | Gear menu |
-| Right trigger | Fire. In menus: press what the laser points at |
+| Right stick up/down | Scrolls menus only. A hard push down works a gold gate / boss door puzzle |
+| Right stick click | Swap guns |
+| Right trigger | Fire. In menus: point and release on a button |
 | Right grip | Pick up the gun at your feet, open the stash, use a gold gate |
-| A | Swap guns |
+| A | Jump |
 | B | Slide |
 
-Why this layout: shooters like Pavlov, Contractors and Onward keep the face buttons for the most frequent actions (reload, swap) and put the map or wristwatch on the off hand. With the hand reload gone, the left grip is free, so it shows the map while held. A, which used to drop the magazine, now swaps guns, which is easier to reach than the stick click. Gear moved to the right stick click, so the X+Y combo is gone. There is no D-pad anywhere.
+Why this layout: see rows 1–5 and 15–18 above. Jump is on a button so a drifting or diagonal stick can never jump; the left grip is the support hand like in Pavlov and Contractors; the map is a wrist glance like Contractors' wrist menu. There is no D-pad anywhere.
 
 **VR test map:** open the game with `?sandbox`, or press **VR TEST MAP** on the start card. You get a small 44x44 floor (the normal first floor is 80x80) with all the normal systems, only 2 weak monsters at a time, 400 HP and the gold gates open. One of each gun type lies at your feet (pump shotgun, rifle, SMG, bolt sniper, belt HMG, hand cannon), along with 500 gold, two mods and a helmet. Press the button again to go back to the normal game.
 
