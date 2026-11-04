@@ -6,7 +6,7 @@ const XrMode = (function () {
   function create(o) {
     const { THREE, renderer, scene, camera, gun, $, gunHome } = o;
     const q = location.search + location.hash;
-    const opts = { snap: /[?&#]snap\b/.test(q), gaze: /[?&#]gaze\b/.test(q), perf: /[?&#]perf\b/.test(q), vignette: !/[?&#]novignette\b/.test(q), aimMove: /[?&#]aimmove\b/.test(q),
+    const opts = { snap: /[?&#]snap\b/.test(q), gaze: /[?&#]gaze\b/.test(q), perf: /[?&#]perf\b/.test(q), vignette: /[?&#]vignette\b/.test(q), aimMove: /[?&#]aimmove\b/.test(q),
       scale: (() => { const m = /[?&#]xrscale=([0-9.]+)/.exec(q); return m ? Math.max(0.5, Math.min(1, +m[1])) : 0.8; })() };   // ?xrscale=0.7 trades sharpness for speed
     const dolly = new THREE.Group(); dolly.name = 'xrDolly';
     scene.add(dolly); scene.remove(camera); dolly.add(camera);       // flat screen: the rig sits at 0,0,0 with no turn, so nothing changes
@@ -14,7 +14,7 @@ const XrMode = (function () {
     const turn = XrInput.createTurn(opts.snap);
     const TURN_SPEED = 2.2;                                         // smooth turn, radians a second at full tilt (gentler than the flat-screen stick)
     const hands = { left: null, right: null };
-    const v3 = new THREE.Vector3(), q4 = new THREE.Quaternion(), fwd = new THREE.Vector3(), aimQ = new THREE.Quaternion(), aimP = new THREE.Vector3(), headQ = new THREE.Quaternion();
+    const tmpS = new THREE.Vector3(), v3 = new THREE.Vector3(), q4 = new THREE.Quaternion(), fwd = new THREE.Vector3(), aimQ = new THREE.Quaternion(), aimP = new THREE.Vector3(), headQ = new THREE.Quaternion();
     let aimInit = false, fps = 0, fpsN = 0, fpsT = 0, moveK = 0;
     const AIM_SMOOTH = 28;                                          // per second: takes the hand jitter out of the ray without feeling laggy
 
@@ -53,7 +53,7 @@ const XrMode = (function () {
     const reticle = new THREE.Mesh(new THREE.RingGeometry(0.008, 0.013, 16), new THREE.MeshBasicMaterial({ color: 0xffe0c0, depthTest: false, fog: false, transparent: true }));
     reticle.renderOrder = 1000; reticle.visible = false; scene.add(reticle);
     // comfort vignette: a dark ring that closes in a little while you move or turn with the sticks (off with ?novignette)
-    const vig = new THREE.Mesh(new THREE.RingGeometry(0.16, 1.2, 32, 1), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0, depthTest: false, depthWrite: false, fog: false }));
+    const vig = new THREE.Mesh(new THREE.RingGeometry(0.22, 0.6, 32, 1), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0, depthTest: false, depthWrite: false, fog: false }));
     vig.position.z = -0.3; vig.renderOrder = 998; vig.visible = false; camera.add(vig);
     // the game's own menus (start card, level-up and shop cards, game over, Gear and stash) shown in VR exactly as they look on the
     // flat page: the open menu's HTML is photographed into a texture with html2canvas whenever it changes, and hung in front of you
@@ -61,6 +61,17 @@ const XrMode = (function () {
     const menuTex = new THREE.Texture(), menuMat = new THREE.MeshBasicMaterial({ map: menuTex, transparent: true, depthTest: false, depthWrite: false, fog: false });
     const menuMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), menuMat); menuMesh.renderOrder = 1001; menuMesh.visible = false; menuMesh.position.set(0, 0, -1.25); camera.add(menuMesh);
     let menuKey = '', menuBusy = false, menuT = 0, menuOk = false, h2cTried = false;
+    // the page's controller prompts name Xbox buttons and a D-pad; the Quest Touch controllers have neither, so VR shows Quest names
+    const QUEST_WORDS = [[/D-pad down/g, 'right stick down'], [/D-pad up/g, 'right stick up'], [/(the )?D-pad( or (the )?left stick)?/g, 'left stick'],
+      [/\bRT\b( \(R2\))?/g, 'right trigger'], [/\bLT\b( \(L2\))?/g, 'left trigger'], [/\bRB\b/g, 'right stick click'], [/\bLB\b/g, 'right grip'],
+      [/\bStart\b( \(Options\))?/g, 'Y'], [/\bBack\b( \(View \/ Share\))?/g, 'left grip + Y'], [/Triangle|\bY\b(?= swaps)/g, 'left grip'], [/\bCross\b/g, 'A'], [/\bSquare\b/g, 'X'], [/\bCircle\b/g, 'B'],
+      [/Click the left stick/g, 'Click the left stick (or push it all the way forward)'], [/right stick<\/b> looks/g, 'right stick</b> turns']];
+    const questText = (t) => { for (const [re, w] of QUEST_WORDS) t = t.replace(re, w); return t; };
+    function questify(root) {
+      for (const el of root.querySelectorAll('.padk, .padhelp, #luHint, .gm p, .gm .hint')) { el.innerHTML = questText(el.innerHTML); el.style.display = el.style.display || ''; }
+      for (const el of root.querySelectorAll('.kbd, .touchhelp, .keys')) el.style.display = 'none';
+      for (const el of root.querySelectorAll('.padk, .padhelp')) el.style.display = 'inline';
+    }
     function loadH2c() {
       if (h2cTried || window.html2canvas) return; h2cTried = true;
       const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'; sc.async = true; document.head.appendChild(sc);
@@ -77,7 +88,7 @@ const XrMode = (function () {
       const key = el.id + '|' + card.innerHTML.length + '|' + Array.from(card.querySelectorAll('.sel, .focus, :focus')).map((n) => n.textContent.length).join(',');
       if (window.html2canvas && !menuBusy && (key !== menuKey || menuT <= 0) && menuT < 1.2) {
         menuBusy = true; const k = key; menuT = 1.5;
-        window.html2canvas(card, { backgroundColor: null, scale: 1, logging: false, useCORS: true }).then((c) => {
+        window.html2canvas(card, { backgroundColor: null, scale: 1, logging: false, useCORS: true, onclone: (doc) => questify(doc.body) }).then((c) => {
           menuTex.image = c; menuTex.needsUpdate = true; menuKey = k; menuOk = true;
           const w = 1.5, h = w * c.height / Math.max(1, c.width); menuMesh.scale.set(w, Math.min(h, 1.3), 1);
         }).catch(() => { /* keep the text fallback */ }).then(() => { menuBusy = false; });
@@ -107,7 +118,7 @@ const XrMode = (function () {
       if (bn && bn.classList.contains('show')) { center(txt('bannerT'), 52, '#ff4a4a'); center(txt('bannerS'), 28); }
       if (shown('boss')) center(txt('bossName'), 28, '#ff8a60');
       if (menuPanel(running, 0)) { const toastE = $('padToast'); if (toastE && toastE.classList.contains('show')) center(toastE.textContent, 24, '#cfa54a'); return; }   // the real menu is on its own panel
-      if (!running) { center(o.started() ? 'PAUSED' : 'CRIMSON PLAGUE', 56, '#ff4a4a'); center('A: ' + (o.started() ? 'resume' : 'enter the hall') + '    Y: pause    left stick: pick class', 26); return; }
+      if (!running) { center(o.started() ? 'PAUSED' : 'CRIMSON PLAGUE', 56, '#ff4a4a'); center('A: ' + (o.started() ? 'resume' : 'enter the hall') + '    Y: pause    left stick: pick class', 26, '#ecdfc6'); return; }
       if (st.over) { center('YOU FELL', 56, '#ff4a4a'); center(txt('overStats'), 24); center('A: rise again', 28); return; }
       if (st.choices || st.classChoices || st.shop) {
         center(txt('luTitle') || (st.shop ? 'THE MERCHANT' : 'LEVEL UP'), 40, '#ffcf6a');
@@ -115,11 +126,14 @@ const XrMode = (function () {
           const box = $(id); if (!box || !box.children.length || box.offsetParent === null && box.hidden) continue;
           Array.from(box.children).slice(0, 6).forEach((c) => { const sel = c.classList.contains('sel'); center((sel ? '> ' : '') + (c.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 60) + (sel ? ' <' : ''), 24, sel ? '#ffe08a' : '#cbb8a8'); });
         }
-        center('stick: move   A: pick' + (st.shop ? '   left grip+Y: leave' : ''), 22, '#a89080');
+        center('left stick: choose   right stick up/down: row   A: take' + (st.shop ? '   left grip+Y: leave' : ''), 22, '#a89080');
         return;
       }
       if (o.menuOpen()) { center('Menu open: easier on the flat screen', 28); center('right stick click: close', 22); }
-      const toastE = $('padToast'); if (toastE && toastE.classList.contains('show')) center(toastE.textContent, 24, '#e8c890');
+      const lb = $('lockBox'); if (lb && getComputedStyle(lb).display !== 'none' && lb.offsetParent !== null) { center(txt('lockTxt'), 24, '#cfa54a'); const b0 = txt('lockB0'), b1 = txt('lockB1'); center((b0 ? 'Right grip: ' + b0 : '') + (b1 ? '    Right stick down: ' + b1 : ''), 22); }
+      const fc = $('floorCard'); if (fc && fc.offsetParent !== null && txt('floorCard')) center('Right grip / A: pick up  ' + txt('floorCard').slice(0, 50), 22, '#ecdfc6');
+      const sh = $('stashHint'); if (sh && !sh.hidden) center('STASH CHEST: right grip or A', 22, '#cfa54a');
+      const toastE = $('padToast'); if (toastE && toastE.classList.contains('show')) center(questText(toastE.textContent), 24, '#e8c890');
     }
 
     let lastDt = 1 / 72;
@@ -130,7 +144,7 @@ const XrMode = (function () {
       const dYaw = turn.step(hands.right && hands.right.gamepad, dt, opts.snap ? 0 : TURN_SPEED); bodyYaw += dYaw;
       fpsN++; fpsT += dt; if (fpsT >= 0.5) { fps = Math.round(fpsN / fpsT); fpsN = 0; fpsT = 0; }
       if (opts.vignette) {
-        const want = Math.min(1, (Math.hypot(p.vx || 0, p.vz || 0) / 7) + Math.abs(dYaw) / Math.max(dt, 1e-3) / 2.5) * 0.85;
+        const want = Math.min(1, (Math.hypot(p.vx || 0, p.vz || 0) / 7) + Math.abs(dYaw) / Math.max(dt, 1e-3) / 2.5) * 0.6;
         moveK += (want - moveK) * Math.min(1, dt * 6); vig.material.opacity = moveK; vig.visible = moveK > 0.03;
         vig.scale.setScalar(1.25 - moveK * 0.3);
       }
@@ -145,7 +159,7 @@ const XrMode = (function () {
     function aim() {
       if (!session) return null;
       const h = !opts.gaze && hands.right;
-      if (h) { h.ray.getWorldQuaternion(q4); h.ray.getWorldPosition(v3); } else { renderer.xr.getCamera(camera).getWorldQuaternion(q4); camera.getWorldPosition(v3); }
+      if (h) { h.ray.getWorldQuaternion(q4); h.ray.getWorldPosition(v3); } else { camera.matrixWorld.decompose(v3, q4, tmpS); }
       if (!aimInit) { aimQ.copy(q4); aimInit = true; } else aimQ.slerp(q4, Math.min(1, AIM_SMOOTH * lastDt));
       q4.copy(aimQ); aimP.copy(v3);
       dollyInv.copy(dolly.quaternion).invert(); aimLocal.copy(dollyInv).multiply(aimQ);    // the same aim in the rig's space, for the gun
@@ -165,7 +179,7 @@ const XrMode = (function () {
     // the direction your head faces, as the game's yaw (movement goes this way, not where the gun points; ?aimmove for the old way)
     function headYaw() {
       if (!session || opts.aimMove) return null;
-      renderer.xr.getCamera(camera).getWorldQuaternion(headQ); fwd.set(0, 0, -1).applyQuaternion(headQ);
+      camera.matrixWorld.decompose(v3, headQ, tmpS); fwd.set(0, 0, -1).applyQuaternion(headQ);
       return XrInput.dirToAngles(fwd.x, fwd.y, fwd.z).yaw;
     }
     // a short buzz in one hand (fire, getting hit). Quest exposes hapticActuators[0].pulse
@@ -176,6 +190,12 @@ const XrMode = (function () {
         const a = s.gamepad.hapticActuators && s.gamepad.hapticActuators[0];
         try { if (a && a.pulse) a.pulse(strength, ms); else if (a && a.playEffect) a.playEffect('dual-rumble', { duration: ms, strongMagnitude: strength, weakMagnitude: strength }); } catch (e) { /* no haptics */ }
       }
+    }
+    // right grip: grab. One press = pick up the gun at your feet, open the stash, or use a gold gate / the boss door (like E / A on the flat page)
+    let gripWas = false;
+    function grab() {
+      const g = hands.right && hands.right.gamepad, b = g && g.buttons && g.buttons[1], on = !!b && (b.pressed || b.value > 0.5);
+      const e = on && !gripWas; gripWas = on; return e;
     }
     function aimDir(out) { return out.set(0, 0, -1).applyQuaternion(aimQ); }
     const pad = () => (session ? XrInput.toPad(sources()) : null);
@@ -189,11 +209,10 @@ const XrMode = (function () {
         await renderer.xr.setSession(s);
         const bl = s.renderState && s.renderState.baseLayer; if (bl && 'fixedFoveation' in bl) bl.fixedFoveation = 1;   // full fixed foveation: edges drawn coarser, centre sharp
         if (renderer.xr.setFoveation) renderer.xr.setFoveation(1);
-        farWas = camera.far; camera.far = o.farVr(); camera.updateProjectionMatrix();             // nothing past the fog is drawn
         loadH2c();
         session = s; aimInit = false; bodyYaw = o.playerYaw(); turn.reset(); hudMesh.visible = true; btn.textContent = 'EXIT VR'; btn.hidden = true;
         s.addEventListener('end', () => {
-          session = null; renderer.xr.enabled = false; camera.far = farWas; camera.updateProjectionMatrix(); vig.visible = false; hudMesh.visible = false; reticle.visible = false; menuMesh.visible = false;
+          session = null; renderer.xr.enabled = false; vig.visible = false; hudMesh.visible = false; reticle.visible = false; menuMesh.visible = false;
           dolly.position.set(0, 0, 0); dolly.rotation.set(0, 0, 0); if (gun.parent !== camera) camera.add(gun);
           btn.textContent = 'ENTER VR'; btn.hidden = false; if (onEnd) onEnd();
         });
@@ -214,13 +233,15 @@ const XrMode = (function () {
     } catch (e) { /* no WebXR here */ }
 
     // in VR, put the camera back at the head pose the headset gave last frame (the game's flat-screen camera code is skipped)
-    function headPose() { const c = renderer.xr.getCamera(camera); c.matrix.decompose(camera.position, camera.quaternion, camera.scale); }
+    // in VR three.js already leaves the camera at the head pose after each render. Never read the XR camera's own world pose here:
+    // asking it for a world quaternion rebuilds its matrix from its world position, which doubled the player offset and put the view inside the walls
+    function headPose() { /* nothing to do: the camera keeps last frame's head pose */ }
     // during a run the button shrinks into the top-left corner so it does not cover the wave counter
     function corner(on) {
       btn.style.left = on ? '10px' : '50%'; btn.style.top = on ? 'auto' : '14px'; btn.style.bottom = on ? '10px' : 'auto';
       btn.style.transform = on ? 'none' : 'translateX(-50%)'; btn.style.padding = on ? '8px 16px' : '18px 44px'; btn.style.fontSize = on ? '15px' : '28px';
     }
-    return { update, aim, pad, headPose, headYaw, pulse, aimDir, corner, presenting: () => !!session, on: (start, end) => { onStart = start; onEnd = end; }, rig: dolly };
+    return { update, aim, pad, headPose, headYaw, pulse, aimDir, corner, grab, questText, menuShown: () => menuMesh.visible, vigOn: () => vig.visible, presenting: () => !!session, on: (start, end) => { onStart = start; onEnd = end; }, rig: dolly };
   }
   return { create };
 })();

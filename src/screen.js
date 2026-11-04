@@ -566,6 +566,7 @@
     if (xr && xr.presenting()) {                                    // VR: aim follows the right controller's ray (or your head), sent like a mouse move
       const a = xr.aim(), pl = state.player, c = ref.cfg;
       if (a) { const lk = XrInput.lookToward(pl, a, c.lookSens, 1 - pl.adsT * (1 - c.adsLookMul)); out.lookX += lk.lookX; out.lookY += lk.lookY; }
+      if (XrInput.autoSprint(out.mz, out.mx) && !out.ads) out.sprint = true;   // stick fully forward runs
       const hy = xr.headYaw();                                        // walk where your head faces, not where the gun points
       if (hy !== null && (out.mx || out.mz)) { const mv = XrInput.headMove(out.mx, out.mz, hy - (a ? a.yaw : pl.yaw)); out.mx = mv.mx; out.mz = mv.mz; }
     }
@@ -1182,12 +1183,12 @@
   ensureFloor(state);
   chooseClass(0);
   xr = XrMode.create({ THREE, renderer, scene, camera, gun, $, gunHome: GUN_DEFAULTS, toast: (t) => toast(t), started: () => started, menuOpen: () => gearMenu.isOpen || stashMenu.isOpen,
-    turnSpeed: () => ref.cfg.padTurn, playerYaw: () => state.player.yaw, farVr: () => view.fogFar + 6 });
+    turnSpeed: () => ref.cfg.padTurn, playerYaw: () => state.player.yaw });
   xr.on(() => { renderer.setAnimationLoop(frame); if (!running) begin(true); }, () => { renderer.setAnimationLoop(null); requestAnimationFrame(frame); });   // a headset drives the frames while in VR
   function frame(now) {
     if (!(xr && xr.presenting())) requestAnimationFrame(frame);
     const dt = Math.min((now - clock.last) / 1000, 0.05); clock.last = now;
-    try { pollPad(dt); padMenus(); } catch (e) { /* a controller hiccup must not stop the frame */ }
+    try { pollPad(dt); padMenus(); if (xr && xr.presenting() && xr.grab() && running && !panelOpen && !state.choices && !state.classChoices && !state.over) pressPickup(); } catch (e) { /* a controller hiccup must not stop the frame */ }
     // each stage guards itself: one bad frame in the drawing code must never freeze the rules or the controller, and the first error is shown on screen so it can be read off a phone
     const stage = (name, fn) => { try { fn(); } catch (e) { if (!frameErr) { frameErr = name + ': ' + (e && e.message ? e.message : e); toastEl.textContent = 'Error in ' + frameErr; toastEl.classList.add('show'); toastT = 1e9; if (window.console) console.error(e); } } };
     if (running && !panelOpen) {
@@ -1210,5 +1211,5 @@
   }
   requestAnimationFrame((t) => { clock.last = t; frame(t); });
   setRunning(false);
-  window.__game = { ref, view, THREE, fx, mouse };   // handy for poking at numbers from the console
+  window.__game = { ref, view, THREE, fx, mouse, xr };   // handy for poking at numbers from the console
 })();

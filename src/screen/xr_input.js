@@ -4,12 +4,12 @@
 
    Quest Touch (xr-standard mapping)            -> standard pad button         -> game action
      Left stick                                 -> left stick                  -> move (flick = move between menu cards)
-     Left stick click                           -> L3                          -> sprint
+     Left stick click                           -> L3                          -> sprint (also: push the stick fully forward)
      Right stick left/right                     -> (handled by the XR view)    -> turn (smooth, or snap with ?snap)
-     Right stick up/down                        -> D-pad up/down               -> move between card rows in menus
+     Right stick up/down                        -> D-pad up/down (internal)    -> card rows in menus; down = second action at a gold gate
      Right trigger                              -> RT                          -> fire
      Left trigger                               -> LT                          -> aim down sights
-     Right grip                                 -> LB                          -> use gold gate / boss door puzzle
+     Right grip                                 -> grab (xr_mode)              -> pick up gun / open stash / use gate or door puzzle
      Left grip                                  -> Y                           -> swap guns
      A (right)                                  -> A                           -> jump / confirm / pick up
      B (right)                                  -> B                           -> slide
@@ -41,7 +41,7 @@ const XrInput = (function () {
     b[1] = btn(pressed(R, XR.HIGH));                // B
     b[2] = btn(pressed(L, XR.LOW));                 // X
     b[3] = btn(lGrip && !lHigh);                    // Y  (swap)
-    b[4] = btn(pressed(R, XR.GRIP));                // LB (use gate / puzzle)
+    b[4] = btn(false);                              // LB: the right grip is read as a grab by the VR view instead (pick up / use)
     b[5] = btn(pressed(R, XR.STICK));               // RB (gear)
     b[6] = btn(pressed(L, XR.TRIGGER), value(L, XR.TRIGGER));   // LT (aim)
     b[7] = btn(pressed(R, XR.TRIGGER), value(R, XR.TRIGGER));   // RT (fire)
@@ -84,6 +84,8 @@ const XrInput = (function () {
     const c = Math.cos(dYaw), s = Math.sin(dYaw);
     return { mx: mx * c + mz * s, mz: mz * c - mx * s };
   }
-  return { headMove, toPad, createTurn, dirToAngles, lookToward, wrap, SNAP_ANGLE };
+  // auto-sprint: the left stick pushed almost all the way forward runs, like most VR shooters
+  const autoSprint = (mz, mx) => mz > 0.85 && Math.abs(mx) < 0.5;
+  return { autoSprint, headMove, toPad, createTurn, dirToAngles, lookToward, wrap, SNAP_ANGLE };
 })();
 if (typeof module !== 'undefined') module.exports = XrInput;
