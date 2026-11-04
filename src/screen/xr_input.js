@@ -79,6 +79,11 @@ const XrInput = (function () {
     const k = lookSens * (lookMul || 1);
     return { lookX: wrap(target.yaw - cur.yaw) / k, lookY: (cur.pitch - Math.max(-1.45, Math.min(1.45, target.pitch))) / k };
   }
-  return { toPad, createTurn, dirToAngles, lookToward, wrap, SNAP_ANGLE };
+  // stick movement turned from the aim's frame into the head's frame (dYaw = head yaw - aim yaw), so you walk where you look
+  function headMove(mx, mz, dYaw) {
+    const c = Math.cos(dYaw), s = Math.sin(dYaw);
+    return { mx: mx * c + mz * s, mz: mz * c - mx * s };
+  }
+  return { headMove, toPad, createTurn, dirToAngles, lookToward, wrap, SNAP_ANGLE };
 })();
 if (typeof module !== 'undefined') module.exports = XrInput;

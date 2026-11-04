@@ -25,5 +25,6 @@ t('Look toward: the look input moves the referee aim exactly onto the target (ta
   const l = XrInput.lookToward(cur, tgt, k, 1), ny = cur.yaw + l.lookX * k, np = cur.pitch - l.lookY * k;
   return Math.abs(XrInput.wrap(ny - tgt.yaw)) < 1e-9 && Math.abs(np - tgt.pitch) < 1e-9 && Math.abs(l.lookX * k) < 0.3;
 })());
+t('Head-relative walking: with your head turned 90 degrees right of the gun, stick forward walks right (strafe), and no turn changes nothing', (() => { const a = XrInput.headMove(0, 1, Math.PI / 2), b = XrInput.headMove(0.3, 0.7, 0); return Math.abs(a.mx - 1) < 1e-9 && Math.abs(a.mz) < 1e-9 && b.mx === 0.3 && b.mz === 0.7; })());
 console.log(bad ? bad + ' failed' : 'all xr checks passed');
 process.exit(bad ? 1 : 0);

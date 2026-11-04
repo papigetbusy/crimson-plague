@@ -566,6 +566,8 @@
     if (xr && xr.presenting()) {                                    // VR: aim follows the right controller's ray (or your head), sent like a mouse move
       const a = xr.aim(), pl = state.player, c = ref.cfg;
       if (a) { const lk = XrInput.lookToward(pl, a, c.lookSens, 1 - pl.adsT * (1 - c.adsLookMul)); out.lookX += lk.lookX; out.lookY += lk.lookY; }
+      const hy = xr.headYaw();                                        // walk where your head faces, not where the gun points
+      if (hy !== null && (out.mx || out.mz)) { const mv = XrInput.headMove(out.mx, out.mz, hy - (a ? a.yaw : pl.yaw)); out.mx = mv.mx; out.mz = mv.mz; }
     }
     I.lookX = I.lookY = I.touchX = I.touchY = 0; I.slide = false; I.jump = false; I.reload = false; I.swap = false; I.pickup = false; I.lockUse = undefined; I.pick = undefined; I.pickClass = undefined; I.shopClose = false; I.restart = false;
     return out;
@@ -591,7 +593,7 @@
   const hud = Hud.create($, { pick: (i) => { I.pick = i; }, pickClass: (i) => { I.pickClass = i; }, restart: () => { if (coop.mode === 'guest') toast('The host starts the next run'); else I.restart = true; } });
 
   function setRunning(v) {
-    running = v;
+    running = v; if (xr) xr.corner(v);
     overlay.hidden = v;
     classPick.hidden = started; $('coopBtn').hidden = started && coop.mode === 'off';
     if (!v) {
@@ -842,12 +844,14 @@
     for (const e of events) {
       hud.event(e);
       if (e.type === 'shot') {
-        if (!e.extra) { flashT = 0.06; kickG = 1; kickDir = [Math.random() * 2 - 1, Math.random() * 2 - 1]; inspK = 0; sfx('shot'); ejectShell(); if (fxOn()) { muzzle.getWorldPosition(tmpV); camera.getWorldDirection(tmpV2); fx.play(fxId(), 'muzzle', tmpV.x + tmpV2.x * 0.12, tmpV.y + tmpV2.y * 0.12, tmpV.z + tmpV2.z * 0.12); } }
+        if (!e.extra && xr && xr.presenting()) xr.pulse('right', 0.45, 35);   // a kick in the gun hand
+        if (!e.extra) { flashT = 0.06; kickG = 1; kickDir = [Math.random() * 2 - 1, Math.random() * 2 - 1]; inspK = 0; sfx('shot'); ejectShell(); if (fxOn()) { muzzle.getWorldPosition(tmpV); if (xr && xr.presenting()) xr.aimDir(tmpV2); else camera.getWorldDirection(tmpV2); fx.play(fxId(), 'muzzle', tmpV.x + tmpV2.x * 0.12, tmpV.y + tmpV2.y * 0.12, tmpV.z + tmpV2.z * 0.12); } }
         addTracer(e.ex, e.ey, e.ez);
         if (e.hit === 'wall') { burst(e.ex, e.ey, e.ez, 5, [0xffb347, 0xff7a1a, 0x888078], 4, 0.35, 12, 0.7); if (fxOn()) fx.play(fxId(), 'wall', e.ex, e.ey, e.ez); }
       } else if (e.type === 'peerShot') {
         if (e.key !== coopKey) friendShot(e);
       } else if (e.type === 'hit') {
+        if (xr && xr.presenting()) xr.pulse('right', e.crit ? 0.6 : 0.25, e.crit ? 40 : 20);   // feel the hit land
         burst(e.x, e.y, e.z, e.crit ? 9 : 5, [0xb01818, 0x701010, 0xe03030], 3.5, 0.4, 10, 0.8);
         if (fxOn() && !e.splash) fx.play(fxId(), 'flesh', e.x, e.y, e.z, { crit: e.crit });
         if (!e.splash) damageNumber(e.x, e.y + 0.2, e.z, e.dmg, e.crit);
@@ -859,7 +863,7 @@
         burst(e.x, 1.2 * e.scale, e.z, e.boss ? 40 : 24, [0xb01818, 0x701010, 0x3a0a0a, 0xff6a20], 5, 0.8, 11, e.boss ? 2 : 1.3);
         if (fxOn()) { fx.play(fxId(), 'kill', e.x, 1.2 * e.scale, e.z, { scale: e.scale, boss: e.boss }); bigShake(FxPlan.shake(fxId(), 'kill') * (e.boss ? 1.6 : 1)); }
       } else if (e.type === 'blast') { burst(e.x, e.y, e.z, 10, [0xff9a1c, 0xff4500, 0xffd060], 5, 0.4, 4, 1.1); sfx('blast'); if (fxOn()) { fx.play(fxId(), 'blast', e.x, e.y, e.z, { r: e.r }); bigShake(FxPlan.shake(fxId(), 'blast')); } }
-      else if (e.type === 'playerHit') { sfx('hurt'); }
+      else if (e.type === 'playerHit') { sfx('hurt'); if (xr && xr.presenting()) { xr.pulse('left', 0.8, 90); xr.pulse('right', 0.8, 90); } }
       else if (e.type === 'slide') { sfx('slide'); }
       else if (e.type === 'jump') { sfx('slide'); }
       else if (e.type === 'hop') { sfx('slide'); }
@@ -1178,7 +1182,7 @@
   ensureFloor(state);
   chooseClass(0);
   xr = XrMode.create({ THREE, renderer, scene, camera, gun, $, gunHome: GUN_DEFAULTS, toast: (t) => toast(t), started: () => started, menuOpen: () => gearMenu.isOpen || stashMenu.isOpen,
-    turnSpeed: () => ref.cfg.padTurn, playerYaw: () => state.player.yaw });
+    turnSpeed: () => ref.cfg.padTurn, playerYaw: () => state.player.yaw, farVr: () => view.fogFar + 6 });
   xr.on(() => { renderer.setAnimationLoop(frame); if (!running) begin(true); }, () => { renderer.setAnimationLoop(null); requestAnimationFrame(frame); });   // a headset drives the frames while in VR
   function frame(now) {
     if (!(xr && xr.presenting())) requestAnimationFrame(frame);

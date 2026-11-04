@@ -6,13 +6,17 @@ const XrMode = (function () {
   function create(o) {
     const { THREE, renderer, scene, camera, gun, $, gunHome } = o;
     const q = location.search + location.hash;
-    const opts = { snap: /[?&#]snap\b/.test(q), gaze: /[?&#]gaze\b/.test(q) };
+    const opts = { snap: /[?&#]snap\b/.test(q), gaze: /[?&#]gaze\b/.test(q), perf: /[?&#]perf\b/.test(q), vignette: !/[?&#]novignette\b/.test(q), aimMove: /[?&#]aimmove\b/.test(q),
+      scale: (() => { const m = /[?&#]xrscale=([0-9.]+)/.exec(q); return m ? Math.max(0.5, Math.min(1, +m[1])) : 0.8; })() };   // ?xrscale=0.7 trades sharpness for speed
     const dolly = new THREE.Group(); dolly.name = 'xrDolly';
     scene.add(dolly); scene.remove(camera); dolly.add(camera);       // flat screen: the rig sits at 0,0,0 with no turn, so nothing changes
     let session = null, bodyYaw = 0, onStart = null, onEnd = null;
     const turn = XrInput.createTurn(opts.snap);
+    const TURN_SPEED = 2.2;                                         // smooth turn, radians a second at full tilt (gentler than the flat-screen stick)
     const hands = { left: null, right: null };
-    const v3 = new THREE.Vector3(), q4 = new THREE.Quaternion(), fwd = new THREE.Vector3();
+    const v3 = new THREE.Vector3(), q4 = new THREE.Quaternion(), fwd = new THREE.Vector3(), aimQ = new THREE.Quaternion(), aimP = new THREE.Vector3(), headQ = new THREE.Quaternion();
+    let aimInit = false, fps = 0, fpsN = 0, fpsT = 0, moveK = 0;
+    const AIM_SMOOTH = 28;                                          // per second: takes the hand jitter out of the ray without feeling laggy
 
     // ---- controllers: rays (aim) and grips (where the hand mesh and the gun sit) ----
     const handMat = new THREE.MeshLambertMaterial({ color: 0x2a1a18, emissive: 0x120806 });
@@ -31,11 +35,12 @@ const XrMode = (function () {
 
     // the gun rides in the right hand in VR: an anchor that follows the grip, offset so the gun's usual hip spot lands in the palm
     const gunAnchor = new THREE.Group(); dolly.add(gunAnchor);
+    const aimLocal = new THREE.Quaternion(), dollyInv = new THREE.Quaternion();
     function placeGun() {
       const h = hands.right;
       if (!h) { if (gun.parent !== camera) camera.add(gun); return; }
       if (gun.parent !== gunAnchor) gunAnchor.add(gun);
-      gunAnchor.position.copy(h.grip.position); gunAnchor.quaternion.copy(h.grip.quaternion);
+      gunAnchor.position.copy(h.grip.position); gunAnchor.quaternion.copy(aimInit ? aimLocal : h.ray.quaternion);   // held at the grip, pointing along the (smoothed) aim ray
       v3.set(-gunHome.gunX, -gunHome.gunY + 0.02, -gunHome.gunZ - 0.12).applyQuaternion(gunAnchor.quaternion);
       gunAnchor.position.add(v3);
     }
@@ -47,26 +52,61 @@ const XrMode = (function () {
     hudMesh.position.set(0, -0.12, -1.1); hudMesh.renderOrder = 999; hudMesh.visible = false; camera.add(hudMesh);
     const reticle = new THREE.Mesh(new THREE.RingGeometry(0.008, 0.013, 16), new THREE.MeshBasicMaterial({ color: 0xffe0c0, depthTest: false, fog: false, transparent: true }));
     reticle.renderOrder = 1000; reticle.visible = false; scene.add(reticle);
+    // comfort vignette: a dark ring that closes in a little while you move or turn with the sticks (off with ?novignette)
+    const vig = new THREE.Mesh(new THREE.RingGeometry(0.16, 1.2, 32, 1), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0, depthTest: false, depthWrite: false, fog: false }));
+    vig.position.z = -0.3; vig.renderOrder = 998; vig.visible = false; camera.add(vig);
+    // the game's own menus (start card, level-up and shop cards, game over, Gear and stash) shown in VR exactly as they look on the
+    // flat page: the open menu's HTML is photographed into a texture with html2canvas whenever it changes, and hung in front of you
+    const MENUS = ['gearMenu', 'stashMenu', 'levelup', 'gameover', 'mapOverlay', 'start'];
+    const menuTex = new THREE.Texture(), menuMat = new THREE.MeshBasicMaterial({ map: menuTex, transparent: true, depthTest: false, depthWrite: false, fog: false });
+    const menuMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), menuMat); menuMesh.renderOrder = 1001; menuMesh.visible = false; menuMesh.position.set(0, 0, -1.25); camera.add(menuMesh);
+    let menuKey = '', menuBusy = false, menuT = 0, menuOk = false, h2cTried = false;
+    function loadH2c() {
+      if (h2cTried || window.html2canvas) return; h2cTried = true;
+      const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'; sc.async = true; document.head.appendChild(sc);
+    }
+    function openMenu(running) {
+      for (const id of MENUS) { const e = $(id); if (e && !e.hidden && (id !== 'start' || !running) && getComputedStyle(e).display !== 'none') return e; }
+      return null;
+    }
+    function menuPanel(running, dt) {
+      const el = openMenu(running);
+      if (!el) { menuMesh.visible = false; menuKey = ''; menuOk = false; return false; }
+      const card = el.querySelector('.card, .gbody') || el;
+      menuT -= dt;
+      const key = el.id + '|' + card.innerHTML.length + '|' + Array.from(card.querySelectorAll('.sel, .focus, :focus')).map((n) => n.textContent.length).join(',');
+      if (window.html2canvas && !menuBusy && (key !== menuKey || menuT <= 0) && menuT < 1.2) {
+        menuBusy = true; const k = key; menuT = 1.5;
+        window.html2canvas(card, { backgroundColor: null, scale: 1, logging: false, useCORS: true }).then((c) => {
+          menuTex.image = c; menuTex.needsUpdate = true; menuKey = k; menuOk = true;
+          const w = 1.5, h = w * c.height / Math.max(1, c.width); menuMesh.scale.set(w, Math.min(h, 1.3), 1);
+        }).catch(() => { /* keep the text fallback */ }).then(() => { menuBusy = false; });
+      }
+      menuMesh.visible = menuOk;
+      return menuOk;
+    }
     let hudT = 0;
     const txt = (id) => { const e = $(id); return e ? (e.textContent || '').replace(/\s+/g, ' ').trim() : ''; };
     const shown = (id) => { const e = $(id); return !!e && !e.hidden && getComputedStyle(e).display !== 'none'; };
     function drawHud(st, running) {
       const W = hc.width, H = hc.height; hx.clearRect(0, 0, W, H);
       hx.textBaseline = 'top'; hx.shadowColor = '#000'; hx.shadowBlur = 8;
-      const line = (s, x, y, size, col, align) => { hx.font = 'bold ' + size + 'px sans-serif'; hx.fillStyle = col || '#f3e6d8'; hx.textAlign = align || 'left'; hx.fillText(s, x, y); };
+      const line = (s, x, y, size, col, align, disp) => { hx.font = (disp ? '' : '700 ') + size + 'px ' + (disp ? "'Pirata One', Georgia, serif" : "'Barlow Condensed', 'Arial Narrow', sans-serif"); hx.fillStyle = col || '#f3e6d8'; hx.textAlign = align || 'left'; hx.fillText(s, x, y); };
       const p = st.player;
+      if (opts.perf) line(fps + ' fps', 40, 6, 30, fps >= 70 ? '#7dff7d' : fps >= 55 ? '#ffd060' : '#ff5050');
       // bottom strip: health bar, ammo, wave, kills
       const hpK = Math.max(0, Math.min(1, p.hp / (p.maxHp || 100)));
-      hx.fillStyle = 'rgba(0,0,0,0.55)'; hx.fillRect(40, 430, 360, 34); hx.fillStyle = hpK < 0.3 ? '#ff2a2a' : '#c4142a'; hx.fillRect(44, 434, 352 * hpK, 26);
+      hx.fillStyle = 'rgba(0,0,0,0.55)'; hx.fillRect(40, 430, 360, 34); hx.fillStyle = hpK < 0.3 ? '#e23a42' : '#a31d26'; hx.fillRect(44, 434, 352 * hpK, 26);
       line('HP ' + Math.ceil(p.hp), 52, 436, 24);
-      line((p.reloading ? 'RELOADING ' : '') + p.ammo + ' / ' + p.magSize, W - 40, 426, 40, p.ammo <= Math.ceil(p.magSize * 0.25) ? '#ff5040' : '#f3e6d8', 'right');
-      line('Wave ' + txt('waveN') + '   Lvl ' + txt('lvlN') + '   Kills ' + st.kills + '   Gold ' + txt('goldN'), W / 2, 470, 26, '#e8c890', 'center');
+      line((p.reloading ? 'RELOADING ' : '') + p.ammo + ' / ' + p.magSize, W - 40, 426, 40, p.ammo <= Math.ceil(p.magSize * 0.25) ? '#e23a42' : '#ecdfc6', 'right', true);
+      line('Wave ' + txt('waveN') + '   Lvl ' + txt('lvlN') + '   Kills ' + st.kills + '   Gold ' + txt('goldN'), W / 2, 470, 26, '#cfa54a', 'center');
       // middle: banners, menus, prompts
       let y = 40;
       const center = (s, size, col) => { line(s, W / 2, y, size, col, 'center'); y += size + 12; };
       const bn = $('banner');
       if (bn && bn.classList.contains('show')) { center(txt('bannerT'), 52, '#ff4a4a'); center(txt('bannerS'), 28); }
       if (shown('boss')) center(txt('bossName'), 28, '#ff8a60');
+      if (menuPanel(running, 0)) { const toastE = $('padToast'); if (toastE && toastE.classList.contains('show')) center(toastE.textContent, 24, '#cfa54a'); return; }   // the real menu is on its own panel
       if (!running) { center(o.started() ? 'PAUSED' : 'CRIMSON PLAGUE', 56, '#ff4a4a'); center('A: ' + (o.started() ? 'resume' : 'enter the hall') + '    Y: pause    left stick: pick class', 26); return; }
       if (st.over) { center('YOU FELL', 56, '#ff4a4a'); center(txt('overStats'), 24); center('A: rise again', 28); return; }
       if (st.choices || st.classChoices || st.shop) {
@@ -82,14 +122,23 @@ const XrMode = (function () {
       const toastE = $('padToast'); if (toastE && toastE.classList.contains('show')) center(toastE.textContent, 24, '#e8c890');
     }
 
+    let lastDt = 1 / 72;
     function update(st, running, dt) {
       if (!session) return;
+      lastDt = dt || lastDt;
       const p = st.player;
-      bodyYaw += turn.step(hands.right && hands.right.gamepad, dt, o.turnSpeed());
+      const dYaw = turn.step(hands.right && hands.right.gamepad, dt, opts.snap ? 0 : TURN_SPEED); bodyYaw += dYaw;
+      fpsN++; fpsT += dt; if (fpsT >= 0.5) { fps = Math.round(fpsN / fpsT); fpsN = 0; fpsT = 0; }
+      if (opts.vignette) {
+        const want = Math.min(1, (Math.hypot(p.vx || 0, p.vz || 0) / 7) + Math.abs(dYaw) / Math.max(dt, 1e-3) / 2.5) * 0.85;
+        moveK += (want - moveK) * Math.min(1, dt * 6); vig.material.opacity = moveK; vig.visible = moveK > 0.03;
+        vig.scale.setScalar(1.25 - moveK * 0.3);
+      }
       dolly.position.set(p.x, p.eye, p.z);
       dolly.rotation.set(0, -bodyYaw, 0);
       dolly.updateMatrixWorld(true);
       placeGun();
+      menuPanel(running, dt);
       hudT -= dt; if (hudT <= 0) { hudT = 0.1; drawHud(st, running); hudTex.needsUpdate = true; }
     }
     // where the player is aiming, in the game's yaw/pitch: the right controller's ray, else your head
@@ -97,28 +146,54 @@ const XrMode = (function () {
       if (!session) return null;
       const h = !opts.gaze && hands.right;
       if (h) { h.ray.getWorldQuaternion(q4); h.ray.getWorldPosition(v3); } else { renderer.xr.getCamera(camera).getWorldQuaternion(q4); camera.getWorldPosition(v3); }
+      if (!aimInit) { aimQ.copy(q4); aimInit = true; } else aimQ.slerp(q4, Math.min(1, AIM_SMOOTH * lastDt));
+      q4.copy(aimQ); aimP.copy(v3);
+      dollyInv.copy(dolly.quaternion).invert(); aimLocal.copy(dollyInv).multiply(aimQ);    // the same aim in the rig's space, for the gun
       fwd.set(0, 0, -1).applyQuaternion(q4);
       reticle.visible = true; reticle.position.copy(v3).addScaledVector(fwd, 6); reticle.quaternion.copy(q4);
       return XrInput.dirToAngles(fwd.x, fwd.y, fwd.z);
     }
+    const srcBuf = [];
     function sources() {
       if (!session) return [];
-      const out = [];
-      for (const s of session.inputSources) if (s && s.gamepad) out.push({ handedness: s.handedness, gamepad: s.gamepad });
-      for (const c of ctl) if (c.hand) { const s = Array.from(session.inputSources).find((x) => x.handedness === c.hand); c.gamepad = s ? s.gamepad : null; }
-      return out;
+      srcBuf.length = 0;
+      const list = session.inputSources;
+      for (let i = 0; i < list.length; i++) { const s = list[i]; if (s && s.gamepad) srcBuf.push(s); }   // XRInputSource already has handedness + gamepad
+      for (const c of ctl) { c.gamepad = null; if (c.hand) for (let i = 0; i < srcBuf.length; i++) if (srcBuf[i].handedness === c.hand) c.gamepad = srcBuf[i].gamepad; }
+      return srcBuf;
     }
+    // the direction your head faces, as the game's yaw (movement goes this way, not where the gun points; ?aimmove for the old way)
+    function headYaw() {
+      if (!session || opts.aimMove) return null;
+      renderer.xr.getCamera(camera).getWorldQuaternion(headQ); fwd.set(0, 0, -1).applyQuaternion(headQ);
+      return XrInput.dirToAngles(fwd.x, fwd.y, fwd.z).yaw;
+    }
+    // a short buzz in one hand (fire, getting hit). Quest exposes hapticActuators[0].pulse
+    function pulse(hand, strength, ms) {
+      if (!session) return;
+      for (let i = 0; i < session.inputSources.length; i++) {
+        const s = session.inputSources[i]; if (s.handedness !== hand || !s.gamepad) continue;
+        const a = s.gamepad.hapticActuators && s.gamepad.hapticActuators[0];
+        try { if (a && a.pulse) a.pulse(strength, ms); else if (a && a.playEffect) a.playEffect('dual-rumble', { duration: ms, strongMagnitude: strength, weakMagnitude: strength }); } catch (e) { /* no haptics */ }
+      }
+    }
+    function aimDir(out) { return out.set(0, 0, -1).applyQuaternion(aimQ); }
     const pad = () => (session ? XrInput.toPad(sources()) : null);
 
+    let farWas = 120;
     async function enter() {
       if (session) { session.end(); return; }
       try {
         const s = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor'] });
-        renderer.xr.enabled = true; renderer.xr.setReferenceSpaceType('local');
+        renderer.xr.enabled = true; renderer.xr.setReferenceSpaceType('local'); renderer.xr.setFramebufferScaleFactor(opts.scale);   // ~80% resolution: holds 72/90 fps
         await renderer.xr.setSession(s);
-        session = s; bodyYaw = o.playerYaw(); turn.reset(); hudMesh.visible = true; btn.textContent = 'EXIT VR'; btn.hidden = true;
+        const bl = s.renderState && s.renderState.baseLayer; if (bl && 'fixedFoveation' in bl) bl.fixedFoveation = 1;   // full fixed foveation: edges drawn coarser, centre sharp
+        if (renderer.xr.setFoveation) renderer.xr.setFoveation(1);
+        farWas = camera.far; camera.far = o.farVr(); camera.updateProjectionMatrix();             // nothing past the fog is drawn
+        loadH2c();
+        session = s; aimInit = false; bodyYaw = o.playerYaw(); turn.reset(); hudMesh.visible = true; btn.textContent = 'EXIT VR'; btn.hidden = true;
         s.addEventListener('end', () => {
-          session = null; renderer.xr.enabled = false; hudMesh.visible = false; reticle.visible = false;
+          session = null; renderer.xr.enabled = false; camera.far = farWas; camera.updateProjectionMatrix(); vig.visible = false; hudMesh.visible = false; reticle.visible = false; menuMesh.visible = false;
           dolly.position.set(0, 0, 0); dolly.rotation.set(0, 0, 0); if (gun.parent !== camera) camera.add(gun);
           btn.textContent = 'ENTER VR'; btn.hidden = false; if (onEnd) onEnd();
         });
@@ -140,7 +215,12 @@ const XrMode = (function () {
 
     // in VR, put the camera back at the head pose the headset gave last frame (the game's flat-screen camera code is skipped)
     function headPose() { const c = renderer.xr.getCamera(camera); c.matrix.decompose(camera.position, camera.quaternion, camera.scale); }
-    return { update, aim, pad, headPose, presenting: () => !!session, on: (start, end) => { onStart = start; onEnd = end; }, rig: dolly };
+    // during a run the button shrinks into the top-left corner so it does not cover the wave counter
+    function corner(on) {
+      btn.style.left = on ? '10px' : '50%'; btn.style.top = on ? 'auto' : '14px'; btn.style.bottom = on ? '10px' : 'auto';
+      btn.style.transform = on ? 'none' : 'translateX(-50%)'; btn.style.padding = on ? '8px 16px' : '18px 44px'; btn.style.fontSize = on ? '15px' : '28px';
+    }
+    return { update, aim, pad, headPose, headYaw, pulse, aimDir, corner, presenting: () => !!session, on: (start, end) => { onStart = start; onEnd = end; }, rig: dolly };
   }
   return { create };
 })();
