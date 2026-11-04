@@ -399,7 +399,7 @@
     }
     toastT -= dt; if (toastT <= 0) toastEl.classList.remove('show');
     pad.now = p ? pad.input.read(p) : null;
-    if (pad.now && xr && xr.presenting()) { pad.now.nav = 0; pad.now.navY = 0; pad.now.confirm = false;  if (pad.now.start && state.shop) { pad.now.start = false; pad.now.map = true; } }   // at the merchant, Y leaves the shop (the flat game uses Back)   // VR menus use the laser pointer, not the sticks
+    if (pad.now && xr && xr.presenting()) { pad.now.nav = 0; pad.now.navY = 0; pad.now.confirm = false;}   // VR menus use the laser pointer, not the sticks
   }
 
   const locked = () => document.pointerLockElement === canvas;
@@ -1208,7 +1208,7 @@
   chooseClass(0);
   GP.gunBody = gunBody; GP.magBase = MAG_BASE; GP.fore = HOLD;
   xr = XrMode.create({ THREE, renderer, scene, camera, gun, $, gunHome: GUN_DEFAULTS, toast: (t) => toast(t), started: () => started, menuOpen: () => gearMenu.isOpen || stashMenu.isOpen,
-    turnSpeed: () => ref.cfg.padTurn, arms: [handL, handR, limbL, limbR], map: { open: (v) => minimap.setOpen(v), big: $('bigMap'), small: $('miniMap') },
+    turnSpeed: () => ref.cfg.padTurn, arms: [handL, handR, limbL, limbR], sight: () => SIGHT, eyeRelief: EYE_RELIEF, inShop: () => !!state.shop, shopClose: () => { I.shopClose = true; }, map: { open: (v) => minimap.setOpen(v), big: $('bigMap'), small: $('miniMap') },
     gunParts: () => { if (!mag || !charge) return null; GP.id = curGun; GP.type = (RefereeWeapons.GUNS[state.player.gun.id] || {}).type; GP.mag = mag; GP.charge = charge; GP.gunScale = view.gunScale; return GP; }, playerYaw: () => state.player.yaw });
   xr.on(() => { renderer.setAnimationLoop(frame); if (!running) begin(true); }, () => { renderer.setAnimationLoop(null); requestAnimationFrame(frame); });   // a headset drives the frames while in VR
   function frame(now) {
@@ -1233,7 +1233,7 @@
     stage('monsters', () => { syncMonsters(state, dt); syncThralls(state); });
     stage('xr', () => xr.update(state, running && !panelOpen, dt));
     stage('view', () => updateView(state, running && !panelOpen ? dt : 0, now / 1000));
-    stage('draw', () => renderer.render(scene, camera));
+    stage('draw', () => { if (xr && xr.presenting()) xr.renderScope(); renderer.render(scene, camera); });
   }
   requestAnimationFrame((t) => { clock.last = t; frame(t); });
   setRunning(false);
