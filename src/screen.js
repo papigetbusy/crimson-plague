@@ -111,8 +111,8 @@
   const gunRig = new THREE.Group(); gunBody.add(gunRig);        // the voxel parts of whichever gun is in your hands (rebuilt by setGun)
   const rigParts = [];
   const voxelPart = (part, vox, parent) => { const g = new THREE.Group(); parent.add(g); rigParts.push(g); return gunLook.part(part, vox, g); };
-  const MAG_BASE = new THREE.Vector3(), SIGHT = { y: 0, z: 0 };
-  let charge, mag, CHARGE_Z = 0, muzzle;
+  const MAG_BASE = new THREE.Vector3(), SIGHT = { x: 0, y: 0, z: 0, dx: 0, dy: 0, dz: -1 };
+  let charge, mag, CHARGE_Z = 0, muzzle, sightMark;
   let CHARGE_MAX = Infinity, CHARGE_KICK = 0.04, SLIDE_LOCK = 0;   // how far the moving part may slide back, its kick per shot, and (mesh guns) how far it locks back on an empty magazine
   // mesh guns (assets/models/manifest.json, src/screen/glb_guns.js): shown instead of the voxel gun once decoded; ?voxelguns keeps the voxel ones
   const glbGuns = GlbGuns.create(THREE, { query: location.search + location.hash }); glbGuns.setRenderer(renderer);   // setRenderer: the steel's small reflection map
@@ -183,8 +183,11 @@
     }
     charge.position.set(A.boltRest[0], A.boltRest[1], A.boltRest[2]); CHARGE_Z = A.boltRest[2]; CHARGE_REST.copy(charge.position);
     mag.rotation.x = 0.1; MAG_BASE.set(A.magPivot[0], A.magPivot[1], A.magPivot[2]); mag.position.copy(MAG_BASE);
-    SIGHT.y = A.sightDot[1]; SIGHT.z = A.sightDot[2];
-    dotMesh.position.set(0, SIGHT.y, SIGHT.z); dotCore.position.set(0, SIGHT.y, SIGHT.z); dotGlow.position.set(0, SIGHT.y, SIGHT.z + 0.001);
+    SIGHT.x = A.sightDot[0]; SIGHT.y = A.sightDot[1]; SIGHT.z = A.sightDot[2];
+    const sd = A.sightDir || [0, 0, -1]; SIGHT.dx = sd[0]; SIGHT.dy = sd[1]; SIGHT.dz = sd[2];
+    if (!sightMark) { sightMark = new THREE.Object3D(); sightMark.name = 'sightMark'; gunBody.add(sightMark); }
+    sightMark.position.set(SIGHT.x, SIGHT.y, SIGHT.z);
+    dotMesh.position.set(SIGHT.x, SIGHT.y, SIGHT.z); dotCore.position.set(SIGHT.x, SIGHT.y, SIGHT.z); dotGlow.position.set(SIGHT.x, SIGHT.y, SIGHT.z + 0.001);
     muzzle.position.set(A.muzzle[0], A.muzzle[1], A.muzzle[2]);
     handR.position.set(H.grip[0], H.grip[1], H.grip[2]);
     HOLD.set(H.fore[0], H.fore[1], H.fore[2]); MAGH.set(H.mag[0], H.mag[1], H.mag[2]);
@@ -605,7 +608,7 @@
     };
     if (xr && xr.presenting()) {                                    // VR: aim follows the right controller's ray (or your head), sent like a mouse move
       const a = xr.aim(), pl = state.player, c = ref.cfg;
-      if (a) { const lk = XrInput.lookToward(pl, a, c.lookSens, 1 - pl.adsT * (1 - c.adsLookMul)); out.lookX += lk.lookX; out.lookY += lk.lookY; }
+      if (a) { const lk = XrInput.lookToward(pl, a, c.lookSens, 1 - pl.adsT * (1 - c.adsLookMul)); out.lookX += lk.lookX; out.lookY += lk.lookY; if (a.origin) out.aimOrigin = a.origin; }
       if (XrInput.autoSprint(out.mz, out.mx) && !out.ads) out.sprint = true;   // stick fully forward runs
       if (xr.menuOpen()) out.fire = false;
       const hy = xr.walkYaw();                                        // walk where your head faces (or the left hand, Onward-style), not where the gun points
@@ -1156,7 +1159,7 @@
     const rl = animateReload(p);
     const gs = view.gunScale;
     gunHip.set(view.gunX, view.gunY + (HIP_DOT.y - SIGHT.y) * gs, view.gunZ + (HIP_DOT.z - SIGHT.z) * gs);   // every gun rests with its sight where the rifle's sits, so short guns are not lost below the screen
-    gunAds.set(0, -SIGHT.y * gs, -EYE_RELIEF - SIGHT.z * gs);   // puts the sight window dead centre
+    gunAds.set(-SIGHT.x * gs, -SIGHT.y * gs, -EYE_RELIEF - SIGHT.z * gs);   // puts the sight window dead centre
     const still = clamp(1 - planar, 0, 1) * (1 - sp) * (1 - sl);
     // hold Reload for 2 seconds with a full magazine: gun inspect (keyboard R, the touch Reload button, or the controller X button)
     const pr = pad.now, rHeld = !!keys.KeyR || tch.reload || !!(pr && pr.reloadHeld);
@@ -1176,9 +1179,11 @@
     if (gunLook.skin().embers && running) { emberT -= dt; if (emberT <= 0) { emberT = 0.07; muzzle.getWorldPosition(tmpV); burst(tmpV.x + (Math.random() - 0.5) * 0.5, tmpV.y + (Math.random() - 0.3) * 0.1, tmpV.z + (Math.random() - 0.5) * 0.5, 1, [0xff6a1a, 0xff3a10, 0xffb040], 0.5, 0.7, -1.5, 0.35); } }
     const mo = GunMotion.add(GunMotion.add(GunMotion.kick(kickG, ad, kickDir), GunMotion.idle(time, still, ad)), GunMotion.add(GunMotion.equip(equipK), GunMotion.inspect(inspKind, inspK)));
     charge.position.z = Math.min(CHARGE_Z + Math.max(CHARGE_MAX, SLIDE_LOCK), charge.position.z + GunMotion.bolt(kickG, CHARGE_KICK));
-    const gx = lerp(gunHip.x, gunAds.x, ad) - sp * 0.1 - sl * 0.05 + Math.sin(bob) * 0.012 * bobAmt + rl.px + mo.px;
-    const gy = lerp(gunHip.y, gunAds.y, ad) - sp * 0.07 + Math.abs(Math.cos(bob)) * 0.012 * bobAmt - sl * 0.06 + rl.py + mo.py;
-    const gz = lerp(gunHip.z, gunAds.z, ad) + sp * 0.05 + rl.pz + mo.pz;
+    const vrAds = inVr && !(typeof XrAds !== 'undefined' && XrAds.useOld(location.search + location.hash));
+    const adk = vrAds ? 0 : ad;                                        // in VR the new ADS module owns the ADS pose (use ?oldads for the old one)
+    const gx = lerp(gunHip.x, gunAds.x, adk) - sp * 0.1 - sl * 0.05 + Math.sin(bob) * 0.012 * bobAmt + rl.px + mo.px;
+    const gy = lerp(gunHip.y, gunAds.y, adk) - sp * 0.07 + Math.abs(Math.cos(bob)) * 0.012 * bobAmt - sl * 0.06 + rl.py + mo.py;
+    const gz = lerp(gunHip.z, gunAds.z, adk) + sp * 0.05 + rl.pz + mo.pz;
     gun.position.set(gx, gy, gz);
     gun.scale.setScalar(gs);
     gun.rotation.set(
@@ -1186,6 +1191,7 @@
       lerp(0.05, 0, ad) + sp * 0.5 + sl * 0.12 + rl.ry + mo.ry,
       sp * 0.22 + sl * 0.3 + Math.sin(bob) * 0.012 * bobAmt + rl.rz + mo.rz
     );
+    if (inVr && xr && xr.alignAds) xr.alignAds();                 // new ADS: re-apply after this pose, so the sight stays on the eye
     gunLook.update(time, flashT / 0.06, running ? planar : 0);
     cloakGlow(st, dt);
     // muzzle flash
@@ -1270,7 +1276,7 @@
   const VR_ACCEL = 240;   // in VR you reach full speed and stop in about 0.04 s: Meta's comfort guides say speeding up and slowing down the view is what makes people sick (docs/vr-design.md, round 5)
   xr = XrMode.create({ THREE, renderer, scene, camera, gun, $, gunHome: GUN_DEFAULTS, toast: (t) => toast(t), started: () => started, menuOpen: () => gearMenu.isOpen || stashMenu.isOpen,
     turnSpeed: () => ref.cfg.padTurn, arms: [handL, handR, limbL, limbR], sight: () => SIGHT, eyeRelief: EYE_RELIEF, inShop: () => !!state.shop, shopClose: () => { I.shopClose = true; }, map: { open: (v) => minimap.setOpen(v), big: $('bigMap'), small: $('miniMap') },
-    gunParts: () => { if (!mag || !charge) return null; GP.id = curGun; GP.type = (RefereeWeapons.GUNS[state.player.gun.id] || {}).type; GP.mag = mag; GP.charge = charge; GP.muzzle = muzzle; GP.gunScale = view.gunScale; GP.glb = glbOn; return GP; }, playerYaw: () => state.player.yaw, levelMap: () => ref.map });
+    gunParts: () => { if (!mag || !charge) return null; GP.id = curGun; GP.type = (RefereeWeapons.GUNS[state.player.gun.id] || {}).type; GP.mag = mag; GP.charge = charge; GP.muzzle = muzzle; GP.sight = sightMark; GP.sightDir = SIGHT; GP.gunScale = view.gunScale; GP.glb = glbOn; return GP; }, playerYaw: () => state.player.yaw, levelMap: () => ref.map });
   xr.on(() => { renderer.setAnimationLoop(frame); document.body.classList.add('xr'); ref.setCfg({ accel: VR_ACCEL, recoilKick: 0 }); applyVrSpeed(); comfortLabels(); if (!running && (started || SANDBOX)) begin(true); }   // a new game shows the start menu in VR first (pick a class, then Enter the hall); a paused run or the test map carries straight on
   , () => { renderer.setAnimationLoop(null); document.body.classList.remove('xr'); ref.setCfg({ accel: ref.defaults.accel, recoilKick: ref.defaults.recoilKick }); applyVrSpeed(); requestAnimationFrame(frame); });   // a headset drives the frames while in VR
   function frame(now) {

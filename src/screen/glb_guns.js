@@ -57,6 +57,60 @@ const GlbGuns = (function () {
     return { dot: new THREE.Vector3(0, b + 0.003 + (h - 0.003 - t) / 2, z), y0: b + 0.003, y1: b + h - t, halfW: hw };
   }
 
+  // a physical M4-style red-dot optic (Aimpoint-like tube) sitting on optic_mount.
+  // Dark steel with the locked 1911 sheen, a thin brass / engraved band, and a lens whose
+  // illuminated reticle is drawn in the glass (visible only when you look through it,
+  // collimated along the optic axis / bore). This is not the old on-gun red_dot housing.
+  function reticleMat(THREE) {
+    const MOA = Math.PI / (180 * 60), CORE = 16 * MOA, GLOW = 40 * MOA;
+    return new THREE.ShaderMaterial({
+      uniforms: { core: { value: CORE }, glow: { value: GLOW } },
+      vertexShader: 'varying vec3 vWPos;\nvarying vec3 vAxis;\nvoid main() {\n  vec4 w = modelMatrix * vec4(position, 1.0);\n  vWPos = w.xyz;\n  vAxis = normalize((modelMatrix * vec4(0.0, 0.0, 1.0, 0.0)).xyz);\n  gl_Position = projectionMatrix * viewMatrix * w;\n}',
+      fragmentShader: [
+        'uniform float core, glow;',
+        'varying vec3 vWPos;',
+        'varying vec3 vAxis;',
+        'void main() {',
+        '  vec3 C = cameraPosition;',
+        '  vec3 D = normalize(-vAxis);',
+        '  vec3 view = normalize(vWPos - C);',
+        '  float looking = dot(view, D);',
+        '  if (looking < 0.15) discard;',
+        '  float ang = acos(clamp(dot(view, D), -1.0, 1.0));',
+        '  float k = 1.0 - smoothstep(core, glow, ang);',
+        '  vec3 glass = vec3(0.10, 0.14, 0.12);',
+        '  vec3 red = vec3(1.0, 0.22, 0.16);',
+        '  gl_FragColor = vec4(mix(glass, red, k), 0.30 + 0.70 * k);',
+        '}'
+      ].join('\n'),
+      transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide
+    });
+  }
+  function m4Optic(THREE, parent, mat, mount) {
+    const g = new THREE.Group(); g.name = 'm4_optic'; g.position.copy(mount);
+    const steel = mat.userData.steel || new THREE.MeshLambertMaterial({ color: 0x1c1c20, emissive: 0x0c0c0e, side: THREE.DoubleSide });
+    if (!mat.userData.brass) mat.userData.brass = new THREE.MeshStandardMaterial({ color: 0xb08a4a, metalness: 0.85, roughness: 0.38, envMapIntensity: 1.4, emissive: 0x1a1008, envMap: steel.envMap || null, side: THREE.DoubleSide });
+    const brass = mat.userData.brass;
+    const add = (mesh, name) => { mesh.name = name; mesh.frustumCulled = false; g.add(mesh); return mesh; };
+    const box = (w, h, d, x, y, z, m, n) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); return add(o, n); };
+    const cyl = (r, l, x, y, z, m, n, seg, open) => { const o = new THREE.Mesh(new THREE.CylinderGeometry(r, r, l, seg || 8, 1, open !== false), m); o.rotation.x = Math.PI / 2; o.position.set(x, y, z); return add(o, n); };
+    const ay = 0.027;                                                   // axis height above the rail (optic centre)
+    box(0.024, 0.012, 0.036, 0, 0.006, 0, steel, 'm4_optic_mount');
+    box(0.020, 0.010, 0.010, 0, 0.011, 0, brass, 'm4_optic_brass_foot'); // subtle brass accent on the clamp
+    cyl(0.0154, 0.054, 0, ay, -0.008, steel, 'm4_optic_tube', 8);
+    cyl(0.0172, 0.008, 0, ay, -0.033, steel, 'm4_optic_hood', 8);       // front hood
+    cyl(0.0164, 0.006, 0, ay, -0.008, brass, 'm4_optic_band', 8);       // engraved / brass ring
+    const glass = (z, rear) => {
+      const m = rear ? reticleMat(THREE) : new THREE.MeshBasicMaterial({ color: 0x1a2420, opacity: 0.28, transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide });
+      const o = new THREE.Mesh(new THREE.CircleGeometry(0.0115, 16), m); o.position.set(0, ay, z);
+      return add(o, rear ? 'm4_optic_lens' : 'm4_optic_glass');
+    };
+    glass(-0.034, false);                                               // front window
+    glass(0.018, true);                                                 // rear window + infinity reticle
+    parent.add(g);
+    return { center: new THREE.Vector3(mount.x, mount.y + ay, mount.z - 0.008), group: g };
+  }
+
   // the parts of one GLB gun at scale k (gun units per model metre)
   function parts(THREE, scene, spec, k, mat) {
     const src = (spec.root && scene.getObjectByName(spec.root)) || scene;
@@ -84,20 +138,31 @@ const GlbGuns = (function () {
     let rest = new THREE.Vector3(0, well.y, well.z);
     if (slideN) { const sb = new THREE.Box3().setFromObject(slideN); rest = new THREE.Vector3(0, (sb.min.y + sb.max.y) / 2, sb.max.z); boltIn.add(detach(THREE, slideN, rest)); }
     bolt.position.fromArray(P(rest));
-    // red-dot housing: the 1911 keeps its open sight window (anchors ADS). Other mesh guns have iron-sight empties and only the sharp fire-ray dot, so no on-gun housing.
-    let r;
-    if (spec.redDot === false) {
-      const s = at(spec.sight || 'front_sight') || new THREE.Vector3(0, box3.max.y, box3.min.z * 0.2);
+    // sights: 1911 keeps its open sight window (anchors ADS). Iron-sight mesh guns use the rear
+    // empty as the ADS point and rear-to-front as the sight line (never the front post alone).
+    // The M4 gets a physical optic on optic_mount; ADS uses the optic centre, not the rail.
+    // Other mesh guns never get the old on-gun red_dot housing; the sharp fire-ray dot is separate.
+    const rear = at('rear_sight'), front = at('front_sight'), mount = at('optic_mount');
+    let r, sightDir = new THREE.Vector3(0, 0, -1);
+    if (spec.optic && mount) {
+      const op = m4Optic(THREE, root, mat, mount);
+      r = { dot: op.center, y0: op.center.y - 0.012, y1: op.center.y + 0.012, halfW: 0.012 };
+    } else if (spec.redDot === false) {
+      const s = (rear || front || at(spec.sight) || new THREE.Vector3(0, box3.max.y, box3.min.z * 0.2));
       r = { dot: s, y0: s.y - 0.006, y1: s.y + 0.006, halfW: 0.004 };
+      if (rear && front) sightDir.subVectors(front, rear);
     } else {
       if (!mat.userData.dotMat) mat.userData.dotMat = new THREE.MeshLambertMaterial({ color: 0x1c1c20, emissive: 0x0c0c0e });
       r = redDot(THREE, root, Object.assign({ base: box3.max.y, z: (box3.min.z + box3.max.z) / 2, halfW: 0.011, height: 0.024 }, spec.redDot || {}, { mat: mat.userData.dotMat }));
     }
+    if (sightDir.lengthSq() < 1e-8) sightDir.set(0, 0, -1); else sightDir.normalize();
     const body = new THREE.Group(); body.name = 'glb_body'; body.position.copy(off); body.scale.setScalar(k); body.add(root);
     const muzzle = at(spec.muzzle || 'muzzle') || new THREE.Vector3(0, r.dot.y - 0.02, box3.min.z);
     const fore = V(spec.fore || [grip.x, grip.y - 0.035, grip.z - 0.018]);
     const anchors = {
-      muzzle: P(muzzle), sightDot: P(r.dot), magPivot: P(well), boltRest: P(rest),
+      muzzle: P(muzzle), sightDot: P(r.dot), sightDir: [sightDir.x, sightDir.y, sightDir.z],
+      rear: rear ? P(rear) : null, front: front ? P(front) : null, opticMount: mount ? P(mount) : null,
+      magPivot: P(well), boltRest: P(rest),
       handGrip: P(grip), handFore: P(fore), handMag: P(spec.magHand ? V(spec.magHand) : fore),
       dotWindow: { y0: off.y + k * r.y0, y1: off.y + k * r.y1, halfW: k * r.halfW },
     };
@@ -139,6 +204,7 @@ const GlbGuns = (function () {
                 // 1911 only: next to the steel, the ivory grips are toned down and cooled (near-white ivory under an orange torch blew out to a skin-coloured block that read as a hand). Wood and polymer keep their own colour.
                 if (spec.coolNonMetal) { r.mat.color.setRGB(0.5, 0.5, 0.58); r.mat.emissive.setHex(0x1c1c1e); r.mat.specular.setHex(0x151412); } }
               parts(THREE, r.scene, spec, 1, r.mat);              // a dry run: a GLB missing its magazine fails here, not mid-game
+              if (env && r.mat.userData.brass) r.mat.userData.brass.envMap = env;
               ready[id] = r; if (onReady) onReady(id);
             } catch (e) { fail(id, e); }
           }, (e) => fail(id, e));
@@ -150,7 +216,8 @@ const GlbGuns = (function () {
     const has = (id) => !forced && !!ready[id];
     const fail = failOut;
     // the steel's reflection: made once from the renderer (screen.js calls this as soon as there is one)
-    function setRenderer(renderer) { if (env || !renderer) return; try { env = envFrom(THREE, renderer); for (const m of steels) { m.envMap = env; m.needsUpdate = true; } } catch (e) { console.warn('GLB guns: no steel reflection (' + e.message + ')'); } }
+    function wearEnv(m) { if (m) { m.envMap = env; m.needsUpdate = true; } }
+    function setRenderer(renderer) { if (env || !renderer) return; try { env = envFrom(THREE, renderer); for (const m of steels) wearEnv(m); Object.keys(ready).forEach((id) => wearEnv(ready[id].mat.userData.brass)); } catch (e) { console.warn('GLB guns: no steel reflection (' + e.message + ')'); } }
     function build(id, k) { const r = ready[id]; if (!r || forced) return null; try { return parts(THREE, r.scene, r.spec, k, r.mat); } catch (e) { fail(id, e); return null; } }
     // gun units per model metre: true size in a headset (the view scales every gun by gunScale), the voxel gun's size on a flat screen
     const scaleFor = (id, vr, gunScale) => (vr ? 1 / (gunScale || 1) : ((guns[id] && guns[id].flatScale) || 1));

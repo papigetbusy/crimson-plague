@@ -281,6 +281,30 @@ module.exports = function (X) {
       rec(G, 'Rifle red dot at 10 m: the shot still lands on the dot', !!rr.ok, rr.ok ? 'err ' + rr.err.toFixed(3) + ' m' : JSON.stringify(rr).slice(0, 240));
       const rs = await aimDotShot('sniper_bolt', 10);
       rec(G, 'Sniper at 10 m: the shot still lands on the aim point (scope does not regress)', !!rs.ok, rs.ok ? 'err ' + rs.err.toFixed(3) + ' m' : JSON.stringify(rs).slice(0, 240));
+      const alignGun = async (id, dist) => {
+        const O = await toOpen(S);
+        await S.ev((o) => { const r = window.__game.ref; r.equipGun(o.id, 1); r.clearWave(); r.setCfg({ spread: 0, spreadAds: 0 }); r.place(o.O[0], o.O[1], Math.PI / 2); }, { id, O });
+        await rest(S);
+        const tgt = await S.ev((d) => { const p = window.__game.ref.snapshot().player; return [p.x + d, p.eye, p.z]; }, dist);
+        await pointAt(S, 'right', tgt); await S.hold('left', 'trigger', true); await S.frames(50);
+        const before = await S.ev(() => (window.__game.xr.adsInfo && window.__game.xr.adsInfo()) || (window.__game.xr.feel().ads) || {});
+        await S.hold('right', 'trigger', true); await S.frames(3); await S.hold('right', 'trigger', false); await S.frames(2);
+        const r = await S.ev((before) => {
+          const sh = window.__game.lastShot && window.__game.lastShot(), f = window.__game.xr.feel(), a = (window.__game.xr.adsInfo && window.__game.xr.adsInfo()) || f.ads || {};
+          if (!sh || !f.dot) return { ok: false, why: 'missing ' + JSON.stringify({ sh: !!sh, dot: f.dot, ads: a }) };
+          const dx = f.dot[0] - sh.ox, dy = f.dot[1] - sh.oy, dz = f.dot[2] - sh.oz, vx = sh.ex - sh.ox, vy = sh.ey - sh.oy, vz = sh.ez - sh.oz, vn = Math.hypot(vx, vy, vz) || 1;
+          const err = Math.hypot(dy * vz - dz * vy, dz * vx - dx * vz, dx * vy - dy * vx) / vn;
+          const tol = 0.06 + 0.01 * (sh.t || dist), ang = before.angleDeg;
+          return { ok: ang != null && ang <= 0.3 && err <= tol, ang, err, tol, old: a.old, k: a.k, relief: before.relief };
+        }, before);
+        await S.hold('left', 'trigger', false); await S.frames(18);
+        return r;
+      };
+      for (const id of ['pistol_service', 'rifle', 'smg_tactical', 'smg_compact', 'rifle_m4', 'shotgun_pump', 'sniper_bolt', 'hmg_belt']) {
+        const r = await alignGun(id, 10);
+        rec(G, id + ' ADS: the eye-to-sight line and the fire ray agree (under 0.3 deg) and the hit lands on the reticle', !!r.ok, r.ok ? 'angle ' + Number(r.ang).toFixed(3) + ' deg, err ' + r.err.toFixed(3) + ' m, relief ' + (r.relief && r.relief.toFixed(2)) : JSON.stringify(r).slice(0, 240));
+      }
+
       await S.ev(() => { const r = window.__game.ref; r.setCfg({ spread: r.defaults.spread, spreadAds: r.defaults.spreadAds }); });
       await rest(S);
       // movement: gets going and stops quickly (no slow glide: gliding is what makes people sick)

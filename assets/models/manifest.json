@@ -102,7 +102,7 @@
     },
     "rifle_m4": {
       "file": "gun/rifle_m4_base.glb",
-      "note": "Wrok's low-poly M4 Carbine (blued steel, worn black polymer; same locked 1911 steel sheen: tint 1.3, env 1.7). New rifle slot, not a replacement. If the GLB does not load, the Gothic Rifle voxel is used. mag_well is the reload pivot; the moving part is charging_handle; optic_mount is the ADS anchor.",
+      "note": "Wrok's low-poly M4 Carbine (blued steel, worn black polymer; same locked 1911 steel sheen: tint 1.3, env 1.7) with a physical red-dot optic on optic_mount. New rifle slot, not a replacement. If the GLB does not load, the Gothic Rifle voxel is used. mag_well is the reload pivot; the moving part is charging_handle; ADS uses the optic centre.",
       "root": "rifle_m4",
       "grip": [
         0,
@@ -121,7 +121,8 @@
       "sight": "optic_mount",
       "redDot": false,
       "kind": "rifle",
-      "flatScale": 1
+      "flatScale": 1,
+      "optic": true
     }
   },
   "env": {

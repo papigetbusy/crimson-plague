@@ -11,6 +11,7 @@ const XrMode = (function () {
     const { THREE, renderer, scene, camera, gun, $, gunHome } = o;
     const q = location.search + location.hash;
     const opts = { vstock: /[?&#]vstock\b/.test(q), snap: /[?&#]snap\b/.test(q), gaze: /[?&#]gaze\b/.test(q), perf: /[?&#]perf\b/.test(q), vignette: /[?&#]vignette\b/.test(q), aimMove: /[?&#]aimmove\b/.test(q),  rack: /[?&#]rack\b/.test(q),
+      oldads: (typeof XrAds !== 'undefined' && XrAds.useOld(q)),
       turnFlag: (() => { const m = /[?&#]turn=([0-9.]+)/.exec(q); return m ? Math.max(0.5, Math.min(10, +m[1])) : null; })(),
       snapDegFlag: (() => { const m = /[?&#]snap=([0-9]+)/.exec(q); return m ? Math.max(10, Math.min(90, +m[1])) : null; })(),
       scale: (() => { const m = /[?&#]xrscale=([0-9.]+)/.exec(q); return m ? Math.max(0.5, Math.min(1, +m[1])) : 0.8; })() };   // ?xrscale=0.7 trades sharpness for speed
@@ -74,6 +75,13 @@ const XrMode = (function () {
     const adsOf = () => { const g = o.gunParts && o.gunParts(); return ADS[(g && g.type) || 'rifle'] || ADS.rifle; };
     let adsK = 0;
     const eyeP = new THREE.Vector3(), hipP = new THREE.Vector3(), adsP = new THREE.Vector3();
+    const adsBlend = (typeof XrAds !== 'undefined') ? XrAds.create() : null;
+    const adsLocalP = new THREE.Vector3(), adsLocalQ = new THREE.Quaternion();
+    const hipLocalP = new THREE.Vector3(), hipLocalQ = new THREE.Quaternion();
+    const sightW = new THREE.Vector3(), dirW = new THREE.Vector3(), eyeW = new THREE.Vector3();
+    let adsInfo = { k: 0, angleDeg: 0, relief: 0, old: !!opts.oldads, id: '' };
+    let lastGunId = '';
+    const camNear0 = camera.near;
     // ---- support hand (left grip near the gun's fore-end): the right hand keeps the gun's position, the left one steers the barrel ----
     //      (Contractors / Pavlov style: rotation comes from both hands, position from the trigger hand). Pistols only get a light pull (cupped hand).
     let twoHand = false, gripErr = -1;
@@ -141,18 +149,42 @@ const XrMode = (function () {
       if (gun.parent !== gunAnchor) gunAnchor.add(gun);
       const q = aimInit ? aimLocal : h.ray.quaternion;
       gunAnchor.quaternion.copy(q);                                    // pointing along the (smoothed) aim
-      adsK = p ? Math.max(0, Math.min(1, p.adsT || 0)) : 0;
-      // hip: the gun's own grip point (each gun's model says where the hand holds it) sits exactly in the controller grip, so it never floats
       const g = o.gunParts && o.gunParts(), glove = o.arms && o.arms[1];
+      if (g && g.id !== lastGunId) { lastGunId = g.id || ''; if (adsBlend) adsBlend.reset(); }  // a swap starts the blend from the hip
+      // hip: the gun's own grip point (each gun's model says where the hand holds it) sits exactly in the controller grip, so it never floats
       gunAnchor.position.copy(h.grip.position); gunAnchor.updateMatrixWorld(true);
       if (glove && g && g.gunBody) { glove.updateMatrixWorld(true); glove.getWorldPosition(gripW); dolly.worldToLocal(gripW); hipP.copy(h.grip.position).sub(gripW).add(h.grip.position); }
       else hipP.set(-gunHome.gunX, -gunHome.gunY + 0.02, -gunHome.gunZ - 0.12).applyQuaternion(q).add(h.grip.position);
-      if (adsK > 0) {
-        const A = adsOf();
-        eyeP.set(0.032, 0, 0).applyQuaternion(camera.quaternion).add(camera.position);   // the right (dominant) eye: half a typical IPD from the head centre
-        adsP.set(0, -A.drop, (o.eyeRelief || 0.5) - A.relief).applyQuaternion(q).add(eyeP);   // gunAds puts the sight eyeRelief ahead of the anchor: pull it back to this gun's distance
-        gunAnchor.position.lerpVectors(hipP, adsP, adsK * adsK * (3 - 2 * adsK));
-      } else gunAnchor.position.copy(hipP);
+      const eyeOff = (typeof XrAds !== 'undefined') ? XrAds.EYE_X : 0.032;
+      eyeP.set(eyeOff, 0, 0).applyQuaternion(camera.quaternion).add(camera.position);   // the right (dominant) eye: half a typical IPD from the head centre
+      if (opts.oldads || !adsBlend) {
+        adsK = p ? Math.max(0, Math.min(1, p.adsT || 0)) : 0;
+        if (adsK > 0) {
+          const A = adsOf();
+          adsP.set(0, -A.drop, (o.eyeRelief || 0.5) - A.relief).applyQuaternion(q).add(eyeP);   // gunAds puts the sight eyeRelief ahead of the anchor: pull it back to this gun's distance
+          gunAnchor.position.lerpVectors(hipP, adsP, adsK * adsK * (3 - 2 * adsK));
+        } else gunAnchor.position.copy(hipP);
+      } else {
+        const type = (g && g.type) || 'rifle', id = (g && g.id) || '';
+        const A = XrAds.of(type, id);
+        const aiming = !!(p && (p.adsT || 0) > 0.02 && !p.reloading);
+        adsK = adsBlend.step(lastDt || 0.016, aiming, XrAds.SETTLE);
+        adsInfo.k = adsK; adsInfo.relief = A.relief; adsInfo.old = false; adsInfo.id = id;
+        const s = (o.sight && o.sight()) || (g && g.sightDir) || { x: 0, y: 0, z: 0, dx: 0, dy: 0, dz: -1 };
+        const gs = (g && g.gunScale) || 1;
+        const loc = XrAds.localAdsPose([s.x || 0, s.y || 0, s.z || 0], [s.dx || 0, s.dy || 0, s.dz == null ? -1 : s.dz], A.relief, gs);
+        adsLocalP.set(loc.px, loc.py, loc.pz); adsLocalQ.set(loc.qx, loc.qy, loc.qz, loc.qw);
+        hipLocalP.copy(gun.position); hipLocalQ.copy(gun.quaternion);
+        if (adsK > 0) {
+          gun.position.lerpVectors(hipLocalP, adsLocalP, adsK);
+          gun.quaternion.copy(hipLocalQ).slerp(adsLocalQ, adsK);
+        }
+        gunAnchor.position.lerpVectors(hipP, eyeP, adsK);             // sight is relief metres in front of the eye along the aim
+        // the default camera near plane is 0.1 m, which would clip a close optic (the M4 sits 8 cm from the eye).
+        // pull it in while aiming so you can see through the glass; the stock behind the camera is already out of view.
+        camera.near = adsK > 0.4 ? Math.min(camNear0, XrAds.HEAD_NEAR) : camNear0;
+        camera.updateProjectionMatrix();
+      }
       if (glove && adsK < 0.01) { gunAnchor.updateMatrixWorld(true); glove.getWorldPosition(gripW); dolly.worldToLocal(gripW); gripErr = gripW.distanceTo(h.grip.position); }   // (checked by the test) the gun's grip is in the hand
       // hands: the game's own gloves at this gun's grip and fore-end spots (no forearms: they crowded the left eye). The right glove is always
       // on the grip; the left one appears on the fore-end while the left grip holds the gun or you aim down sights.
@@ -165,6 +197,21 @@ const XrMode = (function () {
       for (const m of h.grip.children) m.visible = false;
       const L = hands.left; if (L) for (const m of L.grip.children) if (m !== mapMesh) m.visible = false;
       scope(p);
+    }
+    // called from screen.js at the end of the gun pose (updateView runs after xr.update and would otherwise
+    // put the gun back at the hip). Locks the sight on the eye's -Z at the gun's eye relief.
+    function alignAds() {
+      if (opts.oldads || !adsBlend || adsK <= 0) return;
+      const g = o.gunParts && o.gunParts();
+      const type = (g && g.type) || 'rifle', id = (g && g.id) || '';
+      const A = typeof XrAds !== 'undefined' ? XrAds.of(type, id) : { relief: 0.14 };
+      const s = (o.sight && o.sight()) || (g && g.sightDir) || { x: 0, y: 0, z: 0, dx: 0, dy: 0, dz: -1 };
+      const gs = (g && g.gunScale) || 1;
+      const loc = XrAds.localAdsPose([s.x || 0, s.y || 0, s.z || 0], [s.dx || 0, s.dy || 0, s.dz == null ? -1 : s.dz], A.relief, gs);
+      adsLocalP.set(loc.px, loc.py, loc.pz); adsLocalQ.set(loc.qx, loc.qy, loc.qz, loc.qw);
+      hipLocalP.copy(gun.position); hipLocalQ.copy(gun.quaternion);
+      gun.position.lerpVectors(hipLocalP, adsLocalP, adsK);
+      gun.quaternion.copy(hipLocalQ).slerp(adsLocalQ, adsK);
     }
     // ---- sniper scope: while aiming a sniper, a small camera renders a 4x picture into the lens (the whole view never zooms: that makes people sick) ----
     const scopeRT = new THREE.WebGLRenderTarget(384, 384), scopeCam = new THREE.PerspectiveCamera(10, 1, 0.35, 160);
@@ -469,15 +516,44 @@ const XrMode = (function () {
       const h = !opts.gaze && hands.right;
       if (h) { rP.copy(h.grip.position); supportHand(); handsAim(tgtQ); }
       else { camera.matrixWorld.decompose(v3, q4, tmpS); dollyInv.copy(dolly.quaternion).invert(); tgtQ.copy(dollyInv).multiply(q4); rP.copy(camera.position); }
-      if (!aimInit) { aimLocal.copy(tgtQ); aimInit = true; } else { const gp = o.gunParts && o.gunParts(); aimLocal.slerp(tgtQ, Math.min(1, XrFeel.aimRate((gp && gp.type) || 'rifle', twoHand, adsK > 0.5 ? adsOf().smooth : 0) * lastDt)); }   // heavier guns trail the hand a touch; steadier while aiming down sights or with two hands
+      if (!aimInit) { aimLocal.copy(tgtQ); aimInit = true; } else { const gp = o.gunParts && o.gunParts(); const adsSmooth = adsK > 0.5 ? (opts.oldads ? adsOf().smooth : ((typeof XrAds !== 'undefined' && XrAds.of((gp && gp.type) || 'rifle', gp && gp.id).aimRate) || 28)) : 0; aimLocal.slerp(tgtQ, Math.min(1, XrFeel.aimRate((gp && gp.type) || 'rifle', twoHand, adsSmooth) * lastDt)); }   // heavier guns trail the hand a touch; steadier while aiming down sights or with two hands
       aimQ.copy(dolly.quaternion).multiply(aimLocal);                // world aim (the gun in the hand follows this)
       fwd.set(0, 0, -1).applyQuaternion(aimQ);
       v3.copy(rP).applyMatrix4(dolly.matrixWorld);
-      // Fire ray: from the muzzle (or the grip) along the aim. Visual recoil is look only, so the direction is the (smoothed) controller, not the kicked barrel — the red dot then stays on the shot.
-      // The rules fire from your eye; we aim the eye at the point this line first hits, then put the dot on the eye's fire ray so shot and dot agree even if a wall is in the way.
+      // Fire ray. New ADS: stays on the sight line, zeroed at 25 m; the shot starts at the right eye
+      // when you are aiming (the eye sits on that line) so the impact matches the reticle. ?oldads keeps
+      // the old path (muzzle-parallel, then the head is aimed at that hit).
       const gp = o.gunParts && o.gunParts();
-      if (gp && gp.muzzle) { gp.muzzle.updateMatrixWorld(true); gp.muzzle.getWorldPosition(v3); }
       const pl = lastSt && lastSt.player;
+      if (!opts.oldads && typeof XrAds !== 'undefined' && pl && h && gp && (gp.sight || gp.muzzle)) {
+        const originW = adsK > 0.7 ? eyeW.copy(eyeP).applyMatrix4(dolly.matrixWorld) : eyeW.set(pl.x, pl.eye, pl.z);
+        if (gp.sight) { gp.sight.updateMatrixWorld(true); gp.sight.getWorldPosition(sightW); }
+        else if (gp.muzzle) { gp.muzzle.updateMatrixWorld(true); gp.muzzle.getWorldPosition(sightW); }
+        // visual recoil is look only: the fire ray follows the smoothed aim, so the red dot stays on the shot
+        dirW.set(0, 0, -1).applyQuaternion(aimQ);
+        const muz = (gp.muzzle && (gp.muzzle.updateMatrixWorld(true), gp.muzzle.getWorldPosition(v3), [v3.x, v3.y, v3.z])) || null;
+        const relief = adsInfo.relief || 0.14;
+        const sightForFire = adsK > 0.7
+          ? [originW.x + dirW.x * relief, originW.y + dirW.y * relief, originW.z + dirW.z * relief]
+          : [sightW.x, sightW.y, sightW.z];
+        const fr = XrAds.fire([originW.x, originW.y, originW.z], sightForFire, [dirW.x, dirW.y, dirW.z], muz);
+        adsInfo.angleDeg = fr.angleDeg;
+        // first hit along the sight line, then fire from the origin at that point so the shot and the reticle agree
+        convO[0] = sightW.x; convO[1] = sightW.y; convO[2] = sightW.z; convD[0] = fr.dir[0]; convD[1] = fr.dir[1]; convD[2] = fr.dir[2];
+        const dSight = XrFeel.converge(convO, convD, lastSt.monsters, wallAt, 40);
+        const hx = sightW.x + fr.dir[0] * dSight, hy = sightW.y + fr.dir[1] * dSight, hz = sightW.z + fr.dir[2] * dSight;
+        tmpS.set(hx - originW.x, hy - originW.y, hz - originW.z); const L = tmpS.length() || 1;
+        fwd.copy(tmpS).multiplyScalar(1 / L);
+        convO[0] = originW.x; convO[1] = originW.y; convO[2] = originW.z; convD[0] = fwd.x; convD[1] = fwd.y; convD[2] = fwd.z;
+        const d = XrFeel.converge(convO, convD, lastSt.monsters, wallAt, 40); convDist = d;
+        v3.set(originW.x, originW.y, originW.z).addScaledVector(fwd, d);
+        reticle.visible = !menuMesh.visible; reticle.position.copy(v3); reticle.quaternion.copy(aimQ); reticle.scale.setScalar(Math.max(0.5, d / 6));
+        placeFireDot(v3, fwd, d, !menuMesh.visible);
+        const ang = XrInput.dirToAngles(fwd.x, fwd.y, fwd.z);
+        ang.origin = [originW.x, originW.y, originW.z];
+        return ang;
+      }
+      if (gp && gp.muzzle) { gp.muzzle.updateMatrixWorld(true); gp.muzzle.getWorldPosition(v3); }
       if (pl && h) {
         convO[0] = v3.x; convO[1] = v3.y; convO[2] = v3.z; convD[0] = fwd.x; convD[1] = fwd.y; convD[2] = fwd.z;
         const dBar = XrFeel.converge(convO, convD, lastSt.monsters, wallAt, 40);
@@ -600,7 +676,7 @@ const XrMode = (function () {
         if (renderer.xr.setFoveation) renderer.xr.setFoveation(1);
         session = s; aimInit = false; bodyYaw = o.playerYaw(); turn.reset(); hudMesh.visible = true; btn.textContent = 'EXIT VR'; btn.hidden = true;
         s.addEventListener('end', () => {
-          session = null; inter.clear(); renderer.xr.enabled = false; vig.visible = false; hudMesh.visible = false; reticle.visible = false; fireDot.visible = false; menuMesh.visible = false;
+          session = null; inter.clear(); renderer.xr.enabled = false; vig.visible = false; hudMesh.visible = false; reticle.visible = false; fireDot.visible = false; menuMesh.visible = false; if (adsBlend) adsBlend.reset(); camera.near = camNear0; camera.updateProjectionMatrix();
           dolly.position.set(0, 0, 0); dolly.rotation.set(0, 0, 0); if (gun.parent !== camera) camera.add(gun);
           for (const m of (o.arms || [])) m.visible = true; if (mapHeld && o.map) o.map.open(false); mapHeld = false; mapK = 0; mapMesh.visible = false;
           btn.textContent = 'ENTER VR'; btn.hidden = false; if (onEnd) onEnd();
@@ -631,7 +707,7 @@ const XrMode = (function () {
       btn.style.left = on ? '10px' : '50%'; btn.style.top = on ? 'auto' : '14px'; btn.style.bottom = on ? '10px' : 'auto';
       btn.style.transform = on ? 'none' : 'translateX(-50%)'; btn.style.padding = on ? '8px 16px' : '18px 44px'; btn.style.fontSize = on ? '15px' : '28px';
     }
-    return { comfort: () => Object.assign({}, comfort), setComfort, poseGun, dropMag: dropMagFrom, update, aim, pad, headPose, headYaw, handYaw, walkYaw, turnSpeed: turnSpeedOf, snapDeg: snapDegOf, pulse, aimDir, corner, grab, questText, canFire, takeReload, onReloadStart, menuOpen: () => menuMesh.visible, menuCanvas: () => vm.canvas, renderScope, menuHit: (u, v) => { const t = vm.hit(u, v); return t ? t.title : null; }, shotFx, hitFx, hitMark, feel: () => ({ conv: convDist, shotN, hitN, kick: lastKick, rot: recRot.x, back: recBack.x, marker: hitMk.visible, dot: fireDot.visible ? fireDotPos.toArray() : null }), menuTiles: () => { const L = vm.layout; if (!L) return []; const W = XrMenu.W, H = XrMenu.H, V = XrMenu.VIEW, sc = vm.scroll; return L.tiles.map((t) => ({ title: t.title, disabled: !!t.disabled, u: (t.x + t.w / 2) / W, v: 1 - (t.y - sc + t.h / 2) / H, inView: t.y - sc >= 0 && t.y + t.h - sc <= V })).concat(L.exits.map((t) => ({ title: t.title, exit: true, u: (t.x + t.w / 2) / W, v: 1 - (t.y + t.h / 2) / H, inView: true }))); }, faceYaw: (y) => { bodyYaw = y; }, debug: () => ({ grab: inter.debug(), pressN, menuId: menuPlacedFor, dropN, dropping: !!dropMag, magwell: magwell.toArray(), mapShown: mapHeld, armsHidden: (o.arms || []).every((m) => !m.visible), magVisible: !!(o.gunParts() && o.gunParts().mag.visible), hover: vm.hover ? vm.hover.title : null, laserUv, scroll: vm.scroll, maxScroll: vm.maxScroll, tiles: vm.layout ? vm.layout.tiles.length : 0, exits: vm.layout ? vm.layout.exits.map((e) => e.title) : [], adsK, scopeOn, gloveOn: !!(o.arms && o.arms[0] && o.arms[0].visible), twoHand, gripErr, foreAt: (() => { const g = o.gunParts && o.gunParts(); if (!g || !g.gunBody) return null; g.gunBody.updateMatrixWorld(true); const v = g.fore.clone().applyMatrix4(g.gunBody.matrixWorld); dolly.worldToLocal(v); return [v.x, v.y, v.z].map((n) => +n.toFixed(3)); })(), hit: (u, v) => 0, menu: menuMesh.visible, menuPos: menuMesh.position.toArray(), menuScale: menuMesh.scale.toArray(), aim: aimLocal.toArray() }), menuShown: () => menuMesh.visible, smooth: () => ({ dipN, openN, open: Object.assign({}, openRec), dt: lastDt, textSpot: (() => { const L = vm.layout; if (!L) return null; for (const it of L.items) { if (it.k !== 'title' && it.k !== 'text' && it.k !== 'head') continue; const y = it.y + 24 - vm.scroll; if (y > 10 && y < XrMenu.VIEW - 10) return [0.5, 1 - y / XrMenu.H, it.k]; } return null; })(), menuK, opacity: menuMat.opacity, scale: menuMesh.scale.x / PANEL_W, ghostK, ghost: menuGhost.visible, dip: dipT > 0, hiA: hiCur.a, hi: hiMesh.visible, hiRect: hiMesh.visible ? { x: hiCur.x, y: hiCur.y, w: hiCur.w, h: hiCur.h } : null, scrollV, dragging, mapK, mapVisible: mapMesh.visible, laserDir: (hands.right && hands.right.sqOn) ? new THREE.Vector3(0, 0, -1).applyQuaternion(hands.right.sq).toArray() : null }), vigOn: () => vig.visible, presenting: () => !!session, on: (start, end) => { onStart = start; onEnd = end; }, rig: dolly };
+    return { comfort: () => Object.assign({}, comfort), setComfort, poseGun, alignAds, dropMag: dropMagFrom, update, aim, pad, headPose, headYaw, handYaw, walkYaw, turnSpeed: turnSpeedOf, snapDeg: snapDegOf, pulse, aimDir, corner, grab, questText, canFire, takeReload, onReloadStart, menuOpen: () => menuMesh.visible, menuCanvas: () => vm.canvas, renderScope, menuHit: (u, v) => { const t = vm.hit(u, v); return t ? t.title : null; }, shotFx, hitFx, hitMark, feel: () => ({ conv: convDist, shotN, hitN, kick: lastKick, rot: recRot.x, back: recBack.x, marker: hitMk.visible, dot: fireDot.visible ? fireDotPos.toArray() : null, ads: { k: adsK, angleDeg: adsInfo.angleDeg, relief: adsInfo.relief, old: !!opts.oldads, id: adsInfo.id } }), adsInfo: () => ({ k: adsK, angleDeg: adsInfo.angleDeg, relief: adsInfo.relief, old: !!opts.oldads, id: adsInfo.id }), menuTiles: () => { const L = vm.layout; if (!L) return []; const W = XrMenu.W, H = XrMenu.H, V = XrMenu.VIEW, sc = vm.scroll; return L.tiles.map((t) => ({ title: t.title, disabled: !!t.disabled, u: (t.x + t.w / 2) / W, v: 1 - (t.y - sc + t.h / 2) / H, inView: t.y - sc >= 0 && t.y + t.h - sc <= V })).concat(L.exits.map((t) => ({ title: t.title, exit: true, u: (t.x + t.w / 2) / W, v: 1 - (t.y + t.h / 2) / H, inView: true }))); }, faceYaw: (y) => { bodyYaw = y; }, debug: () => ({ grab: inter.debug(), pressN, menuId: menuPlacedFor, dropN, dropping: !!dropMag, magwell: magwell.toArray(), mapShown: mapHeld, armsHidden: (o.arms || []).every((m) => !m.visible), magVisible: !!(o.gunParts() && o.gunParts().mag.visible), hover: vm.hover ? vm.hover.title : null, laserUv, scroll: vm.scroll, maxScroll: vm.maxScroll, tiles: vm.layout ? vm.layout.tiles.length : 0, exits: vm.layout ? vm.layout.exits.map((e) => e.title) : [], adsK, scopeOn, gloveOn: !!(o.arms && o.arms[0] && o.arms[0].visible), twoHand, gripErr, foreAt: (() => { const g = o.gunParts && o.gunParts(); if (!g || !g.gunBody) return null; g.gunBody.updateMatrixWorld(true); const v = g.fore.clone().applyMatrix4(g.gunBody.matrixWorld); dolly.worldToLocal(v); return [v.x, v.y, v.z].map((n) => +n.toFixed(3)); })(), hit: (u, v) => 0, menu: menuMesh.visible, menuPos: menuMesh.position.toArray(), menuScale: menuMesh.scale.toArray(), aim: aimLocal.toArray() }), menuShown: () => menuMesh.visible, smooth: () => ({ dipN, openN, open: Object.assign({}, openRec), dt: lastDt, textSpot: (() => { const L = vm.layout; if (!L) return null; for (const it of L.items) { if (it.k !== 'title' && it.k !== 'text' && it.k !== 'head') continue; const y = it.y + 24 - vm.scroll; if (y > 10 && y < XrMenu.VIEW - 10) return [0.5, 1 - y / XrMenu.H, it.k]; } return null; })(), menuK, opacity: menuMat.opacity, scale: menuMesh.scale.x / PANEL_W, ghostK, ghost: menuGhost.visible, dip: dipT > 0, hiA: hiCur.a, hi: hiMesh.visible, hiRect: hiMesh.visible ? { x: hiCur.x, y: hiCur.y, w: hiCur.w, h: hiCur.h } : null, scrollV, dragging, mapK, mapVisible: mapMesh.visible, laserDir: (hands.right && hands.right.sqOn) ? new THREE.Vector3(0, 0, -1).applyQuaternion(hands.right.sq).toArray() : null }), vigOn: () => vig.visible, presenting: () => !!session, on: (start, end) => { onStart = start; onEnd = end; }, rig: dolly };
   }
   return { create, laserRate, LASER_SNAP };
 })();

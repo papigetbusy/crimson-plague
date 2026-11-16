@@ -70,15 +70,22 @@ async function loaderChecks() {
     let magMesh = 0; M.groups.mag.traverse((o) => { if (o.isMesh) magMesh++; });
     t(id + ' magazine is its own mesh, not part of the body', magMesh >= 1);
     t(id + ' muzzle is on the centre line, in front of the hand and above it', A.muzzle[0] === 0 && A.muzzle[2] < A.handGrip[2] - 0.1 && A.muzzle[1] > A.handGrip[1], A.muzzle.map((v) => v.toFixed(3)));
-    t(id + ' front sight (ADS anchor) is on the centre line, above the bore and behind the muzzle', A.sightDot[0] === 0 && A.sightDot[1] > A.muzzle[1] && A.sightDot[2] > A.muzzle[2], A.sightDot.map((v) => v.toFixed(3)));
+    t(id + ' ADS sight (rear empty or optic centre) is on the centre line, above the bore and behind the muzzle', A.sightDot[0] === 0 && A.sightDot[1] > A.muzzle[1] && A.sightDot[2] > A.muzzle[2], A.sightDot.map((v) => v.toFixed(3)));
     t(id + ' right hand is on the same grip spot as every voxel gun', Math.abs(A.handGrip[1] - GlbGuns.GRIP_TARGET[1]) < 1e-9 && Math.abs(A.handGrip[2] - GlbGuns.GRIP_TARGET[2]) < 1e-9);
     t(id + ' magazine pivot (mag_well) is below the bore', A.magPivot[1] < A.muzzle[1], A.magPivot.map((v) => v.toFixed(3)));
     t(id + ' triangle count stays in the low-poly budget', M.tris >= 200 && M.tris <= 2500, M.tris);
     t(id + ' moving part is named ' + slide, true);
-    let steel = null, rest = null; M.groups.body.traverse((o) => { if (o.isMesh && o.material.type === 'MeshStandardMaterial') steel = o.material; if (o.isMesh && o.material.type === 'MeshPhongMaterial') rest = o.material; });
+    let steel = null, rest = null; M.groups.body.traverse((o) => { if (o.isMesh && o.material.type === 'MeshStandardMaterial' && o.material.metalness >= 0.99) steel = o.material; if (o.isMesh && o.material.type === 'MeshPhongMaterial') rest = o.material; });
     t(id + ' steel uses the locked 1911 sheen (metalness 1, roughness about 0.3, env 1.7, tint 1.3) and wood/polymer is not cooled', !!steel && steel.metalness === 1 && Math.abs(steel.roughness - 0.3) < 0.01 && steel.envMapIntensity === 1.7 && Math.abs(steel.color.r - 1.3) < 0.02 && (!rest || (rest.color.r > 0.9 && rest.color.g > 0.9)));
-    let housing = 0; M.groups.body.traverse((o) => { if (o.name === 'red_dot') housing++; });
-    t(id + ' has no on-gun red-dot housing (only the fire-ray dot)', housing === 0);
+    let housing = 0, optic = 0, lens = 0; M.groups.body.traverse((o) => { if (o.name === 'red_dot') housing++; if (o.name === 'm4_optic') optic++; if (o.name === 'm4_optic_lens') lens++; });
+    t(id + ' has no old on-gun red-dot housing (only the fire-ray dot, and on the M4 a physical optic)', housing === 0);
+    if (id === 'rifle_m4') {
+      t('The M4 carries a physical optic on the rail, with a lens for the reticle', optic === 1 && lens === 1);
+      t('The M4 ADS sight is the optic centre, above the rail (not the empty mount)', A.opticMount && A.sightDot[1] > A.opticMount[1] + 0.02 && Math.abs(A.sightDot[2] - A.opticMount[2]) < 0.05, JSON.stringify({ sight: A.sightDot, mount: A.opticMount }));
+      t('The M4 sight line is along the bore (straight ahead)', A.sightDir && Math.abs(A.sightDir[0]) < 1e-6 && A.sightDir[2] < -0.9, A.sightDir && A.sightDir.map((v) => v.toFixed(3)));
+    } else {
+      t(id + ' has a rear-to-front sight line for ADS (not a lone front post)', A.sightDir && A.sightDir[2] < -0.5 && A.rear && A.front && A.front[2] < A.rear[2], A.sightDir && A.sightDir.map((v) => v.toFixed(3)));
+    }
   }
   { const M = G.build('pistol_service', 1); let steel = null, ivory = null; M.groups.body.traverse((o) => { if (o.isMesh && o.material.type === 'MeshStandardMaterial') steel = o.material; if (o.isMesh && o.material.type === 'MeshPhongMaterial' && o.name !== 'red_dot') ivory = o.material; });
     t('Its steel is a metal (metalness 1, roughness about 0.3) and the ivory grips are not', !!steel && steel.metalness === 1 && Math.abs(steel.roughness - 0.3) < 0.01 && !!ivory); }

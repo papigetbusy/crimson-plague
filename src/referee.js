@@ -942,7 +942,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       const fx = sy * cp, fy = sp, fz = -cy * cp;
       const rx = cy, rz = sy;                              // right
       const ux = -sy * sp, uy = cp, uz = cy * sp;          // up
-      const ex = P.x, ey = P.eye, ez = P.z;
+      const ex = P.aimOrigin ? P.aimOrigin[0] : P.x, ey = P.aimOrigin ? P.aimOrigin[1] : P.eye, ez = P.aimOrigin ? P.aimOrigin[2] : P.z;
       P.shotN = (P.shotN || 0) + 1; const charged = M.over > 0 && P.shotN % L.overEvery === 0; if (charged) events.push({ type: 'overcharge' });      // Overcharge: every 5th shot hits harder
       const vol = kit.beginShot(), bullets = GS.pellets + M.multi + vol.extra, dmgOne = GS.dmg * M.dmg * (R.frenzy > 0 ? L.frenzyDmg : 1) * (charged ? 1 + M.over : 1);
       for (let b = 0; b < bullets; b++) {
@@ -1224,6 +1224,7 @@ const FG = typeof FloorGen !== 'undefined' ? FloorGen : require('./floorgen.js')
       const mag = Math.hypot(mx, mz);
       if (mag > 1) { mx /= mag; mz /= mag; }
       const wx = rx * mx + fx * mz, wz = rz * mx + fz * mz;
+      p.aimOrigin = inp.aimOrigin || null;     // VR: a fire origin on the sight line (right eye when aiming); flat game stays at the head
       const ads = !!inp.ads && !p.reloading;   // aiming drops while reloading
       p.sprinting = !!inp.sprint && mz > 0.25 && !ads && !p.sliding;
       const CM = kit.mods();                                       // the class bonuses (and a running ultimate)
