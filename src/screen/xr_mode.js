@@ -35,6 +35,10 @@ const XrMode = (function () {
       try { localStorage.setItem(COMFORT_KEY, JSON.stringify(comfort)); } catch (e) { /* private mode: just this visit */ }
     }
     const hands = { left: null, right: null };
+    const vrHands = (typeof XrHands !== 'undefined') ? XrHands.create(THREE, { dolly, query: q }) : null;
+    const foreMark = new THREE.Group(); foreMark.name = 'xr_fore_mark';
+    const gripMark = new THREE.Group(); gripMark.name = 'xr_grip_mark';
+    let handsForce = null;
     const tmpS = new THREE.Vector3(), v3 = new THREE.Vector3(), q4 = new THREE.Quaternion(), fwd = new THREE.Vector3(), aimQ = new THREE.Quaternion(), aimP = new THREE.Vector3(), headQ = new THREE.Quaternion();
     let aimInit = false, fps = 0, fpsN = 0, fpsT = 0, moveK = 0;
 
@@ -191,11 +195,12 @@ const XrMode = (function () {
       const kr = recRot.step(lastDt), kb = recBack.step(lastDt);   // recoil: muzzle up and the gun back toward you, springing home
       if (kr || kb) { recQ.setFromAxisAngle(AX_X, kr); gunAnchor.quaternion.multiply(recQ); v3.set(0, 0, kb).applyQuaternion(q); gunAnchor.position.add(v3); }
       const gR = o.arms && o.arms[1], gL = o.arms && o.arms[0], showL = twoHand || adsK > 0.35;
-      // owner rule (2026-11-13): in VR you see the guns only, never hands or gloves. The gloves still follow the grip and fore-end spots (the gun
-      // is placed from them and the tests read them) but are never drawn; the placeholder controller shapes are hidden too.
+      // viewmodel gold-cuffed gloves and the old box/torus controller placeholders stay hidden in VR.
+      // the new leather gloves (xr_glove_*) are posed after this, and must not be hidden with the placeholders.
       if (gR) gR.visible = false; if (gL) gL.visible = false; void showL;
-      for (const m of h.grip.children) m.visible = false;
-      const L = hands.left; if (L) for (const m of L.grip.children) if (m !== mapMesh) m.visible = false;
+      const skipHand = (m) => m === mapMesh || (m && (m.name === 'xr_glove_right' || m.name === 'xr_glove_left' || m.userData && m.userData.xrGlove));
+      for (const m of h.grip.children) if (!skipHand(m)) m.visible = false;
+      const L = hands.left; if (L) for (const m of L.grip.children) if (!skipHand(m)) m.visible = false;
       scope(p);
     }
     // called from screen.js at the end of the gun pose (updateView runs after xr.update and would otherwise
@@ -502,6 +507,24 @@ const XrMode = (function () {
       hitMarkStep(dt);
       menuPanel(running, dt); menuAnim(dt);
       inter.update(st, running, dt, menuMesh.visible);
+      if (vrHands) {
+        const g = o.gunParts && o.gunParts();
+        if (g && g.gunBody) {
+          if (foreMark.parent !== g.gunBody) g.gunBody.add(foreMark);
+          if (gripMark.parent !== g.gunBody) g.gunBody.add(gripMark);
+          if (g.fore) foreMark.position.copy(g.fore);
+          // sit on the same grip point as the (hidden) viewmodel hand; never parent to that hand, it is invisible
+          if (o.arms && o.arms[1]) gripMark.position.copy(o.arms[1].position);
+        }
+        const type = (g && g.type) || 'rifle';
+        vrHands.update({
+          presenting: !!session, left: hands.left, right: hands.right, type,
+          gripObj: gripMark.parent ? gripMark : null, foreObj: foreMark.parent ? foreMark : null,
+          twoHand, pistolCup: type === 'pistol' && twoHand,
+          reloadObj: (p && p.reloading && o.arms && o.arms[0]) || null,
+          grab: inter.debug(), adsK, camera, forceEmpty: handsForce === 'empty'
+        });
+      }
       laser(dt);
       hudT -= dt; if (hudT <= 0) { hudT = 0.1; drawHud(st, running); hudTex.needsUpdate = true; }
     }
@@ -707,7 +730,7 @@ const XrMode = (function () {
       btn.style.left = on ? '10px' : '50%'; btn.style.top = on ? 'auto' : '14px'; btn.style.bottom = on ? '10px' : 'auto';
       btn.style.transform = on ? 'none' : 'translateX(-50%)'; btn.style.padding = on ? '8px 16px' : '18px 44px'; btn.style.fontSize = on ? '15px' : '28px';
     }
-    return { comfort: () => Object.assign({}, comfort), setComfort, poseGun, alignAds, dropMag: dropMagFrom, update, aim, pad, headPose, headYaw, handYaw, walkYaw, turnSpeed: turnSpeedOf, snapDeg: snapDegOf, pulse, aimDir, corner, grab, questText, canFire, takeReload, onReloadStart, menuOpen: () => menuMesh.visible, menuCanvas: () => vm.canvas, renderScope, menuHit: (u, v) => { const t = vm.hit(u, v); return t ? t.title : null; }, shotFx, hitFx, hitMark, feel: () => ({ conv: convDist, shotN, hitN, kick: lastKick, rot: recRot.x, back: recBack.x, marker: hitMk.visible, dot: fireDot.visible ? fireDotPos.toArray() : null, ads: { k: adsK, angleDeg: adsInfo.angleDeg, relief: adsInfo.relief, old: !!opts.oldads, id: adsInfo.id } }), adsInfo: () => ({ k: adsK, angleDeg: adsInfo.angleDeg, relief: adsInfo.relief, old: !!opts.oldads, id: adsInfo.id }), menuTiles: () => { const L = vm.layout; if (!L) return []; const W = XrMenu.W, H = XrMenu.H, V = XrMenu.VIEW, sc = vm.scroll; return L.tiles.map((t) => ({ title: t.title, disabled: !!t.disabled, u: (t.x + t.w / 2) / W, v: 1 - (t.y - sc + t.h / 2) / H, inView: t.y - sc >= 0 && t.y + t.h - sc <= V })).concat(L.exits.map((t) => ({ title: t.title, exit: true, u: (t.x + t.w / 2) / W, v: 1 - (t.y + t.h / 2) / H, inView: true }))); }, faceYaw: (y) => { bodyYaw = y; }, debug: () => ({ grab: inter.debug(), pressN, menuId: menuPlacedFor, dropN, dropping: !!dropMag, magwell: magwell.toArray(), mapShown: mapHeld, armsHidden: (o.arms || []).every((m) => !m.visible), magVisible: !!(o.gunParts() && o.gunParts().mag.visible), hover: vm.hover ? vm.hover.title : null, laserUv, scroll: vm.scroll, maxScroll: vm.maxScroll, tiles: vm.layout ? vm.layout.tiles.length : 0, exits: vm.layout ? vm.layout.exits.map((e) => e.title) : [], adsK, scopeOn, gloveOn: !!(o.arms && o.arms[0] && o.arms[0].visible), twoHand, gripErr, foreAt: (() => { const g = o.gunParts && o.gunParts(); if (!g || !g.gunBody) return null; g.gunBody.updateMatrixWorld(true); const v = g.fore.clone().applyMatrix4(g.gunBody.matrixWorld); dolly.worldToLocal(v); return [v.x, v.y, v.z].map((n) => +n.toFixed(3)); })(), hit: (u, v) => 0, menu: menuMesh.visible, menuPos: menuMesh.position.toArray(), menuScale: menuMesh.scale.toArray(), aim: aimLocal.toArray() }), menuShown: () => menuMesh.visible, smooth: () => ({ dipN, openN, open: Object.assign({}, openRec), dt: lastDt, textSpot: (() => { const L = vm.layout; if (!L) return null; for (const it of L.items) { if (it.k !== 'title' && it.k !== 'text' && it.k !== 'head') continue; const y = it.y + 24 - vm.scroll; if (y > 10 && y < XrMenu.VIEW - 10) return [0.5, 1 - y / XrMenu.H, it.k]; } return null; })(), menuK, opacity: menuMat.opacity, scale: menuMesh.scale.x / PANEL_W, ghostK, ghost: menuGhost.visible, dip: dipT > 0, hiA: hiCur.a, hi: hiMesh.visible, hiRect: hiMesh.visible ? { x: hiCur.x, y: hiCur.y, w: hiCur.w, h: hiCur.h } : null, scrollV, dragging, mapK, mapVisible: mapMesh.visible, laserDir: (hands.right && hands.right.sqOn) ? new THREE.Vector3(0, 0, -1).applyQuaternion(hands.right.sq).toArray() : null }), vigOn: () => vig.visible, presenting: () => !!session, on: (start, end) => { onStart = start; onEnd = end; }, rig: dolly };
+    return { comfort: () => Object.assign({}, comfort), setComfort, poseGun, alignAds, handsForce: (v) => { handsForce = v || null; }, dropMag: dropMagFrom, update, aim, pad, headPose, headYaw, handYaw, walkYaw, turnSpeed: turnSpeedOf, snapDeg: snapDegOf, pulse, aimDir, corner, grab, questText, canFire, takeReload, onReloadStart, menuOpen: () => menuMesh.visible, menuCanvas: () => vm.canvas, renderScope, menuHit: (u, v) => { const t = vm.hit(u, v); return t ? t.title : null; }, shotFx, hitFx, hitMark, feel: () => ({ conv: convDist, shotN, hitN, kick: lastKick, rot: recRot.x, back: recBack.x, marker: hitMk.visible, dot: fireDot.visible ? fireDotPos.toArray() : null, ads: { k: adsK, angleDeg: adsInfo.angleDeg, relief: adsInfo.relief, old: !!opts.oldads, id: adsInfo.id } }), adsInfo: () => ({ k: adsK, angleDeg: adsInfo.angleDeg, relief: adsInfo.relief, old: !!opts.oldads, id: adsInfo.id }), menuTiles: () => { const L = vm.layout; if (!L) return []; const W = XrMenu.W, H = XrMenu.H, V = XrMenu.VIEW, sc = vm.scroll; return L.tiles.map((t) => ({ title: t.title, disabled: !!t.disabled, u: (t.x + t.w / 2) / W, v: 1 - (t.y - sc + t.h / 2) / H, inView: t.y - sc >= 0 && t.y + t.h - sc <= V })).concat(L.exits.map((t) => ({ title: t.title, exit: true, u: (t.x + t.w / 2) / W, v: 1 - (t.y + t.h / 2) / H, inView: true }))); }, faceYaw: (y) => { bodyYaw = y; }, debug: () => ({ grab: inter.debug(), pressN, menuId: menuPlacedFor, dropN, dropping: !!dropMag, magwell: magwell.toArray(), mapShown: mapHeld, armsHidden: (o.arms || []).every((m) => !m.visible), magVisible: !!(o.gunParts() && o.gunParts().mag.visible), hover: vm.hover ? vm.hover.title : null, laserUv, scroll: vm.scroll, maxScroll: vm.maxScroll, tiles: vm.layout ? vm.layout.tiles.length : 0, exits: vm.layout ? vm.layout.exits.map((e) => e.title) : [], adsK, scopeOn, gloveOn: !!(o.arms && o.arms[0] && o.arms[0].visible), handsOn: !!(vrHands && vrHands.visible()), vrHands: vrHands ? vrHands.status() : { on: false, noHands: true }, twoHand, gripErr, foreAt: (() => { const g = o.gunParts && o.gunParts(); if (!g || !g.gunBody) return null; g.gunBody.updateMatrixWorld(true); const v = g.fore.clone().applyMatrix4(g.gunBody.matrixWorld); dolly.worldToLocal(v); return [v.x, v.y, v.z].map((n) => +n.toFixed(3)); })(), hit: (u, v) => 0, menu: menuMesh.visible, menuPos: menuMesh.position.toArray(), menuScale: menuMesh.scale.toArray(), aim: aimLocal.toArray() }), menuShown: () => menuMesh.visible, smooth: () => ({ dipN, openN, open: Object.assign({}, openRec), dt: lastDt, textSpot: (() => { const L = vm.layout; if (!L) return null; for (const it of L.items) { if (it.k !== 'title' && it.k !== 'text' && it.k !== 'head') continue; const y = it.y + 24 - vm.scroll; if (y > 10 && y < XrMenu.VIEW - 10) return [0.5, 1 - y / XrMenu.H, it.k]; } return null; })(), menuK, opacity: menuMat.opacity, scale: menuMesh.scale.x / PANEL_W, ghostK, ghost: menuGhost.visible, dip: dipT > 0, hiA: hiCur.a, hi: hiMesh.visible, hiRect: hiMesh.visible ? { x: hiCur.x, y: hiCur.y, w: hiCur.w, h: hiCur.h } : null, scrollV, dragging, mapK, mapVisible: mapMesh.visible, laserDir: (hands.right && hands.right.sqOn) ? new THREE.Vector3(0, 0, -1).applyQuaternion(hands.right.sq).toArray() : null }), vigOn: () => vig.visible, presenting: () => !!session, on: (start, end) => { onStart = start; onEnd = end; }, rig: dolly };
   }
   return { create, laserRate, LASER_SNAP };
 })();

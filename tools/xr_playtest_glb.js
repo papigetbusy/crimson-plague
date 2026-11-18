@@ -49,10 +49,14 @@ module.exports = function (X) {
         return { n: list.length, list, ads: G.ref.snapshot().player.adsT, dot: d };
       });
       await shot(S, 'mesh_1911_ads');
-      // owner rule: in VR you see the gun only. While aiming with both hands (where the support glove used to show), no glove, forearm or placeholder controller hand is drawn
-      const hands = await S.ev(() => { const G = window.__game, d = G.xr.debug(); const ph = []; G.xr.rig.traverse((o) => { if (!o.isMesh) return; for (let p = o; p; p = p.parent) if (!p.visible) return; const gp = o.geometry && o.geometry.parameters || {};
-        if ((o.geometry.type === 'BoxGeometry' && gp.width === 0.045 && gp.depth === 0.11) || (o.geometry.type === 'TorusGeometry' && gp.radius === 0.04)) ph.push(o.geometry.type); }); return { armsHidden: d.armsHidden, gloveOn: d.gloveOn, placeholders: ph }; });
-      rec(G, 'In VR no hand, glove or forearm is drawn on the 1911 (aiming with both hands too): only the gun', hands.armsHidden && !hands.gloveOn && hands.placeholders.length === 0, JSON.stringify(hands));
+      // leather VR gloves are drawn; the old viewmodel arms and placeholder controller boxes stay hidden
+      const hands = await S.ev(() => { const G = window.__game, d = G.xr.debug(); const ph = []; const vis = [];
+        const shown = (o) => { for (let p = o; p; p = p.parent) if (p.visible === false) return false; return true; };
+        G.scene.traverse((o) => { if (!o.isMesh) return; if (!shown(o)) return; const gp = o.geometry && o.geometry.parameters || {};
+          if ((o.geometry.type === 'BoxGeometry' && gp.width === 0.045 && gp.depth === 0.11) || (o.geometry.type === 'TorusGeometry' && gp.radius === 0.04)) ph.push(o.geometry.type); });
+        G.scene.traverse((o) => { if ((o.name === 'xr_glove_right' || o.name === 'xr_glove_left') && shown(o)) vis.push(o.name); });
+        return { armsHidden: d.armsHidden, gloveOn: d.gloveOn, placeholders: ph, handsOn: d.handsOn, vrHands: d.vrHands, vis }; });
+      rec(G, 'In VR black leather gloves are drawn (the old viewmodel gloves and placeholder controller hands stay hidden)', hands.armsHidden && !hands.gloveOn && hands.placeholders.length === 0 && hands.handsOn && hands.vrHands && hands.vrHands.right && hands.vrHands.left && hands.vis.length >= 2, JSON.stringify(hands));
       await S.hold('right', 'trigger', true); await S.frames(3); await S.hold('right', 'trigger', false); await S.frames(2);
       const r = await S.ev(() => { const G = window.__game, sh = G.lastShot(), d = G.xr.feel().dot; if (!sh || !d) return { ok: false }; const V = G.THREE.Vector3, o = new V(sh.ox, sh.oy, sh.oz), e = new V(sh.ex, sh.ey, sh.ez), dir = e.clone().sub(o).normalize(), q = new V(d[0], d[1], d[2]).sub(o), err = q.clone().sub(dir.clone().multiplyScalar(q.dot(dir))).length();   // how far the dot is off the shot's line (along-the-line depth on a grazing wall does not matter to the eye)
         return { ok: err <= 0.06 + 0.01 * (sh.t || 10), err, hit: sh.hit, t: sh.t, o: [sh.ox, sh.oy, sh.oz].map((v) => +v.toFixed(2)), e: [sh.ex, sh.ey, sh.ez].map((v) => +v.toFixed(2)), d: d.map((v) => +v.toFixed(2)), mons: G.ref.snapshot().monsters.length }; });
@@ -62,6 +66,18 @@ module.exports = function (X) {
       await S.ev(() => { const r = window.__game.ref; r.setCfg({ spread: r.defaults.spread, spreadAds: r.defaults.spreadAds }); });
       const errs = await S.ev(() => window.__fx.errors.slice(0, 3));
       rec(G, 'No script errors with the mesh gun and walls', errs.length === 0, errs.join(' | ').slice(0, 200));
+    } finally { await S.close(); }
+    // ?nohands brings back the guns-only look
+    S = await open('?sandbox&nohands');
+    try {
+      await S.ev(() => { const r = window.__game.ref; r.equipGun('pistol_service', 1); }); await S.frames(24);
+      await S.hold('left', 'trigger', true); await S.frames(20);
+      const h2 = await S.ev(() => { const G = window.__game, d = G.xr.debug(); const vis = [];
+        const shown = (o) => { for (let p = o; p; p = p.parent) if (p.visible === false) return false; return true; };
+        G.scene.traverse((o) => { if ((o.name === 'xr_glove_right' || o.name === 'xr_glove_left') && shown(o)) vis.push(o.name); });
+        return { armsHidden: d.armsHidden, gloveOn: d.gloveOn, handsOn: d.handsOn, noHands: !!(d.vrHands && d.vrHands.noHands), vis }; });
+      rec(G, '?nohands hides the VR gloves and keeps the guns-only look', h2.armsHidden && !h2.gloveOn && !h2.handsOn && h2.noHands && h2.vis.length === 0, JSON.stringify(h2));
+      await S.hold('left', 'trigger', false);
     } finally { await S.close(); }
     // the old look on request
     S = await open('?sandbox&voxelguns&voxelwalls');
