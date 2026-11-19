@@ -6,7 +6,7 @@ fs.mkdirSync(out, { recursive: true });
 const IDS = (process.env.ONLY ? process.env.ONLY.split(',') : null) || ['pistol_cannon', 'pistol_machine', 'pistol_duelist', 'smg_drum', 'smg_bullpup', 'shotgun_pump', 'shotgun_blunderbuss', 'shotgun_double', 'shotgun_combat', 'sniper_bolt', 'sniper_antimat', 'sniper_marksman', 'sniper_rail', 'hmg_belt', 'hmg_minigun', 'hmg_drum', 'hmg_chain', 'pistol_service', 'rifle', 'rifle_m4', 'smg_tactical', 'smg_compact'];
 const clearSpot = () => { const G = window.__game, r = G.ref; r.clearWave(); const m = r.map, C = m.CELL; for (let z = 4; z < m.H - 4; z++) for (let x = 4; x < m.W - 4; x++) { let ok = true; for (let dz = -3; dz <= 3 && ok; dz++) for (let dx = -3; dx <= 3; dx++) if (m.solid && m.solid(x + dx, z + dz)) { ok = false; break; } if (ok) { r.place((x + 0.5) * C, (z + 0.5) * C, Math.PI / 2); return true; } } return false; };
 (async () => {
-  const S = await launch({ root, page: 'site/index.html', query });
+  const S = await launch({ root, page: 'site/index.html', query, w: +process.env.W || undefined, h: +process.env.H || undefined });
   await S.enterVR();
   await S.head({ p: [0, 0, 0], q: [0, 0, 0, 1] });
   await S.hand('left', { p: [-0.25, -0.6, -0.1], q: [0, 0, 0, 1] });
