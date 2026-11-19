@@ -10,7 +10,7 @@ const Minimap = (function () {
     const small = $('miniMap'), big = $('bigMap'), bigBox = $('mapOverlay');
     const sctx = small.getContext('2d'), bctx = big.getContext('2d');
     const tile = document.createElement('canvas'), tctx = tile.getContext('2d');   // one pixel per cell, scaled up when drawn
-    let img = null, floorId = -1, timer = 0, open = false, lastDoorOpen = null;
+    let img = null, floorId = -1, timer = 0, open = false, lastDoorOpen = null, fit = false;   // fit: the big map zooms to what you have explored (the VR palm map)
 
     function cellColour(ch, seen) {
       if (!seen) return COL.unseen;
@@ -79,6 +79,16 @@ const Minimap = (function () {
       for (const f of (st.coop && st.coop.peers) || []) marker(ctx, px(f.x), pz(f.z), Math.max(3, s * 1.1), f.down ? '#ff6a6a' : '#5aa0e8');     // your friends (red when downed: go stand next to them)
       arrow(ctx, px(st.player.x), pz(st.player.z), st.player.yaw, Math.max(3, s * 1.1));
     }
+    function seenWindow(map, st) {                                      // the square of cells around everything explored (and you), padded, at least 24 wide
+      const e = st.explored; if (!e) return null;
+      let x0 = map.W, z0 = map.H, x1 = -1, z1 = -1;
+      for (let z = 0; z < map.H; z++) for (let x = 0; x < map.W; x++) if (e[z * map.W + x]) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (z < z0) z0 = z; if (z > z1) z1 = z; }
+      if (x1 < 0) return null;
+      const inc = (wx, wz) => { const cx = Math.floor(wx / map.CELL), cz = Math.floor(wz / map.CELL); x0 = Math.min(x0, cx); x1 = Math.max(x1, cx); z0 = Math.min(z0, cz); z1 = Math.max(z1, cz); };
+      inc(st.player.x, st.player.z); if (st.door) inc(st.door.x, st.door.z);   // you and the exit gate are always on the card
+      const w = Math.min(map.W, Math.max(24, x1 - x0 + 5, z1 - z0 + 5)), cx = (x0 + x1 + 1) / 2, cz = (z0 + z1 + 1) / 2;
+      return [cx - w / 2, cz - w / 2, w];
+    }
     function setOpen(v) { open = v; bigBox.hidden = !v; timer = 0; }
     function toggle() { setOpen(!open); }
     small.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); toggle(); });
@@ -93,9 +103,9 @@ const Minimap = (function () {
       const half = CORNER_CELLS / 2;
       const cx0 = Math.max(0, Math.min(map.W - CORNER_CELLS, st.player.x / map.CELL - half)), cz0 = Math.max(0, Math.min(map.H - CORNER_CELLS, st.player.z / map.CELL - half));
       draw(sctx, small, map, st, Math.floor(cx0), Math.floor(cz0), Math.min(CORNER_CELLS, map.W));
-      if (open) draw(bctx, big, map, st, 0, 0, map.W);
+      if (open) { const w = fit ? seenWindow(map, st) : null; if (w) draw(bctx, big, map, st, w[0], w[1], w[2]); else draw(bctx, big, map, st, 0, 0, map.W); }
     }
-    return { update, toggle, setOpen, get isOpen() { return open; } };
+    return { update, toggle, setOpen, fitExplored: (v) => { fit = !!v; timer = 0; }, get isOpen() { return open; } };
   }
   return { create };
 })();

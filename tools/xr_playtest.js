@@ -297,6 +297,22 @@ async function controlsGroup() {
     rec(G, 'Double-tap Y shows the map', mp, 'map=' + mp);
     await S.press('left', 'y', 3); await S.frames(20);
     rec(G, 'Tap Y closes the map without pausing', !(await debug(S)).mapShown && !(await S.ev(() => window.__game.xr.menuShown())), '');
+    await S.frames(10);
+    // palm map: turn the left hand palm-up (the controller's bottom toward the eyes) and the floor map lies on that hand; turn it back and it goes
+    {
+      const hp = await S.ev(() => window.__fx.head.p.slice()), lp = [hp[0] - 0.12, hp[1] - 0.38, hp[2] - 0.3];
+      const te = [hp[0] - lp[0], hp[1] - lp[1], hp[2] - lp[2]], tl = Math.hypot(...te), t = te.map((v) => v / tl);
+      // quaternion turning (0,-1,0) onto t: (a x t, 1 + a.t)
+      let qq = [-t[2], 0, t[0], 1 - t[1]]; const ql = Math.hypot(...qq); qq = qq.map((v) => v / ql);
+      const lq0 = await S.ev(() => window.__fx.hands.left.q.slice()), lp0 = await S.ev(() => window.__fx.hands.left.p.slice());
+      await S.hand('left', { p: lp, q: qq }); await S.frames(30);
+      const pd = await S.ev(() => window.__game.xr.smooth());
+      await shot(S, 'palm_map');
+      rec(G, 'Left palm up shows the map on the hand', pd.mapVisible && pd.palmUp, 'palmDot ' + pd.palmDot + ' mapK ' + pd.mapK);
+      await S.hand('left', { p: lp0, q: lq0 }); await S.frames(30);
+      const pd2 = await S.ev(() => window.__game.xr.smooth());
+      rec(G, 'Turning the left hand back hides the map', !pd2.mapVisible && !pd2.palmUp, 'palmDot ' + pd2.palmDot);
+    }
     await S.frames(20);
     await S.hold('left', 'y', true); await S.frames(30); await S.hold('left', 'y', false); await S.frames(20);
     const mg = await S.ev(() => window.__game.xr.menuShown());

@@ -545,8 +545,8 @@ const XrMode = (function () {
       const lb = $('lockBox'); if (lb && getComputedStyle(lb).display !== 'none' && lb.offsetParent !== null) { center(txt('lockTxt'), 24, '#cfa54a'); const b0 = txt('lockB0'), b1 = txt('lockB1'); center((b0 ? 'Grip: ' + b0 : '') + (b1 ? '    Right stick down: ' + b1 : ''), 22); }
       const fc = $('floorCard'); if (fc && fc.offsetParent !== null && txt('floorCard')) center('Grip (reach or point at it): pick up  ' + txt('floorCard').slice(0, 44), 22, '#ecdfc6');
       const sh = $('stashHint'); if (sh && !sh.hidden) center('STASH CHEST: grip', 22, '#cfa54a');
-      const mm = o.map && o.map.small;                                // the corner map, bottom left of the view (hold the LEFT GRIP for the whole floor in your hand)
-      if (mm && mm.width) { hx.shadowBlur = 0; hx.globalAlpha = 0.9; hx.drawImage(mm, 40, 250, 170, 170); hx.globalAlpha = 1; hx.strokeStyle = '#6a2a2e'; hx.lineWidth = 3; hx.strokeRect(40, 250, 170, 170); hx.shadowBlur = 8; line('Double-tap Y: map', 40, 222, 20, '#cfa54a'); }
+      const mm = o.map && o.map.small;                                // the corner map, bottom left of the view (turn the LEFT palm up for the whole floor in your hand)
+      if (mm && mm.width && !mapMesh.visible) { hx.shadowBlur = 0; hx.globalAlpha = 0.92; hx.imageSmoothingEnabled = false; hx.drawImage(mm, 24, 140, 280, 280); hx.imageSmoothingEnabled = true; hx.globalAlpha = 1; hx.strokeStyle = '#6a2a2e'; hx.lineWidth = 3; hx.strokeRect(24, 140, 280, 280); hx.shadowBlur = 8; line('Left palm up: full map', 24, 110, 20, '#cfa54a'); }   // 280 px (was 170), clear of the health bar at y 430
       const toastE = $('padToast'); if (toastE && toastE.classList.contains('show')) center(questText(toastE.textContent), 24, '#e8c890');
     }
 
@@ -672,30 +672,61 @@ const XrMode = (function () {
     }
     function fall(dt) { if (dropMag) { dropV += 9.8 * dt; dropMag.position.y -= dropV * dt; dropMag.rotation.x += dt * 4; dropMag.rotation.z += dt * 2; if (dropMag.position.y < -2.2) { dolly.remove(dropMag); dropMag = null; } } }
     const btnOn = (g, i, th) => { const b = g && g.buttons && g.buttons[i]; return !!b && (b.pressed || b.value > (th || 0.5)); };
-    // ---- map: hold the LEFT GRIP and the floor map appears in your left hand (the game's own big map, live) ----
+    // ---- palm map (owner, 2026-11-19): turn your LEFT hand palm-up, so you look at the bottom of the left controller, and the floor map
+    //      lies on that hand like a card you are holding: explored rooms, you (arrow = facing), the exit gate, monsters, the gold road.
+    //      It rides the hand every frame, so it works while you run and look around, and fades out (150 ms) when you turn the hand back.
+    //      Guarded so it cannot pop open in a fight: not while aiming down sights, holding the gun with two hands, grabbing, or in a menu,
+    //      and the palm must face your eyes for ~0.12 s (it closes with some slack so a wobble does not flicker it). Double-tap Y still toggles
+    //      it (then it floats over the hand, as before).
     const mapCv = o.map && o.map.big, mapTex = mapCv ? new THREE.CanvasTexture(mapCv) : null;
-    const mapMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.34), new THREE.MeshBasicMaterial({ map: mapTex, transparent: true, opacity: 0.97, depthTest: false, depthWrite: false, fog: false, side: THREE.DoubleSide }));
-    mapMesh.renderOrder = 997; mapMesh.visible = false;
-    const mapFrame = new THREE.Mesh(new THREE.PlaneGeometry(0.36, 0.36), new THREE.MeshBasicMaterial({ color: 0x2a0d10, transparent: true, depthTest: false, depthWrite: false, fog: false, side: THREE.DoubleSide }));
-    mapFrame.renderOrder = 996; mapFrame.position.z = -0.001; mapMesh.add(mapFrame);
+    if (mapTex) { mapTex.minFilter = THREE.LinearFilter; mapTex.generateMipmaps = false; }
+    const PALM_MAP = 0.26;                                             // metres across (about 40 degrees at a held-out hand: easy to read)
+    const mapMesh = new THREE.Mesh(new THREE.PlaneGeometry(PALM_MAP, PALM_MAP), new THREE.MeshBasicMaterial({ map: mapTex, transparent: true, opacity: 0.97, depthTest: false, depthWrite: false, fog: false, side: THREE.DoubleSide }));
+    mapMesh.renderOrder = 999.4; mapMesh.visible = false; mapMesh.name = 'xr_palm_map';   // over the HUD strip
+    const mapFrame = new THREE.Mesh(new THREE.PlaneGeometry(PALM_MAP * 1.06, PALM_MAP * 1.06), new THREE.MeshBasicMaterial({ color: 0x2a0d10, transparent: true, depthTest: false, depthWrite: false, fog: false, side: THREE.DoubleSide }));
+    mapFrame.renderOrder = 999.2; mapFrame.position.z = -0.001; mapMesh.add(mapFrame);
     let mapHeld = false, mapT = 0, mapHost = null, mapK = 0;          // mapK: the map's 150 ms fade/grow in and out (menu smoothing)
-    // the map: double-tap Y toggles it, a single Y tap (or any menu) closes it. A button and nothing else: the old wrist-glance gesture
-    // opened it in the middle of gunfights. It floats above the left controller, turned to face you, so the gun's sight line stays clear.
-    let mapOpen = false;
+    const camUp = new THREE.Vector3();
+    let mapOpen = false, palmUp = false, palmT = 0, palmDot = -1;
+    const PALM_ON = 0.6, PALM_OFF = 0.35, PALM_HOLD = 0.12;
+    const gBot = new THREE.Vector3(), gFwd = new THREE.Vector3(), toEye = new THREE.Vector3(), mN = new THREE.Vector3(), mUp = new THREE.Vector3(), mX = new THREE.Vector3(), mM = new THREE.Matrix4(), headP = new THREE.Vector3();
+    function palmCheck(L, dt) {                                        // rig space: the controller's bottom (-Y of the grip) toward the eyes
+      gBot.set(0, -1, 0).applyQuaternion(L.grip.quaternion);
+      headP.copy(camera.position); toEye.copy(headP).sub(L.grip.position); const dist = toEye.length(); toEye.divideScalar(dist || 1);
+      palmDot = gBot.dot(toEye);
+      const busy = adsK > 0.2 || twoHand || btnOn(L.gamepad, 1, 0.5) || dist > 0.9;       // (not while the left hand grabs or holds the gun)
+      const want = !busy && (palmUp ? palmDot > PALM_OFF : palmDot > PALM_ON);
+      palmT = want ? palmT + dt : 0;
+      palmUp = want && (palmUp || palmT >= PALM_HOLD);
+    }
     function mapHand(dt, running) {
       const L = hands.left;
-      if (!running || menuMesh.visible || !L || !mapTex) mapOpen = false;
-      const show = mapOpen;
-      if (show !== mapHeld) { mapHeld = show; if (o.map) o.map.open(show); pulse('left', show ? 0.25 : 0.12, 15); }
+      if (!running || menuMesh.visible || !L || !mapTex) { mapOpen = false; palmUp = false; palmT = 0; }
+      else palmCheck(L, dt);
+      const show = mapOpen || palmUp;
+      if (show !== mapHeld) { mapHeld = show; if (o.map) { if (o.map.fit) o.map.fit(show); o.map.open(show); } pulse('left', show ? 0.25 : 0.12, 15); }
       if (mapHost !== dolly) { dolly.add(mapMesh); mapHost = dolly; }
       mapK = show ? Math.min(1, mapK + Math.min(dt, 0.05) / MENU_FADE) : Math.max(0, mapK - Math.min(dt, 0.05) / MENU_FADE);
       if (!show && (!L || !mapTex)) mapK = 0;
       mapMesh.visible = mapK > 0;
       if (!mapMesh.visible) return;
       const e = show ? ease(mapK) : mapK * mapK; mapMesh.material.opacity = 0.97 * e; mapMesh.children[0].material.opacity = e; mapMesh.scale.setScalar(0.9 + 0.1 * e);
-      mapMesh.position.copy(L.grip.position); mapMesh.position.y += 0.13;                 // just above the hand
-      mapMesh.lookAt(v3.copy(camera.position).applyMatrix4(dolly.matrixWorld));           // always turned to face you (lookAt works in world space)
-      mapT -= dt; if (mapT <= 0) { mapT = 0.2; mapTex.needsUpdate = true; }
+      if (palmUp || (!mapOpen && palmDot > 0)) {
+        // on the palm: the card lies on the hand (a hair above the controller's bottom), its face tipped halfway toward your eyes so it reads
+        // at any wrist angle, the top of the map toward your fingertips (the controller's forward)
+        gBot.set(0, -1, 0).applyQuaternion(L.grip.quaternion); gFwd.set(0, 0, -1).applyQuaternion(L.grip.quaternion);
+        toEye.copy(camera.position).sub(L.grip.position).normalize();
+        mN.copy(gBot).add(toEye).normalize();
+        camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);                           // north up as you see it, so it reads level at any wrist roll
+        mUp.copy(camUp).addScaledVector(mN, -camUp.dot(mN)); if (mUp.lengthSq() < 1e-4) mUp.copy(gFwd); mUp.normalize();
+        mX.crossVectors(mUp, mN).normalize();
+        mM.makeBasis(mX, mUp, mN); mapMesh.quaternion.setFromRotationMatrix(mM);
+        mapMesh.position.copy(L.grip.position).addScaledVector(gBot, 0.035).addScaledVector(gFwd, 0.05);
+      } else {
+        mapMesh.position.copy(L.grip.position); mapMesh.position.y += 0.13;                 // double-tap Y: just above the hand
+        mapMesh.lookAt(v3.copy(camera.position).applyMatrix4(dolly.matrixWorld));           // always turned to face you (lookAt works in world space)
+      }
+      mapT -= dt; if (mapT <= 0) { mapT = 0.15; mapTex.needsUpdate = true; }
     }
     const canFire = () => true, takeReload = () => false, onReloadStart = () => {}, poseGun = () => {};   // kept so older callers stay harmless
     const srcBuf = [];
@@ -794,7 +825,7 @@ const XrMode = (function () {
       btn.style.left = on ? '10px' : '50%'; btn.style.top = on ? 'auto' : '14px'; btn.style.bottom = on ? '10px' : 'auto';
       btn.style.transform = on ? 'none' : 'translateX(-50%)'; btn.style.padding = on ? '8px 16px' : '18px 44px'; btn.style.fontSize = on ? '15px' : '28px';
     }
-    return { comfort: () => Object.assign({}, comfort), setComfort, poseGun, alignAds, handsForce: (v) => { handsForce = v || null; }, dropMag: dropMagFrom, update, aim, pad, headPose, headYaw, handYaw, walkYaw, turnSpeed: turnSpeedOf, snapDeg: snapDegOf, pulse, aimDir, corner, grab, questText, canFire, takeReload, onReloadStart, menuOpen: () => menuMesh.visible, menuCanvas: () => vm.canvas, renderScope, menuHit: (u, v) => { const t = vm.hit(u, v); return t ? t.title : null; }, shotFx, hitFx, hitMark, feel: () => ({ conv: convDist, shotN, hitN, kick: lastKick, rot: recRot.x, back: recBack.x, marker: hitMk.visible, dot: fireDot.visible ? fireDotPos.toArray() : null, ads: { k: adsK, angleDeg: adsInfo.angleDeg, relief: adsInfo.relief, old: !!opts.oldads, id: adsInfo.id } }), adsInfo: () => ({ k: adsK, angleDeg: adsInfo.angleDeg, relief: adsInfo.relief, old: !!opts.oldads, id: adsInfo.id }), menuTiles: () => { const L = vm.layout; if (!L) return []; const W = XrMenu.W, H = XrMenu.H, V = XrMenu.VIEW, sc = vm.scroll; return L.tiles.map((t) => ({ title: t.title, disabled: !!t.disabled, u: (t.x + t.w / 2) / W, v: 1 - (t.y - sc + t.h / 2) / H, inView: t.y - sc >= 0 && t.y + t.h - sc <= V })).concat(L.exits.map((t) => ({ title: t.title, exit: true, u: (t.x + t.w / 2) / W, v: 1 - (t.y + t.h / 2) / H, inView: true }))); }, faceYaw: (y) => { bodyYaw = y; }, debug: () => ({ grab: inter.debug(), pressN, menuId: menuPlacedFor, dropN, dropping: !!dropMag, magwell: magwell.toArray(), mapShown: mapHeld, armsHidden: (o.arms || []).every((m) => !m.visible), magVisible: !!(o.gunParts() && o.gunParts().mag.visible), hover: vm.hover ? vm.hover.title : null, laserUv, scroll: vm.scroll, maxScroll: vm.maxScroll, tiles: vm.layout ? vm.layout.tiles.length : 0, exits: vm.layout ? vm.layout.exits.map((e) => e.title) : [], adsK, scopeOn, scope: { on: scopeOn, zoom: scopeZoom, fov: +scopeFov.toFixed(3), n: scopeN, res: SCOPE_RES }, gloveOn: !!(o.arms && o.arms[0] && o.arms[0].visible), handsOn: !!(vrHands && vrHands.visible()), vrHands: vrHands ? vrHands.status() : { on: false, noHands: true }, twoHand, gripErr, foreAt: (() => { const g = o.gunParts && o.gunParts(); if (!g || !g.gunBody) return null; g.gunBody.updateMatrixWorld(true); const v = g.fore.clone().applyMatrix4(g.gunBody.matrixWorld); dolly.worldToLocal(v); return [v.x, v.y, v.z].map((n) => +n.toFixed(3)); })(), hit: (u, v) => 0, menu: menuMesh.visible, menuPos: menuMesh.position.toArray(), menuScale: menuMesh.scale.toArray(), aim: aimLocal.toArray() }), menuShown: () => menuMesh.visible, smooth: () => ({ dipN, openN, open: Object.assign({}, openRec), dt: lastDt, textSpot: (() => { const L = vm.layout; if (!L) return null; for (const it of L.items) { if (it.k !== 'title' && it.k !== 'text' && it.k !== 'head') continue; const y = it.y + 24 - vm.scroll; if (y > 10 && y < XrMenu.VIEW - 10) return [0.5, 1 - y / XrMenu.H, it.k]; } return null; })(), menuK, opacity: menuMat.opacity, scale: menuMesh.scale.x / PANEL_W, ghostK, ghost: menuGhost.visible, dip: dipT > 0, hiA: hiCur.a, hi: hiMesh.visible, hiRect: hiMesh.visible ? { x: hiCur.x, y: hiCur.y, w: hiCur.w, h: hiCur.h } : null, scrollV, dragging, mapK, mapVisible: mapMesh.visible, laserDir: (hands.right && hands.right.sqOn) ? new THREE.Vector3(0, 0, -1).applyQuaternion(hands.right.sq).toArray() : null }), vigOn: () => vig.visible, presenting: () => !!session, on: (start, end) => { onStart = start; onEnd = end; }, rig: dolly };
+    return { comfort: () => Object.assign({}, comfort), setComfort, poseGun, alignAds, handsForce: (v) => { handsForce = v || null; }, dropMag: dropMagFrom, update, aim, pad, headPose, headYaw, handYaw, walkYaw, turnSpeed: turnSpeedOf, snapDeg: snapDegOf, pulse, aimDir, corner, grab, questText, canFire, takeReload, onReloadStart, menuOpen: () => menuMesh.visible, menuCanvas: () => vm.canvas, renderScope, menuHit: (u, v) => { const t = vm.hit(u, v); return t ? t.title : null; }, shotFx, hitFx, hitMark, feel: () => ({ conv: convDist, shotN, hitN, kick: lastKick, rot: recRot.x, back: recBack.x, marker: hitMk.visible, dot: fireDot.visible ? fireDotPos.toArray() : null, ads: { k: adsK, angleDeg: adsInfo.angleDeg, relief: adsInfo.relief, old: !!opts.oldads, id: adsInfo.id } }), adsInfo: () => ({ k: adsK, angleDeg: adsInfo.angleDeg, relief: adsInfo.relief, old: !!opts.oldads, id: adsInfo.id }), menuTiles: () => { const L = vm.layout; if (!L) return []; const W = XrMenu.W, H = XrMenu.H, V = XrMenu.VIEW, sc = vm.scroll; return L.tiles.map((t) => ({ title: t.title, disabled: !!t.disabled, u: (t.x + t.w / 2) / W, v: 1 - (t.y - sc + t.h / 2) / H, inView: t.y - sc >= 0 && t.y + t.h - sc <= V })).concat(L.exits.map((t) => ({ title: t.title, exit: true, u: (t.x + t.w / 2) / W, v: 1 - (t.y + t.h / 2) / H, inView: true }))); }, faceYaw: (y) => { bodyYaw = y; }, debug: () => ({ grab: inter.debug(), pressN, menuId: menuPlacedFor, dropN, dropping: !!dropMag, magwell: magwell.toArray(), mapShown: mapHeld, armsHidden: (o.arms || []).every((m) => !m.visible), magVisible: !!(o.gunParts() && o.gunParts().mag.visible), hover: vm.hover ? vm.hover.title : null, laserUv, scroll: vm.scroll, maxScroll: vm.maxScroll, tiles: vm.layout ? vm.layout.tiles.length : 0, exits: vm.layout ? vm.layout.exits.map((e) => e.title) : [], adsK, scopeOn, scope: { on: scopeOn, zoom: scopeZoom, fov: +scopeFov.toFixed(3), n: scopeN, res: SCOPE_RES }, gloveOn: !!(o.arms && o.arms[0] && o.arms[0].visible), handsOn: !!(vrHands && vrHands.visible()), vrHands: vrHands ? vrHands.status() : { on: false, noHands: true }, twoHand, gripErr, foreAt: (() => { const g = o.gunParts && o.gunParts(); if (!g || !g.gunBody) return null; g.gunBody.updateMatrixWorld(true); const v = g.fore.clone().applyMatrix4(g.gunBody.matrixWorld); dolly.worldToLocal(v); return [v.x, v.y, v.z].map((n) => +n.toFixed(3)); })(), hit: (u, v) => 0, menu: menuMesh.visible, menuPos: menuMesh.position.toArray(), menuScale: menuMesh.scale.toArray(), aim: aimLocal.toArray() }), menuShown: () => menuMesh.visible, smooth: () => ({ dipN, openN, open: Object.assign({}, openRec), dt: lastDt, textSpot: (() => { const L = vm.layout; if (!L) return null; for (const it of L.items) { if (it.k !== 'title' && it.k !== 'text' && it.k !== 'head') continue; const y = it.y + 24 - vm.scroll; if (y > 10 && y < XrMenu.VIEW - 10) return [0.5, 1 - y / XrMenu.H, it.k]; } return null; })(), menuK, opacity: menuMat.opacity, scale: menuMesh.scale.x / PANEL_W, ghostK, ghost: menuGhost.visible, dip: dipT > 0, hiA: hiCur.a, hi: hiMesh.visible, hiRect: hiMesh.visible ? { x: hiCur.x, y: hiCur.y, w: hiCur.w, h: hiCur.h } : null, scrollV, dragging, mapK, mapVisible: mapMesh.visible, palmUp, palmDot: +palmDot.toFixed(3), laserDir: (hands.right && hands.right.sqOn) ? new THREE.Vector3(0, 0, -1).applyQuaternion(hands.right.sq).toArray() : null }), vigOn: () => vig.visible, presenting: () => !!session, on: (start, end) => { onStart = start; onEnd = end; }, rig: dolly };
   }
   return { create, laserRate, LASER_SNAP };
 })();
