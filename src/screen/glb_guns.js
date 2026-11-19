@@ -16,7 +16,13 @@ const GlbGuns = (function () {
   // the game's look for a textured low-poly gun: nearest-filter pixels, lit by the torches like the voxel guns (Phong), with a little of the
   // texture glowing by itself so it never goes black in a dark hall
   function lookMat(THREE, map) {
-    if (map) { map.magFilter = THREE.NearestFilter; map.minFilter = THREE.NearestFilter; map.generateMipmaps = false; map.encoding = THREE.LinearEncoding; map.needsUpdate = true; }
+    if (map) {
+      // the 1024 px HD albedos (the gothic remakes) are smooth paintings: LINEAR + mipmaps + anisotropy, never the pixel look. The 256 px ones (1911, AK, M4, MP5, Uzi, the three pistols) keep their crisp nearest pixels.
+      const hd = map.image && (map.image.width || 0) >= 512;
+      if (hd) { map.magFilter = THREE.LinearFilter; map.minFilter = THREE.LinearMipmapLinearFilter; map.generateMipmaps = true; map.anisotropy = 8; }
+      else { map.magFilter = THREE.NearestFilter; map.minFilter = THREE.NearestFilter; map.generateMipmaps = false; }
+      map.encoding = THREE.LinearEncoding; map.needsUpdate = true;
+    }
     return new THREE.MeshPhongMaterial({ color: 0xffffff, map: map || null, emissive: 0x303030, emissiveMap: map || null, specular: 0x2a2828, shininess: 24, side: THREE.DoubleSide });
   }
   // polished steel (a GLB material with metalness >= 0.5, e.g. Wrok's blued 1911 base: metallic 1, roughness 0.3): a metal needs something to
@@ -26,6 +32,21 @@ const GlbGuns = (function () {
     // (color 1.3) and the reflection raised (1.7); metalness and roughness stay Wrok's (1 and 0.3)
     const m = new THREE.MeshStandardMaterial({ color: 0xffffff, map: map || null, metalness: Math.min(1, src.metalness), roughness: Math.max(0.22, src.roughness), envMapIntensity: 1.7, emissive: 0x18181c, emissiveMap: map || null, side: THREE.DoubleSide });
     m.color.setScalar(1.3); return m;
+  }
+  // the extra GLB materials of the remakes: smoked glass (glTF alphaMode BLEND, the P90 magazine) and glowing energy (emissiveFactor, the rail rifle's crimson channel).
+  // Both share the gun's atlas, so the painted smoked glass / painted crimson stay as the fallback if anything here is off.
+  function glassMat(THREE, src, map) {
+    const m = new THREE.MeshPhongMaterial({ color: 0xffffff, map: map || null, emissive: 0x101214, emissiveMap: map || null, specular: 0x9a9aa0, shininess: 90, transparent: true, opacity: Math.min(1, src.opacity === undefined ? 1 : src.opacity), depthWrite: false, side: THREE.DoubleSide });
+    return m;
+  }
+  // glossy lacquered polymer (the remakes' near-black furniture: glTF clearcoat 0.55 / roughness 0.1 on the clearcoat): a flat Phong makes it read as a black blob in a dark hall, so it
+  // gets a clearcoat reflection of the same small torch-hall gradient the steel uses, and the same small self-light so it never goes pure black
+  function polyMat(THREE, src, map) {
+    const m = new THREE.MeshPhysicalMaterial({ color: 0xffffff, map: map || null, metalness: 0, roughness: Math.max(0.25, src.roughness || 0.3), clearcoat: 0.45, clearcoatRoughness: 0.1, envMapIntensity: 0.2, emissive: 0x161618, emissiveMap: map || null, side: THREE.DoubleSide });
+    m.color.setScalar(1.1); return m;
+  }
+  function energyMat(THREE, src, map) {
+    return new THREE.MeshPhongMaterial({ color: 0xffffff, map: map || null, emissive: src.emissive ? src.emissive.clone() : new THREE.Color(0.95, 0.02, 0.05), emissiveMap: null, specular: 0x331018, shininess: 30, side: THREE.DoubleSide });
   }
   function envFrom(THREE, renderer) {
     const c = document.createElement('canvas'); c.width = 64; c.height = 32; const x = c.getContext('2d');
@@ -111,13 +132,40 @@ const GlbGuns = (function () {
     return { center: new THREE.Vector3(mount.x, mount.y + ay, mount.z - 0.008), group: g };
   }
 
+  // a GLB whose moving part is baked into a bigger mesh (the Bolt Rifle's bolt handle is part of its receiver): spec.splitSlide { mesh, minX, name } carves the triangles
+  // right of x = minX out of that mesh into their own mesh (same vertex data, so the custom normals stay as they are) so spec.slide can move them. Art untouched.
+  function splitSlide(THREE, scene, sp) {
+    let host = null; scene.traverse((o) => { if (!host && o.isMesh && o.name === sp.mesh) host = o; });
+    if (!host || !host.geometry.index) throw new Error('splitSlide: no indexed mesh ' + sp.mesh);
+    const g = host.geometry, P = g.attributes.position, I = g.index.array, keep = [], take = [];
+    for (let t = 0; t < I.length; t += 3) {
+      const cx = (P.getX(I[t]) + P.getX(I[t + 1]) + P.getX(I[t + 2])) / 3;
+      (cx > sp.minX ? take : keep).push(I[t], I[t + 1], I[t + 2]);
+    }
+    if (!take.length) throw new Error('splitSlide: nothing right of x ' + sp.minX);
+    const ng = new THREE.BufferGeometry(); for (const k of Object.keys(g.attributes)) ng.setAttribute(k, g.attributes[k]);
+    ng.setIndex(take); g.setIndex(keep);
+    const nm = new THREE.Mesh(ng, host.material); nm.name = sp.name || 'split_slide';
+    nm.position.copy(host.position); nm.quaternion.copy(host.quaternion); nm.scale.copy(host.scale);
+    host.parent.add(nm);
+  }
+
   // the parts of one GLB gun at scale k (gun units per model metre)
   function parts(THREE, scene, spec, k, mat) {
     const src = (spec.root && scene.getObjectByName(spec.root)) || scene;
     const root = src.clone(true);
     root.position.set(0, 0, 0); root.quaternion.set(0, 0, 0, 1); root.scale.set(1, 1, 1); root.updateMatrixWorld(true);
     let tris = 0;
-    root.traverse((m) => { if (!m.isMesh) return; m.material = (mat.userData.steel && m.material && m.material.metalness >= 0.5) ? mat.userData.steel : mat; m.frustumCulled = false; const g = m.geometry; tris += (g.index ? g.index.count : g.attributes.position.count) / 3; });
+    // glass / energy GLB materials get their own looks (built once per gun, from the first look map); steel and everything else are as before
+    const pick = (src) => {
+      const ud = mat.userData;
+      if (src && src.metalness >= 0.5 && ud.steel) return ud.steel;
+      if (src && src.clearcoat > 0 && ud.poly) return ud.poly;
+      if (src && src.transparent) return ud.glass || (ud.glass = glassMat(THREE, src, mat.map));
+      if (src && src.emissive && (src.emissive.r + src.emissive.g + src.emissive.b) > 0.3) return ud.energy || (ud.energy = energyMat(THREE, src, mat.map));
+      return mat;
+    };
+    root.traverse((m) => { if (!m.isMesh) return; const pm = pick(m.material); m.material = pm; if (pm === mat.userData.glass) m.renderOrder = 2; m.frustumCulled = false; const g = m.geometry; tris += (g.index ? g.index.count : g.attributes.position.count) / 3; });
     const V = (a) => new THREE.Vector3(a[0], a[1], a[2]);
     const at = (name) => { const n = name && root.getObjectByName(name); return n ? new THREE.Vector3().setFromMatrixPosition(n.matrixWorld) : null; };
     const grip = V(spec.grip || [0, 0, 0]);
@@ -203,6 +251,9 @@ const GlbGuns = (function () {
               if (metal) { r.mat.userData.steel = steelMat(THREE, metal, map); if (env) r.mat.userData.steel.envMap = env; steels.push(r.mat.userData.steel);
                 // 1911 only: next to the steel, the ivory grips are toned down and cooled (near-white ivory under an orange torch blew out to a skin-coloured block that read as a hand). Wood and polymer keep their own colour.
                 if (spec.coolNonMetal) { r.mat.color.setRGB(0.5, 0.5, 0.58); r.mat.emissive.setHex(0x1c1c1e); r.mat.specular.setHex(0x151412); } }
+              if (spec.splitSlide) splitSlide(THREE, r.scene, spec.splitSlide);
+              let coat = null; gltf.scene.traverse((m) => { if (!coat && m.isMesh && m.material && m.material.clearcoat > 0 && !(m.material.metalness >= 0.5)) coat = m.material; });
+              if (coat) { r.mat.userData.poly = polyMat(THREE, coat, map); if (env) r.mat.userData.poly.envMap = env; steels.push(r.mat.userData.poly); }
               parts(THREE, r.scene, spec, 1, r.mat);              // a dry run: a GLB missing its magazine fails here, not mid-game
               if (env && r.mat.userData.brass) r.mat.userData.brass.envMap = env;
               ready[id] = r; if (onReady) onReady(id);
@@ -223,6 +274,6 @@ const GlbGuns = (function () {
     const scaleFor = (id, vr, gunScale) => (vr ? 1 / (gunScale || 1) : ((guns[id] && guns[id].flatScale) || 1));
     return { start, has, build, scaleFor, setRenderer, file: (id) => ready[id] && ready[id].spec.file, envReady: () => !!env, ids: Object.keys(guns), status: () => ({ ready: Object.keys(ready), failed: Object.assign({}, failed), forced, loader: !!THREE.GLTFLoader }) };
   }
-  return { create, parts, decode, lookMat, GRIP_TARGET };
+  return { create, parts, decode, lookMat, splitSlide, GRIP_TARGET };
 })();
 if (typeof module !== 'undefined') module.exports = GlbGuns;

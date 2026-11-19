@@ -25,7 +25,12 @@ for (const [id, file, label] of MORE) {
   t(label, !!s && s.file === file && data.files[file] && data.files[file].length > 1000, s && s.file);
   t(id + ' is small (under 300 KB) and has no second GLB that would double the slot', !!(s && data.files[file] && data.files[file].length * 0.75 < 300000) && !s.fallback);
 }
-t('Five GLB gun slots, one gun each (1911, AK, MP5, Uzi, M4)', Object.keys(data.manifest.guns).length === 5 && !data.manifest.guns.m4);
+const REMAKES = ['pistol_cannon', 'pistol_machine', 'pistol_duelist', 'smg_drum', 'smg_bullpup', 'shotgun_pump', 'shotgun_blunderbuss', 'shotgun_double', 'shotgun_combat', 'sniper_bolt', 'sniper_antimat', 'sniper_marksman', 'sniper_rail', 'hmg_belt', 'hmg_minigun', 'hmg_drum', 'hmg_chain'];
+for (const id of REMAKES) {
+  const s = data.manifest.guns[id], file = 'gun/' + id + '_base.glb';
+  t('Gothic remake ' + id + ' replaces its own slot (its GLB is embedded, no fallback file, no on-gun red dot housing)', !!s && s.file === file && s.root === id && s.redDot === false && !s.fallback && !!data.files[file] && data.files[file].length > 1000);
+}
+t('22 GLB gun slots, one gun each (1911, AK, MP5, Uzi, M4 + the 17 gothic remakes; no duplicate files)', Object.keys(data.manifest.guns).length === 22 && !data.manifest.guns.m4 && new Set(Object.values(data.manifest.guns).map((g) => g.file)).size === 22);
 
 const threePath = [process.env.THREE_JS, '/workspace/three128.js', path.join(root, 'node_modules', 'three', 'build', 'three.js')].find((p) => p && fs.existsSync(p));
 async function loaderChecks() {
