@@ -268,11 +268,19 @@ const GlbGuns = (function () {
     const fail = failOut;
     // the steel's reflection: made once from the renderer (screen.js calls this as soon as there is one)
     function wearEnv(m) { if (m) { m.envMap = env; m.needsUpdate = true; } }
+    // sheenK scales every mesh gun's reflection (steel, lacquer, brass) from its locked value. Down the sights in VR the receiver top and the sights are seen
+    // at a grazing angle, where the torch-hall gradient's bright horizon streak mirrors off them at full strength and burns them white; screen.js eases it down while you aim
+    let sheenK = 1;
+    function setSheenK(k) {
+      sheenK = k;                                                    // every frame (a few dozen materials), so a gun built mid-aim is right too
+      const all = steels.slice(); Object.keys(ready).forEach((id) => { const b = ready[id].mat.userData.brass; if (b) all.push(b); });
+      for (const m of all) { if (m.userData.env0 === undefined) m.userData.env0 = m.envMapIntensity; m.envMapIntensity = m.userData.env0 * k; }
+    }
     function setRenderer(renderer) { if (env || !renderer) return; try { env = envFrom(THREE, renderer); for (const m of steels) wearEnv(m); Object.keys(ready).forEach((id) => wearEnv(ready[id].mat.userData.brass)); } catch (e) { console.warn('GLB guns: no steel reflection (' + e.message + ')'); } }
     function build(id, k) { const r = ready[id]; if (!r || forced) return null; try { return parts(THREE, r.scene, r.spec, k, r.mat); } catch (e) { fail(id, e); return null; } }
     // gun units per model metre: true size in a headset (the view scales every gun by gunScale), the voxel gun's size on a flat screen
     const scaleFor = (id, vr, gunScale) => (vr ? 1 / (gunScale || 1) : ((guns[id] && guns[id].flatScale) || 1));
-    return { start, has, build, scaleFor, setRenderer, file: (id) => ready[id] && ready[id].spec.file, envReady: () => !!env, ids: Object.keys(guns), status: () => ({ ready: Object.keys(ready), failed: Object.assign({}, failed), forced, loader: !!THREE.GLTFLoader }) };
+    return { start, has, build, scaleFor, setRenderer, setSheenK, file: (id) => ready[id] && ready[id].spec.file, envReady: () => !!env, ids: Object.keys(guns), status: () => ({ ready: Object.keys(ready), failed: Object.assign({}, failed), forced, loader: !!THREE.GLTFLoader }) };
   }
   return { create, parts, decode, lookMat, splitSlide, GRIP_TARGET };
 })();

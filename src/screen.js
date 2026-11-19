@@ -116,6 +116,7 @@
   let CHARGE_MAX = Infinity, CHARGE_KICK = 0.04, SLIDE_LOCK = 0;   // how far the moving part may slide back, its kick per shot, and (mesh guns) how far it locks back on an empty magazine
   // mesh guns (assets/models/manifest.json, src/screen/glb_guns.js): shown instead of the voxel gun once decoded; ?voxelguns keeps the voxel ones
   const glbGuns = GlbGuns.create(THREE, { query: location.search + location.hash }); glbGuns.setRenderer(renderer);   // setRenderer: the steel's small reflection map
+  const VR_ADS_SHEEN = 0.35;                                       // the mesh gun's reflection while fully aimed in VR (1 = the locked look)
   let glbScale = 0, glbVr = false, glbOn = false;                 // the mesh gun in your hands is true size in a headset, the voxel gun's size on a flat screen
   const CHARGE_REST = new THREE.Vector3(), GP = { gunBody: null, magBase: null, chargeRest: CHARGE_REST, fore: null };   // the gun's parts for the VR hand reload
   // the red dot floats between the scope rings; ADS lines it up with the eye.
@@ -1192,6 +1193,8 @@
       sp * 0.22 + sl * 0.3 + Math.sin(bob) * 0.012 * bobAmt + rl.rz + mo.rz
     );
     if (inVr && xr && xr.alignAds) xr.alignAds();                 // new ADS: re-apply after this pose, so the sight stays on the eye
+    gunLook.setLightK(inVr && glbOn ? 0 : 1);
+    glbGuns.setSheenK(inVr ? 1 - (1 - VR_ADS_SHEEN) * Math.min(1, p.adsT) : 1);   // down the sights in VR the steel reflects less (glb_guns.js setSheenK)
     gunLook.update(time, flashT / 0.06, running ? planar : 0);
     cloakGlow(st, dt);
     // muzzle flash
@@ -1277,8 +1280,9 @@
   xr = XrMode.create({ THREE, renderer, scene, camera, gun, $, gunHome: GUN_DEFAULTS, toast: (t) => toast(t), started: () => started, menuOpen: () => gearMenu.isOpen || stashMenu.isOpen,
     turnSpeed: () => ref.cfg.padTurn, arms: [handL, handR, limbL, limbR], sight: () => SIGHT, eyeRelief: EYE_RELIEF, inShop: () => !!state.shop, shopClose: () => { I.shopClose = true; }, map: { open: (v) => minimap.setOpen(v), fit: (v) => minimap.fitExplored(v), big: $('bigMap'), small: $('miniMap') },
     gunParts: () => { if (!mag || !charge) return null; GP.id = curGun; GP.type = (RefereeWeapons.GUNS[state.player.gun.id] || {}).type; GP.mag = mag; GP.charge = charge; GP.muzzle = muzzle; GP.sight = sightMark; GP.sightDir = SIGHT; GP.gunScale = view.gunScale; GP.glb = glbOn; return GP; }, playerYaw: () => state.player.yaw, levelMap: () => ref.map });
-  xr.on(() => { renderer.setAnimationLoop(frame); document.body.classList.add('xr'); ref.setCfg({ accel: VR_ACCEL, recoilKick: 0 }); applyVrSpeed(); comfortLabels(); if (!running && (started || SANDBOX)) begin(true); }   // a new game shows the start menu in VR first (pick a class, then Enter the hall); a paused run or the test map carries straight on
-  , () => { renderer.setAnimationLoop(null); document.body.classList.remove('xr'); ref.setCfg({ accel: ref.defaults.accel, recoilKick: ref.defaults.recoilKick }); applyVrSpeed(); requestAnimationFrame(frame); });   // a headset drives the frames while in VR
+  // VR: the lantern rides above and behind your head, not in your eye (from the eye it lit every held face head-on like a camera flash and washed out the sights and gloves)
+  xr.on(() => { renderer.setAnimationLoop(frame); document.body.classList.add('xr'); lantern.position.set(0, 0.6, 0.4); ref.setCfg({ accel: VR_ACCEL, recoilKick: 0 }); applyVrSpeed(); comfortLabels(); if (!running && (started || SANDBOX)) begin(true); }   // a new game shows the start menu in VR first (pick a class, then Enter the hall); a paused run or the test map carries straight on
+  , () => { renderer.setAnimationLoop(null); document.body.classList.remove('xr'); lantern.position.set(0, 0, 0); ref.setCfg({ accel: ref.defaults.accel, recoilKick: ref.defaults.recoilKick }); applyVrSpeed(); requestAnimationFrame(frame); });   // a headset drives the frames while in VR
   function frame(now) {
     if (!(xr && xr.presenting())) requestAnimationFrame(frame);
     const dt = Math.min((now - clock.last) / 1000, 0.05); clock.last = now;

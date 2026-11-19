@@ -23,7 +23,8 @@ const XrHands = (function () {
 
   function leatherMat(THREE) {
     return new THREE.MeshPhongMaterial({
-      color: 0x1a1a1d, specular: 0x4a4a52, shininess: 32, emissive: 0x0c0c10,
+      color: 0x1a1a1d, specular: 0x1e1e22, shininess: 20, emissive: 0x0c0c10,   // a soft sheen: the old 0x4a4a52 highlight turned the back of the glove pale grey-pink under the lantern (playtest 2)
+     
       side: THREE.DoubleSide, name: 'xr_glove_leather'
     });
   }

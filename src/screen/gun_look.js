@@ -42,10 +42,13 @@ const GunLook = (function () {
         }
         a.needsUpdate = true;
       }
-      light.color.setRGB(g.light[0], g.light[1], g.light[2]); light.intensity = 0.45 * g.k + flash * 1.2;
+      light.color.setRGB(g.light[0], g.light[1], g.light[2]); light.intensity = (0.45 * g.k + flash * 1.2) * lightK;
     }
+    // lightK: 0 turns the little light off. In VR with a mesh (GLB) gun it is off: it sits 10 cm over the receiver, and down the sights it burnt the
+    // steel and the sights to flat white boxes (playtest 2, 'you look down the barrel and it's just a square'); the muzzle light still flashes on a shot
+    let lightK = 1;
     setSkin('crimson');
-    return { gunMat, glowMat, part, release, setSkin, update, skin: () => skin };
+    return { gunMat, glowMat, part, release, setSkin, update, skin: () => skin, setLightK: (k) => { lightK = k; } };
   }
   return { create };
 })();
