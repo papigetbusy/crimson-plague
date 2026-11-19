@@ -405,7 +405,7 @@ body.pad .card3.sel { border-color: var(--gold); background: linear-gradient(#3c
 <div class="overlay" id="start">
   <div class="card">
     <h1>Crimson Plague</h1>
-    <p>Hold the corridor. Nothing stops coming.</p><p class="buildTag">build 42c3cc5</p>
+    <p>Hold the corridor. Nothing stops coming.</p><p class="buildTag">build 0d3b851</p>
     <div class="keys">
       <p><b>WASD</b> move</p><p><b>Mouse</b> look, <b>Click</b> fire</p>
       <p><b>Shift</b> sprint</p><p><b>Right click</b> aim</p>
@@ -9804,11 +9804,19 @@ const GlbGuns = (function () {
     const fail = failOut;
     // the steel's reflection: made once from the renderer (screen.js calls this as soon as there is one)
     function wearEnv(m) { if (m) { m.envMap = env; m.needsUpdate = true; } }
+    // sheenK scales every mesh gun's reflection (steel, lacquer, brass) from its locked value. Down the sights in VR the receiver top and the sights are seen
+    // at a grazing angle, where the torch-hall gradient's bright horizon streak mirrors off them at full strength and burns them white; screen.js eases it down while you aim
+    let sheenK = 1;
+    function setSheenK(k) {
+      sheenK = k;                                                    // every frame (a few dozen materials), so a gun built mid-aim is right too
+      const all = steels.slice(); Object.keys(ready).forEach((id) => { const b = ready[id].mat.userData.brass; if (b) all.push(b); });
+      for (const m of all) { if (m.userData.env0 === undefined) { m.userData.env0 = m.envMapIntensity; m.userData.coat0 = m.clearcoat || 0; } m.envMapIntensity = m.userData.env0 * k; if (m.isMeshPhysicalMaterial) m.clearcoat = m.userData.coat0 * k; }   // (the lacquer's clearcoat too: it put hot lantern spots on the P90's top)
+    }
     function setRenderer(renderer) { if (env || !renderer) return; try { env = envFrom(THREE, renderer); for (const m of steels) wearEnv(m); Object.keys(ready).forEach((id) => wearEnv(ready[id].mat.userData.brass)); } catch (e) { console.warn('GLB guns: no steel reflection (' + e.message + ')'); } }
     function build(id, k) { const r = ready[id]; if (!r || forced) return null; try { return parts(THREE, r.scene, r.spec, k, r.mat); } catch (e) { fail(id, e); return null; } }
     // gun units per model metre: true size in a headset (the view scales every gun by gunScale), the voxel gun's size on a flat screen
     const scaleFor = (id, vr, gunScale) => (vr ? 1 / (gunScale || 1) : ((guns[id] && guns[id].flatScale) || 1));
-    return { start, has, build, scaleFor, setRenderer, file: (id) => ready[id] && ready[id].spec.file, envReady: () => !!env, ids: Object.keys(guns), status: () => ({ ready: Object.keys(ready), failed: Object.assign({}, failed), forced, loader: !!THREE.GLTFLoader }) };
+    return { start, has, build, scaleFor, setRenderer, setSheenK, file: (id) => ready[id] && ready[id].spec.file, envReady: () => !!env, ids: Object.keys(guns), status: () => ({ ready: Object.keys(ready), failed: Object.assign({}, failed), forced, loader: !!THREE.GLTFLoader }) };
   }
   return { create, parts, decode, lookMat, splitSlide, GRIP_TARGET };
 })();
@@ -13522,7 +13530,8 @@ const XrHands = (function () {
 
   function leatherMat(THREE) {
     return new THREE.MeshPhongMaterial({
-      color: 0x1a1a1d, specular: 0x4a4a52, shininess: 32, emissive: 0x0c0c10,
+      color: 0x1a1a1d, specular: 0x1e1e22, shininess: 20, emissive: 0x0c0c10,   // a soft sheen: the old 0x4a4a52 highlight turned the back of the glove pale grey-pink under the lantern (playtest 2)
+     
       side: THREE.DoubleSide, name: 'xr_glove_leather'
     });
   }
@@ -14383,7 +14392,7 @@ const XrMode = (function () {
       let y = 40;
       const center = (s, size, col) => { line(s, W / 2, y, size, col, 'center'); y += size + 12; };
       const bn = $('banner');
-      if (bn && bn.classList.contains('show')) { center(txt('bannerT'), 52, '#ff4a4a'); center(txt('bannerS'), 28); }
+      if (bn && bn.classList.contains('show') && adsK < 0.15) { center(txt('bannerT'), 52, '#ff4a4a'); center(txt('bannerS'), 28); }
       if (shown('boss')) center(txt('bossName'), 28, '#ff8a60');
       if (menuPanel(running, 0)) { const toastE = $('padToast'); if (toastE && toastE.classList.contains('show')) center(toastE.textContent, 24, '#cfa54a'); return; }   // the real menu is on its own panel
       if (!running) { center(o.started() ? 'PAUSED' : 'CRIMSON PLAGUE', 56, '#ff4a4a'); center('Point and pull the trigger on the menu    Y: pause', 26, '#ecdfc6'); return; }
@@ -14400,8 +14409,8 @@ const XrMode = (function () {
       const lb = $('lockBox'); if (lb && getComputedStyle(lb).display !== 'none' && lb.offsetParent !== null) { center(txt('lockTxt'), 24, '#cfa54a'); const b0 = txt('lockB0'), b1 = txt('lockB1'); center((b0 ? 'Grip: ' + b0 : '') + (b1 ? '    Right stick down: ' + b1 : ''), 22); }
       const fc = $('floorCard'); if (fc && fc.offsetParent !== null && txt('floorCard')) center('Grip (reach or point at it): pick up  ' + txt('floorCard').slice(0, 44), 22, '#ecdfc6');
       const sh = $('stashHint'); if (sh && !sh.hidden) center('STASH CHEST: grip', 22, '#cfa54a');
-      const mm = o.map && o.map.small;                                // the corner map, bottom left of the view (turn the LEFT palm up for the whole floor in your hand)
-      if (mm && mm.width && !mapMesh.visible) { hx.shadowBlur = 0; hx.globalAlpha = 0.92; hx.imageSmoothingEnabled = false; hx.drawImage(mm, 24, 140, 280, 280); hx.imageSmoothingEnabled = true; hx.globalAlpha = 1; hx.strokeStyle = '#6a2a2e'; hx.lineWidth = 3; hx.strokeRect(24, 140, 280, 280); hx.shadowBlur = 8; line('Left palm up: full map', 24, 110, 20, '#cfa54a'); }   // 280 px (was 170), clear of the health bar at y 430
+      const mm = o.map && o.map.small;                                // (hidden, with the WAVE banner, while aiming down sights: both sat over the sight picture) the corner map, bottom left of the view (turn the LEFT palm up for the whole floor in your hand)
+      if (mm && mm.width && !mapMesh.visible && adsK < 0.15) { hx.shadowBlur = 0; hx.globalAlpha = 0.92; hx.imageSmoothingEnabled = false; hx.drawImage(mm, 24, 140, 280, 280); hx.imageSmoothingEnabled = true; hx.globalAlpha = 1; hx.strokeStyle = '#6a2a2e'; hx.lineWidth = 3; hx.strokeRect(24, 140, 280, 280); hx.shadowBlur = 8; line('Left palm up: full map', 24, 110, 20, '#cfa54a'); }   // 280 px (was 170), clear of the health bar at y 430
       const toastE = $('padToast'); if (toastE && toastE.classList.contains('show')) center(questText(toastE.textContent), 24, '#e8c890');
     }
 
@@ -15196,10 +15205,13 @@ const GunLook = (function () {
         }
         a.needsUpdate = true;
       }
-      light.color.setRGB(g.light[0], g.light[1], g.light[2]); light.intensity = 0.45 * g.k + flash * 1.2;
+      light.color.setRGB(g.light[0], g.light[1], g.light[2]); light.intensity = (0.45 * g.k + flash * 1.2) * lightK;
     }
+    // lightK: 0 turns the little light off. In VR with a mesh (GLB) gun it is off: it sits 10 cm over the receiver, and down the sights it burnt the
+    // steel and the sights to flat white boxes (playtest 2, 'you look down the barrel and it's just a square'); the muzzle light still flashes on a shot
+    let lightK = 1;
     setSkin('crimson');
-    return { gunMat, glowMat, part, release, setSkin, update, skin: () => skin };
+    return { gunMat, glowMat, part, release, setSkin, update, skin: () => skin, setLightK: (k) => { lightK = k; } };
   }
   return { create };
 })();
@@ -15444,6 +15456,7 @@ if (typeof module !== 'undefined') module.exports = GunMotion;
   let CHARGE_MAX = Infinity, CHARGE_KICK = 0.04, SLIDE_LOCK = 0;   // how far the moving part may slide back, its kick per shot, and (mesh guns) how far it locks back on an empty magazine
   // mesh guns (assets/models/manifest.json, src/screen/glb_guns.js): shown instead of the voxel gun once decoded; ?voxelguns keeps the voxel ones
   const glbGuns = GlbGuns.create(THREE, { query: location.search + location.hash }); glbGuns.setRenderer(renderer);   // setRenderer: the steel's small reflection map
+  const VR_ADS_SHEEN = 0.25;                                       // the mesh gun's reflection while fully aimed in VR (1 = the locked look)
   let glbScale = 0, glbVr = false, glbOn = false;                 // the mesh gun in your hands is true size in a headset, the voxel gun's size on a flat screen
   const CHARGE_REST = new THREE.Vector3(), GP = { gunBody: null, magBase: null, chargeRest: CHARGE_REST, fore: null };   // the gun's parts for the VR hand reload
   // the red dot floats between the scope rings; ADS lines it up with the eye.
@@ -16520,6 +16533,8 @@ if (typeof module !== 'undefined') module.exports = GunMotion;
       sp * 0.22 + sl * 0.3 + Math.sin(bob) * 0.012 * bobAmt + rl.rz + mo.rz
     );
     if (inVr && xr && xr.alignAds) xr.alignAds();                 // new ADS: re-apply after this pose, so the sight stays on the eye
+    gunLook.setLightK(inVr && glbOn ? 0 : 1);
+    glbGuns.setSheenK(inVr ? 1 - (1 - VR_ADS_SHEEN) * Math.min(1, p.adsT) : 1);   // down the sights in VR the steel reflects less (glb_guns.js setSheenK)
     gunLook.update(time, flashT / 0.06, running ? planar : 0);
     cloakGlow(st, dt);
     // muzzle flash
@@ -16605,8 +16620,9 @@ if (typeof module !== 'undefined') module.exports = GunMotion;
   xr = XrMode.create({ THREE, renderer, scene, camera, gun, $, gunHome: GUN_DEFAULTS, toast: (t) => toast(t), started: () => started, menuOpen: () => gearMenu.isOpen || stashMenu.isOpen,
     turnSpeed: () => ref.cfg.padTurn, arms: [handL, handR, limbL, limbR], sight: () => SIGHT, eyeRelief: EYE_RELIEF, inShop: () => !!state.shop, shopClose: () => { I.shopClose = true; }, map: { open: (v) => minimap.setOpen(v), fit: (v) => minimap.fitExplored(v), big: $('bigMap'), small: $('miniMap') },
     gunParts: () => { if (!mag || !charge) return null; GP.id = curGun; GP.type = (RefereeWeapons.GUNS[state.player.gun.id] || {}).type; GP.mag = mag; GP.charge = charge; GP.muzzle = muzzle; GP.sight = sightMark; GP.sightDir = SIGHT; GP.gunScale = view.gunScale; GP.glb = glbOn; return GP; }, playerYaw: () => state.player.yaw, levelMap: () => ref.map });
-  xr.on(() => { renderer.setAnimationLoop(frame); document.body.classList.add('xr'); ref.setCfg({ accel: VR_ACCEL, recoilKick: 0 }); applyVrSpeed(); comfortLabels(); if (!running && (started || SANDBOX)) begin(true); }   // a new game shows the start menu in VR first (pick a class, then Enter the hall); a paused run or the test map carries straight on
-  , () => { renderer.setAnimationLoop(null); document.body.classList.remove('xr'); ref.setCfg({ accel: ref.defaults.accel, recoilKick: ref.defaults.recoilKick }); applyVrSpeed(); requestAnimationFrame(frame); });   // a headset drives the frames while in VR
+  // VR: the lantern rides above and behind your head, not in your eye (from the eye it lit every held face head-on like a camera flash and washed out the sights and gloves)
+  xr.on(() => { renderer.setAnimationLoop(frame); document.body.classList.add('xr'); lantern.position.set(0, 0.6, 0.4); ref.setCfg({ accel: VR_ACCEL, recoilKick: 0 }); applyVrSpeed(); comfortLabels(); if (!running && (started || SANDBOX)) begin(true); }   // a new game shows the start menu in VR first (pick a class, then Enter the hall); a paused run or the test map carries straight on
+  , () => { renderer.setAnimationLoop(null); document.body.classList.remove('xr'); lantern.position.set(0, 0, 0); ref.setCfg({ accel: ref.defaults.accel, recoilKick: ref.defaults.recoilKick }); applyVrSpeed(); requestAnimationFrame(frame); });   // a headset drives the frames while in VR
   function frame(now) {
     if (!(xr && xr.presenting())) requestAnimationFrame(frame);
     const dt = Math.min((now - clock.last) / 1000, 0.05); clock.last = now;
