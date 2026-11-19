@@ -233,27 +233,71 @@ const XrMode = (function () {
       gun.position.lerpVectors(hipLocalP, adsLocalP, adsK);
       gun.quaternion.copy(hipLocalQ).slerp(adsLocalQ, adsK);
     }
-    // ---- sniper scope: while aiming a sniper, a small camera renders a 4x picture into the lens (the whole view never zooms: that makes people sick) ----
-    const scopeRT = new THREE.WebGLRenderTarget(384, 384), scopeCam = new THREE.PerspectiveCamera(10, 1, 0.35, 160);
-    const lens = new THREE.Mesh(new THREE.CircleGeometry(1, 28), new THREE.MeshBasicMaterial({ map: scopeRT.texture, fog: false }));
-    const reticleLens = new THREE.Mesh(new THREE.RingGeometry(0.03, 0.05, 24), new THREE.MeshBasicMaterial({ color: 0x000000, fog: false })); reticleLens.position.z = 0.001; lens.add(reticleLens);
-    { const cross = new THREE.MeshBasicMaterial({ color: 0x000000, fog: false }); for (const [w, hh] of [[1.6, 0.02], [0.02, 1.6]]) { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, hh), cross); m.position.z = 0.001; lens.add(m); } }
-    lens.visible = false; let scopeOn = false, scopeFrame = 0;
+    // ---- sniper scope: while aiming a sniper, a small camera renders a magnified picture into the lens, picture-in-picture. The whole
+    //      view never zooms (that makes people sick); only the glass shows the zoomed world. The lens is drawn by a small shader: the
+    //      picture, a fine duplex crosshair (thin centre, thicker outer posts) drawn per pixel so it stays crisp, and a dark ring at the edge
+    //      (the scope's eye-box shadow). Quest 3 budget: one 448 px mono render per frame with a 3-6 degree frustum (culling drops almost
+    //      everything), no hands, gun, dot or HUD in it.
+    const SCOPE_RES = 448, LENS_R = 0.019;                            // picture size (px); lens radius in metres
+    const scopeRT = new THREE.WebGLRenderTarget(SCOPE_RES, SCOPE_RES, { depthBuffer: true, stencilBuffer: false });
+    const scopeCam = new THREE.PerspectiveCamera(10, 1, 0.3, 160);
+    const lensMat = new THREE.ShaderMaterial({
+      uniforms: { map: { value: scopeRT.texture } },
+      vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: [
+        'uniform sampler2D map; varying vec2 vUv;',
+        'float line(float d, float w) { float aa = max(fwidth(d), 1e-4); return 1.0 - smoothstep(w - aa, w + aa, abs(d)); }',
+        'void main() {',
+        '  vec2 p = vUv * 2.0 - 1.0; float r = length(p);',
+        '  if (r > 1.0) discard;',
+        '  vec3 c = texture2D(map, vUv).rgb;',
+        '  c *= mix(1.0, 0.82, smoothstep(0.35, 0.8, r));',                // a touch of fall-off, then the dark ring at the rim
+        '  c *= 1.0 - smoothstep(0.80, 0.97, r);',
+        '  float thin = 0.0045, post = 0.022;',
+        '  float h = line(p.y, abs(p.x) > 0.55 ? post : thin), v = line(p.x, abs(p.y) > 0.55 ? post : thin);',
+        '  float cross = max(h, v) * step(r, 0.93);',
+        '  c = mix(c, vec3(0.0), cross);',
+        '  gl_FragColor = vec4(c, 1.0);',
+        '}'
+      ].join('\n'),
+      depthWrite: true, fog: false, toneMapped: false
+    });
+    lensMat.extensions = { derivatives: true };
+    const lens = new THREE.Mesh(new THREE.CircleGeometry(1, 40), lensMat); lens.name = 'xr_scope_lens';
+    const lensRim = new THREE.Mesh(new THREE.RingGeometry(0.985, 1.32, 40), new THREE.MeshBasicMaterial({ color: 0x050405, fog: false })); lensRim.position.z = -0.002; lens.add(lensRim);
+    lens.visible = false; let scopeOn = false, scopeN = 0, scopeZoom = 0, scopeFov = 0;
+    const lensW = new THREE.Vector3(), eyeWs = new THREE.Vector3(), lensS = new THREE.Vector3();
+    function scopeSpec(g) {
+      const type = (g && g.type) || 'rifle', id = (g && g.id) || '';
+      return opts.oldads || typeof XrAds === 'undefined' ? adsOf() : XrAds.of(type, id);
+    }
     function scope(p) {
-      const g = o.gunParts && o.gunParts(), A = adsOf(), want = !!(session && A.zoom && adsK > 0.85 && p && !p.reloading && g && o.sight);
+      const g = o.gunParts && o.gunParts(), A = scopeSpec(g), want = !!(session && A.zoom && adsK > 0.85 && p && !p.reloading && g && o.sight);
       if (want && lens.parent !== gun) gun.add(lens);
       lens.visible = want; scopeOn = want;
       if (!want) return;
-      const sp = o.sight();                                            // the sight point in the gun's own space (the flat ADS lines it up with the eye)
-      lens.position.set(0, sp.y, sp.z + 0.01 / Math.max(0.01, gun.scale.z)); lens.scale.setScalar(0.017 / Math.max(0.01, gun.scale.x));
-      scopeCam.fov = 50 / A.zoom; scopeCam.updateProjectionMatrix();
+      const sp = o.sight();                                            // the sight point in the gun's own space (the eyepiece; ADS puts it on the eye line)
+      const gsx = Math.max(0.01, gun.scale.x), gsz = Math.max(0.01, gun.scale.z);
+      lens.position.set(sp.x || 0, sp.y, sp.z + 0.008 / gsz);          // just behind the eyepiece, toward the eye
+      lens.scale.setScalar(LENS_R / gsx);
+      scopeZoom = A.zoom;
     }
-    function renderScope() {                                           // called just before the XR frame renders (screen.js), every other frame
-      if (!scopeOn || (scopeFrame++ & 1)) return;
-      lens.updateMatrixWorld(true); lens.getWorldPosition(scopeCam.position); scopeCam.quaternion.copy(aimQ);
-      const xrOn = renderer.xr.enabled; lens.visible = false;
-      renderer.xr.enabled = false; const prev = renderer.getRenderTarget(); renderer.setRenderTarget(scopeRT); renderer.render(scene, scopeCam); renderer.setRenderTarget(prev); renderer.xr.enabled = xrOn;
-      lens.visible = true;
+    function renderScope() {                                           // called just before the XR frame renders (screen.js)
+      if (!scopeOn) return;
+      lens.updateMatrixWorld(true); lens.getWorldPosition(lensW); lens.getWorldScale(lensS);
+      // the lens covers a cone of 2*atan(r/d) from the eye; the picture in it is that cone magnified
+      eyeWs.copy(eyeP).applyMatrix4(dolly.matrixWorld);
+      const d = Math.max(0.03, lensW.distanceTo(eyeWs)), cone = 2 * Math.atan(Math.abs(lensS.x) / d);
+      scopeFov = cone / Math.max(1, scopeZoom) * 180 / Math.PI;
+      scopeCam.fov = scopeFov; scopeCam.updateProjectionMatrix();
+      scopeCam.position.copy(lensW); scopeCam.quaternion.copy(aimQ); scopeCam.updateMatrixWorld(true);
+      // hide what must not be in the picture: the gun and gloves (in front of the lens), the dot (it is drawn on top of the lens already), the HUD
+      const hide = [gun, fireDot, reticle, menuMesh, hudMesh, vrHands && vrHands.roots.left, vrHands && vrHands.roots.right].filter(Boolean), was = hide.map((m) => m.visible);
+      hide.forEach((m) => { m.visible = false; });
+      const xrOn = renderer.xr.enabled; renderer.xr.enabled = false; const prev = renderer.getRenderTarget();
+      renderer.setRenderTarget(scopeRT); renderer.render(scene, scopeCam); renderer.setRenderTarget(prev); renderer.xr.enabled = xrOn;
+      hide.forEach((m, i) => { m.visible = was[i]; });
+      scopeN++;
     }
 
     // ---- HUD: a small canvas in front of your eyes, redrawn a few times a second from the page's own HUD text ----
@@ -750,7 +794,7 @@ const XrMode = (function () {
       btn.style.left = on ? '10px' : '50%'; btn.style.top = on ? 'auto' : '14px'; btn.style.bottom = on ? '10px' : 'auto';
       btn.style.transform = on ? 'none' : 'translateX(-50%)'; btn.style.padding = on ? '8px 16px' : '18px 44px'; btn.style.fontSize = on ? '15px' : '28px';
     }
-    return { comfort: () => Object.assign({}, comfort), setComfort, poseGun, alignAds, handsForce: (v) => { handsForce = v || null; }, dropMag: dropMagFrom, update, aim, pad, headPose, headYaw, handYaw, walkYaw, turnSpeed: turnSpeedOf, snapDeg: snapDegOf, pulse, aimDir, corner, grab, questText, canFire, takeReload, onReloadStart, menuOpen: () => menuMesh.visible, menuCanvas: () => vm.canvas, renderScope, menuHit: (u, v) => { const t = vm.hit(u, v); return t ? t.title : null; }, shotFx, hitFx, hitMark, feel: () => ({ conv: convDist, shotN, hitN, kick: lastKick, rot: recRot.x, back: recBack.x, marker: hitMk.visible, dot: fireDot.visible ? fireDotPos.toArray() : null, ads: { k: adsK, angleDeg: adsInfo.angleDeg, relief: adsInfo.relief, old: !!opts.oldads, id: adsInfo.id } }), adsInfo: () => ({ k: adsK, angleDeg: adsInfo.angleDeg, relief: adsInfo.relief, old: !!opts.oldads, id: adsInfo.id }), menuTiles: () => { const L = vm.layout; if (!L) return []; const W = XrMenu.W, H = XrMenu.H, V = XrMenu.VIEW, sc = vm.scroll; return L.tiles.map((t) => ({ title: t.title, disabled: !!t.disabled, u: (t.x + t.w / 2) / W, v: 1 - (t.y - sc + t.h / 2) / H, inView: t.y - sc >= 0 && t.y + t.h - sc <= V })).concat(L.exits.map((t) => ({ title: t.title, exit: true, u: (t.x + t.w / 2) / W, v: 1 - (t.y + t.h / 2) / H, inView: true }))); }, faceYaw: (y) => { bodyYaw = y; }, debug: () => ({ grab: inter.debug(), pressN, menuId: menuPlacedFor, dropN, dropping: !!dropMag, magwell: magwell.toArray(), mapShown: mapHeld, armsHidden: (o.arms || []).every((m) => !m.visible), magVisible: !!(o.gunParts() && o.gunParts().mag.visible), hover: vm.hover ? vm.hover.title : null, laserUv, scroll: vm.scroll, maxScroll: vm.maxScroll, tiles: vm.layout ? vm.layout.tiles.length : 0, exits: vm.layout ? vm.layout.exits.map((e) => e.title) : [], adsK, scopeOn, gloveOn: !!(o.arms && o.arms[0] && o.arms[0].visible), handsOn: !!(vrHands && vrHands.visible()), vrHands: vrHands ? vrHands.status() : { on: false, noHands: true }, twoHand, gripErr, foreAt: (() => { const g = o.gunParts && o.gunParts(); if (!g || !g.gunBody) return null; g.gunBody.updateMatrixWorld(true); const v = g.fore.clone().applyMatrix4(g.gunBody.matrixWorld); dolly.worldToLocal(v); return [v.x, v.y, v.z].map((n) => +n.toFixed(3)); })(), hit: (u, v) => 0, menu: menuMesh.visible, menuPos: menuMesh.position.toArray(), menuScale: menuMesh.scale.toArray(), aim: aimLocal.toArray() }), menuShown: () => menuMesh.visible, smooth: () => ({ dipN, openN, open: Object.assign({}, openRec), dt: lastDt, textSpot: (() => { const L = vm.layout; if (!L) return null; for (const it of L.items) { if (it.k !== 'title' && it.k !== 'text' && it.k !== 'head') continue; const y = it.y + 24 - vm.scroll; if (y > 10 && y < XrMenu.VIEW - 10) return [0.5, 1 - y / XrMenu.H, it.k]; } return null; })(), menuK, opacity: menuMat.opacity, scale: menuMesh.scale.x / PANEL_W, ghostK, ghost: menuGhost.visible, dip: dipT > 0, hiA: hiCur.a, hi: hiMesh.visible, hiRect: hiMesh.visible ? { x: hiCur.x, y: hiCur.y, w: hiCur.w, h: hiCur.h } : null, scrollV, dragging, mapK, mapVisible: mapMesh.visible, laserDir: (hands.right && hands.right.sqOn) ? new THREE.Vector3(0, 0, -1).applyQuaternion(hands.right.sq).toArray() : null }), vigOn: () => vig.visible, presenting: () => !!session, on: (start, end) => { onStart = start; onEnd = end; }, rig: dolly };
+    return { comfort: () => Object.assign({}, comfort), setComfort, poseGun, alignAds, handsForce: (v) => { handsForce = v || null; }, dropMag: dropMagFrom, update, aim, pad, headPose, headYaw, handYaw, walkYaw, turnSpeed: turnSpeedOf, snapDeg: snapDegOf, pulse, aimDir, corner, grab, questText, canFire, takeReload, onReloadStart, menuOpen: () => menuMesh.visible, menuCanvas: () => vm.canvas, renderScope, menuHit: (u, v) => { const t = vm.hit(u, v); return t ? t.title : null; }, shotFx, hitFx, hitMark, feel: () => ({ conv: convDist, shotN, hitN, kick: lastKick, rot: recRot.x, back: recBack.x, marker: hitMk.visible, dot: fireDot.visible ? fireDotPos.toArray() : null, ads: { k: adsK, angleDeg: adsInfo.angleDeg, relief: adsInfo.relief, old: !!opts.oldads, id: adsInfo.id } }), adsInfo: () => ({ k: adsK, angleDeg: adsInfo.angleDeg, relief: adsInfo.relief, old: !!opts.oldads, id: adsInfo.id }), menuTiles: () => { const L = vm.layout; if (!L) return []; const W = XrMenu.W, H = XrMenu.H, V = XrMenu.VIEW, sc = vm.scroll; return L.tiles.map((t) => ({ title: t.title, disabled: !!t.disabled, u: (t.x + t.w / 2) / W, v: 1 - (t.y - sc + t.h / 2) / H, inView: t.y - sc >= 0 && t.y + t.h - sc <= V })).concat(L.exits.map((t) => ({ title: t.title, exit: true, u: (t.x + t.w / 2) / W, v: 1 - (t.y + t.h / 2) / H, inView: true }))); }, faceYaw: (y) => { bodyYaw = y; }, debug: () => ({ grab: inter.debug(), pressN, menuId: menuPlacedFor, dropN, dropping: !!dropMag, magwell: magwell.toArray(), mapShown: mapHeld, armsHidden: (o.arms || []).every((m) => !m.visible), magVisible: !!(o.gunParts() && o.gunParts().mag.visible), hover: vm.hover ? vm.hover.title : null, laserUv, scroll: vm.scroll, maxScroll: vm.maxScroll, tiles: vm.layout ? vm.layout.tiles.length : 0, exits: vm.layout ? vm.layout.exits.map((e) => e.title) : [], adsK, scopeOn, scope: { on: scopeOn, zoom: scopeZoom, fov: +scopeFov.toFixed(3), n: scopeN, res: SCOPE_RES }, gloveOn: !!(o.arms && o.arms[0] && o.arms[0].visible), handsOn: !!(vrHands && vrHands.visible()), vrHands: vrHands ? vrHands.status() : { on: false, noHands: true }, twoHand, gripErr, foreAt: (() => { const g = o.gunParts && o.gunParts(); if (!g || !g.gunBody) return null; g.gunBody.updateMatrixWorld(true); const v = g.fore.clone().applyMatrix4(g.gunBody.matrixWorld); dolly.worldToLocal(v); return [v.x, v.y, v.z].map((n) => +n.toFixed(3)); })(), hit: (u, v) => 0, menu: menuMesh.visible, menuPos: menuMesh.position.toArray(), menuScale: menuMesh.scale.toArray(), aim: aimLocal.toArray() }), menuShown: () => menuMesh.visible, smooth: () => ({ dipN, openN, open: Object.assign({}, openRec), dt: lastDt, textSpot: (() => { const L = vm.layout; if (!L) return null; for (const it of L.items) { if (it.k !== 'title' && it.k !== 'text' && it.k !== 'head') continue; const y = it.y + 24 - vm.scroll; if (y > 10 && y < XrMenu.VIEW - 10) return [0.5, 1 - y / XrMenu.H, it.k]; } return null; })(), menuK, opacity: menuMat.opacity, scale: menuMesh.scale.x / PANEL_W, ghostK, ghost: menuGhost.visible, dip: dipT > 0, hiA: hiCur.a, hi: hiMesh.visible, hiRect: hiMesh.visible ? { x: hiCur.x, y: hiCur.y, w: hiCur.w, h: hiCur.h } : null, scrollV, dragging, mapK, mapVisible: mapMesh.visible, laserDir: (hands.right && hands.right.sqOn) ? new THREE.Vector3(0, 0, -1).applyQuaternion(hands.right.sq).toArray() : null }), vigOn: () => vig.visible, presenting: () => !!session, on: (start, end) => { onStart = start; onEnd = end; }, rig: dolly };
   }
   return { create, laserRate, LASER_SNAP };
 })();

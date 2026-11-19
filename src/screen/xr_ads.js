@@ -18,9 +18,12 @@ const XrAds = (function () {
     smg:       { relief: 0.18, aimRate: AIM_RATE, zoom: 0 },
     rifle:     { relief: 0.14, aimRate: AIM_RATE, zoom: 0 },
     rifle_m4:  { relief: 0.08, aimRate: AIM_RATE, zoom: 0 },   // eye on the optic centre
-    shotgun:   { relief: 0.16, aimRate: AIM_RATE, zoom: 0 },
+    shotgun:   { relief: 0.26, aimRate: AIM_RATE, zoom: 0 },     // cheek on the stock: the receiver's back face no longer fills the lower view
     sniper:    { relief: 0.10, aimRate: AIM_RATE, zoom: 4 },
-    hmg:       { relief: 0.16, aimRate: AIM_RATE, zoom: 0 }
+    sniper_marksman: { zoom: 3 },                                 // per-scope magnification (the picture inside the lens; the view never zooms)
+    sniper_rail:     { zoom: 5 },
+    sniper_antimat:  { zoom: 6 },
+    hmg:       { relief: 0.24, aimRate: AIM_RATE, zoom: 0 }
   };
 
   const of = (type, id) => Object.assign({}, TABLE[type] || TABLE.rifle, (id && TABLE[id]) || {});
