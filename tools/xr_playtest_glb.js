@@ -44,7 +44,7 @@ module.exports = function (X) {
         const G = window.__game, V = G.THREE.Vector3, d = G.xr.feel().dot, cam = G.camera.getWorldPosition(new V()), at = d ? new V(d[0], d[1], d[2]) : null, list = [];
         G.scene.traverse((o) => { if (!o.visible || !o.material || !o.material.color) return; for (let p = o; p; p = p.parent) if (!p.visible) return;
           const c = o.material.color, red = c.r > 0.9 && c.g < 0.3 && c.b < 0.3, w = o.getWorldPosition(new V()), near = w.distanceTo(cam) < 1.5 || (at && w.distanceTo(at) < 0.5);
-          const isDot = (o.isSprite && (red || (o.material.map && o.material.map.image && o.material.map.image.width === 128))) || (o.isMesh && o.geometry.type === 'BoxGeometry' && o.geometry.parameters.width < 0.01 && (red || c.g > 0.9));
+          const isDot = (o.isSprite && (red || (o.material.map && o.material.map.image && (o.material.map.image.width === 32 || o.material.map.image.width === 128)))) || (o.isMesh && o.geometry.type === 'BoxGeometry' && o.geometry.parameters.width < 0.01 && (red || c.g > 0.9));
           if (isDot && near) list.push(o.type + (o.isSprite ? ' ' + o.scale.x.toFixed(3) : '')); });
         return { n: list.length, list, ads: G.ref.snapshot().player.adsT, dot: d };
       });

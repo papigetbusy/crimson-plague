@@ -34,6 +34,9 @@ async function launch(o) {
     async close() { if (o.share) { await page.close(); return; } await browser.close(); srv.close(); },
     ev: (fn, ...a) => page.evaluate(fn, ...a),
     async frames(n) { const f0 = await page.evaluate(() => window.__fx.frames); await page.waitForFunction((t) => window.__fx.frames >= t, { timeout: 120000, polling: 20 }, f0 + n); },
+    // headset-like resolution: the flat game draws at a retro ~300 px height, and the fake Quest renders into that canvas, so each eye
+    // was only ~300 px wide (a real Quest 3 eye is ~1650 px). Call before enterVR for screenshots you judge by eye (dots, hands, scopes).
+    hires: () => page.evaluate(() => { const G = window.__game, c = G.renderer.domElement; G.renderer.setSize(c.clientWidth, c.clientHeight, false); return [c.width, c.height]; }),
     async enterVR() { await page.click('#vrBtn'); await page.waitForFunction(() => window.__game.xr.presenting(), { timeout: 30000 }); await S.frames(20); },
     hand: (h, o) => page.evaluate((h, o) => { const d = window.__fx.hands[h]; if (o.p) d.p = o.p; if (o.q) d.q = o.q; if (o.ax) d.ax = o.ax; if (o.v) for (const k in o.v) d.v[k] = o.v[k]; }, h, o),
     head: (o) => page.evaluate((o) => { const d = window.__fx.head; if (o.p) d.p = o.p; if (o.q) d.q = o.q; }, o),

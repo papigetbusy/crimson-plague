@@ -147,6 +147,21 @@ const XrMode = (function () {
       m4b.lookAt(ZERO3, dir2, up2); q2.setFromRotationMatrix(m4b);   // Matrix4.lookAt makes -z face the target (camera style), which is how the gun points
       return out.copy(q2);
     }
+    // The right eye in rig space. In a WebXR session three.js leaves the user camera at the LEFT eye's pose (not the head centre), so
+    // "camera + half an IPD" landed between the eyes and the sights sat 3.2 cm left of the aiming eye (2026-11-19 playtest: looking down the
+    // gun showed only the side of the receiver, a square, and no dot). Use the right view's own pose; off-headset, fall back to the old guess.
+    const eyeA = new THREE.Vector3(), eyeB = new THREE.Vector3(), headR = new THREE.Vector3();
+    function rightEye(eyeOff, out) {
+      const xc = session && renderer.xr.getCamera && renderer.xr.getCamera(camera), cams = xc && xc.cameras;
+      if (cams && cams.length >= 2) {
+        eyeA.setFromMatrixPosition(cams[0].matrix); eyeB.setFromMatrixPosition(cams[1].matrix);
+        if (eyeA.distanceToSquared(eyeB) > 1e-6) {
+          headR.set(1, 0, 0).applyQuaternion(camera.quaternion);
+          return out.copy(eyeB.dot(headR) >= eyeA.dot(headR) ? eyeB : eyeA);
+        }
+      }
+      return out.set(eyeOff, 0, 0).applyQuaternion(camera.quaternion).add(camera.position);
+    }
     function placeGun(p) {
       const h = hands.right;
       if (!h) { if (gun.parent !== camera) camera.add(gun); return; }
@@ -160,7 +175,7 @@ const XrMode = (function () {
       if (glove && g && g.gunBody) { glove.updateMatrixWorld(true); glove.getWorldPosition(gripW); dolly.worldToLocal(gripW); hipP.copy(h.grip.position).sub(gripW).add(h.grip.position); }
       else hipP.set(-gunHome.gunX, -gunHome.gunY + 0.02, -gunHome.gunZ - 0.12).applyQuaternion(q).add(h.grip.position);
       const eyeOff = (typeof XrAds !== 'undefined') ? XrAds.EYE_X : 0.032;
-      eyeP.set(eyeOff, 0, 0).applyQuaternion(camera.quaternion).add(camera.position);   // the right (dominant) eye: half a typical IPD from the head centre
+      rightEye(eyeOff, eyeP);                                          // the right (dominant) eye, from the headset's own right-eye view
       if (opts.oldads || !adsBlend) {
         adsK = p ? Math.max(0, Math.min(1, p.adsT || 0)) : 0;
         if (adsK > 0) {
@@ -250,18 +265,23 @@ const XrMode = (function () {
     reticle.renderOrder = 1000; reticle.visible = false; scene.add(reticle);
     // Collimated red-dot sight: a solid red point with a white-hot centre and a soft glow, sitting on the fire ray at the hit (or far along it).
     // From any eye it overlays the impact, the way a real red dot (collimated at infinity) does. Sized in angle, not metres: the sprite is about
-    // 44 MOA across, the solid core about 7-8 MOA (3-4 px on a Quest 3 at ~25 px per degree). Smaller than that (the first try, 10 MOA with a
-    // sub-pixel core, mipmapped and added on) fades to nothing on the headset. Normal blending so it shows on bright walls; depth-tested so walls hide it.
-    const MOA = Math.PI / (180 * 60), DOT_GLOW_MOA = 22, DOT_CORE = 0.17, DOT_MIN_CORE_MOA = 7.2;   // glow radius (MOA), core share of the radius, smallest core (~3 px)
+    // 44 MOA across, the solid core about 13 MOA (3-4 px on a Quest 3: ~15-20 px per degree at the default 0.8 framebuffer scale), the rest a soft glow. The texture is small
+    // (32 px) so the sprite is drawn at about one texel per pixel: a big 128 px texture minified 10:1 (mipmapped or not) smears the core into
+    // the glow and the dot all but disappears on the headset.
+    // Drawn on top (no depth test), like the dot on a real optic's glass: it already sits at the first wall or monster along the fire ray, so
+    // nothing in the world can be in front of it, and the gun's own sights, the optic housing or the glove never hide it. (Depth-tested, the
+    // 2026-11-19 playtest saw no dot in ADS: the ADS near plane of 2 cm leaves a 16-bit headset depth buffer ~10 cm of precision at 12 m, so
+    // the wall won against a dot 3 cm in front of it.)
+    const MOA = Math.PI / (180 * 60), DOT_GLOW_MOA = 22, DOT_CORE = 0.3, DOT_MIN_CORE_MOA = 13.2, DOT_TEX = 32;   // glow radius (MOA), core share of the radius, smallest core (~3-4 px)
     const fireDotTex = (() => {
-      const N = 128, c = document.createElement('canvas'); c.width = c.height = N; const x = c.getContext('2d'), R = N / 2;
+      const N = DOT_TEX, c = document.createElement('canvas'); c.width = c.height = N; const x = c.getContext('2d'), R = N / 2;
       const g = x.createRadialGradient(R, R, 0, R, R, R);
-      g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.06, 'rgba(255,235,230,1)'); g.addColorStop(0.1, 'rgba(255,40,32,1)'); g.addColorStop(DOT_CORE, 'rgba(255,24,20,1)');
-      g.addColorStop(DOT_CORE + 0.04, 'rgba(255,20,20,0.5)'); g.addColorStop(0.45, 'rgba(255,10,10,0.14)'); g.addColorStop(1, 'rgba(255,0,0,0)');
+      g.addColorStop(0, 'rgba(255,240,232,1)'); g.addColorStop(0.09, 'rgba(255,150,135,1)'); g.addColorStop(0.15, 'rgba(255,40,30,1)'); g.addColorStop(DOT_CORE, 'rgba(255,28,22,1)');
+      g.addColorStop(DOT_CORE + 0.07, 'rgba(255,24,20,0.42)'); g.addColorStop(0.6, 'rgba(255,14,10,0.1)'); g.addColorStop(1, 'rgba(255,0,0,0)');
       x.fillStyle = g; x.fillRect(0, 0, N, N);
       const t = new THREE.CanvasTexture(c); t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter; t.generateMipmaps = false; t.needsUpdate = true; return t;
     })();
-    const fireDot = new THREE.Sprite(new THREE.SpriteMaterial({ map: fireDotTex, color: 0xffffff, blending: THREE.NormalBlending, depthTest: true, depthWrite: false, fog: false, transparent: true }));
+    const fireDot = new THREE.Sprite(new THREE.SpriteMaterial({ map: fireDotTex, color: 0xffffff, blending: THREE.NormalBlending, depthTest: false, depthWrite: false, fog: false, transparent: true }));
     fireDot.renderOrder = 1002; fireDot.visible = false; scene.add(fireDot);
     const fireDotPos = new THREE.Vector3();
     function placeFireDot(hit, dir, dist, show) {
