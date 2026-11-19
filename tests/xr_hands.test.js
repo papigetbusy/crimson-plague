@@ -74,6 +74,32 @@ t('On a pistol the right hand snaps to the grip, and the index finger curls on t
   on.status().pose.right === 'pistol' && on.roots.right.parent === gunGrip && after > before + 0.2,
   'pose ' + on.status().pose.right + ' curl ' + before.toFixed(3) + ' -> ' + after.toFixed(3));
 
+
+// orientation (the 2026-11-19 playtest: the gun hand was upside down and facing back). In gun space (+Y up, -Z forward, +X right):
+// the palm faces the handle from the right, the fingers run forward, the thumb is up, the index finger is the top finger,
+// and the wrist cuff trails behind the grip. Checked for every class.
+const W = (o) => { o.updateMatrixWorld(true); return o.getWorldPosition(new THREE.Vector3()); };
+const named = (root, n) => { let r = null; root.traverse((o) => { if (o.name === n) r = o; }); return r; };
+for (const type of ['pistol', 'smg', 'rifle', 'shotgun', 'sniper', 'hmg']) {
+  right.gamepad.buttons[0].value = 0; right.gamepad.buttons[0].pressed = false;
+  on.update({ presenting: true, right, type, gripObj: gunGrip });
+  const G = on.roots.right, palm = W(named(G, 'palm')), i0 = W(named(G, 'index0')), p0 = W(named(G, 'pinky0')), t0 = W(named(G, 'thumb0'));
+  const cuffY = new THREE.Vector3(0, -0.06, 0); G.localToWorld(cuffY);
+  const palmN = new THREE.Vector3(0, 0, 1).transformDirection(G.matrixWorld);
+  const ok = i0.z < palm.z - 0.02 && i0.y > p0.y + 0.02 && t0.y > palm.y && cuffY.z > palm.z && palmN.x < -0.8 && palm.x > 0.015;
+  t('Gun hand on a ' + type + ' wraps the grip the right way up (palm on the handle, fingers forward, thumb and index on top, cuff behind)', ok,
+    'palmN ' + palmN.toArray().map((v) => v.toFixed(2)) + ' index y ' + i0.y.toFixed(3) + ' pinky y ' + p0.y.toFixed(3));
+}
+{
+  const gripL2 = new THREE.Group(), fore2 = new THREE.Group(); dolly.add(gripL2); dolly.add(fore2);
+  const left2 = { grip: gripL2, ray: new THREE.Group(), gamepad: { buttons: [{ value: 0 }, { value: 1, pressed: true }] } };
+  on.update({ presenting: true, right, left: left2, type: 'rifle', gripObj: gunGrip, foreObj: fore2, twoHand: true });
+  const G = on.roots.left, palm = W(named(G, 'palm')), i0 = W(named(G, 'index0')), t0 = W(named(G, 'thumb0'));
+  const palmN = new THREE.Vector3(0, 0, 1).transformDirection(G.matrixWorld);
+  t('Support hand under a handguard: palm up, fingers forward, thumb on the left side', palmN.y > 0.8 && i0.z < palm.z - 0.02 && t0.x < palm.x,
+    'palmN ' + palmN.toArray().map((v) => v.toFixed(2)));
+}
+
 const gripL = new THREE.Group(), fore = new THREE.Group(); dolly.add(gripL); dolly.add(fore);
 const left = { grip: gripL, ray: new THREE.Group(), gamepad: { buttons: [{ value: 0 }, { value: 1, pressed: true }] } };
 on.update({ presenting: true, right, left, type: 'rifle', gripObj: gunGrip, foreObj: fore, twoHand: true });

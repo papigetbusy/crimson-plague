@@ -518,7 +518,7 @@ const XrMode = (function () {
         }
         const type = (g && g.type) || 'rifle';
         vrHands.update({
-          presenting: !!session, left: hands.left, right: hands.right, type,
+          presenting: !!session, left: hands.left, right: hands.right, type, id: (g && g.id) || '',
           gripObj: gripMark.parent ? gripMark : null, foreObj: foreMark.parent ? foreMark : null,
           twoHand, pistolCup: type === 'pistol' && twoHand,
           reloadObj: (p && p.reloading && o.arms && o.arms[0]) || null,
