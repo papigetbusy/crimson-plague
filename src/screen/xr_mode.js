@@ -316,12 +316,13 @@ const XrMode = (function () {
     // nothing in the world can be in front of it, and the gun's own sights, the optic housing or the glove never hide it. (Depth-tested, the
     // 2026-11-19 playtest saw no dot in ADS: the ADS near plane of 2 cm leaves a 16-bit headset depth buffer ~10 cm of precision at 12 m, so
     // the wall won against a dot 3 cm in front of it.)
-    const MOA = Math.PI / (180 * 60), DOT_GLOW_MOA = 22, DOT_CORE = 0.3, DOT_MIN_CORE_MOA = 13.2, DOT_TEX = 32;   // glow radius (MOA), core share of the radius, smallest core (~3-4 px)
+    const MOA = Math.PI / (180 * 60), DOT_GLOW_MOA = 26, DOT_CORE = 0.3, DOT_MIN_CORE_MOA = 18, DOT_TEX = 32;   // sprite radius (MOA), core share of the radius, smallest core (~5 px on a Quest 3)
     const fireDotTex = (() => {
       const N = DOT_TEX, c = document.createElement('canvas'); c.width = c.height = N; const x = c.getContext('2d'), R = N / 2;
       const g = x.createRadialGradient(R, R, 0, R, R, R);
-      g.addColorStop(0, 'rgba(255,240,232,1)'); g.addColorStop(0.09, 'rgba(255,150,135,1)'); g.addColorStop(0.15, 'rgba(255,40,30,1)'); g.addColorStop(DOT_CORE, 'rgba(255,28,22,1)');
-      g.addColorStop(DOT_CORE + 0.07, 'rgba(255,24,20,0.42)'); g.addColorStop(0.6, 'rgba(255,14,10,0.1)'); g.addColorStop(1, 'rgba(255,0,0,0)');
+      // (playtest 2: the old white-hot centre vanished on a pistol's white front post) a solid saturated red core with a thin dark rim, so it reads on white sights, bright walls and dark halls alike
+      g.addColorStop(0, 'rgba(255,96,72,1)'); g.addColorStop(0.12, 'rgba(255,34,24,1)'); g.addColorStop(DOT_CORE, 'rgba(236,16,12,1)');
+      g.addColorStop(DOT_CORE + 0.05, 'rgba(24,0,0,0.7)'); g.addColorStop(DOT_CORE + 0.14, 'rgba(10,0,0,0.35)'); g.addColorStop(0.62, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0)');
       x.fillStyle = g; x.fillRect(0, 0, N, N);
       const t = new THREE.CanvasTexture(c); t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter; t.generateMipmaps = false; t.needsUpdate = true; return t;
     })();
