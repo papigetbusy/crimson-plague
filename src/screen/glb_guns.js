@@ -17,7 +17,7 @@ const GlbGuns = (function () {
   // texture glowing by itself so it never goes black in a dark hall
   function lookMat(THREE, map) {
     if (map) {
-      // the 1024 px HD albedos (the gothic remakes) are smooth paintings: LINEAR + mipmaps + anisotropy, never the pixel look. The 256 px ones (1911, AK, M4, MP5, Uzi, the three pistols) keep their crisp nearest pixels.
+      // the 1024 px HD albedos (the gothic remakes) are smooth paintings: LINEAR + mipmaps + anisotropy, never the pixel look. The 256 px ones (1911, AK, M4, MP5, Uzi) keep their crisp nearest pixels.
       const hd = map.image && (map.image.width || 0) >= 512;
       if (hd) { map.magFilter = THREE.LinearFilter; map.minFilter = THREE.LinearMipmapLinearFilter; map.generateMipmaps = true; map.anisotropy = 8; }
       else { map.magFilter = THREE.NearestFilter; map.minFilter = THREE.NearestFilter; map.generateMipmaps = false; }
