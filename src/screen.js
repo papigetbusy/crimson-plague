@@ -116,7 +116,7 @@
   let CHARGE_MAX = Infinity, CHARGE_KICK = 0.04, SLIDE_LOCK = 0;   // how far the moving part may slide back, its kick per shot, and (mesh guns) how far it locks back on an empty magazine
   // mesh guns (assets/models/manifest.json, src/screen/glb_guns.js): shown instead of the voxel gun once decoded; ?voxelguns keeps the voxel ones
   const glbGuns = GlbGuns.create(THREE, { query: location.search + location.hash }); glbGuns.setRenderer(renderer);   // setRenderer: the steel's small reflection map
-  const VR_ADS_SHEEN = 0.35;                                       // the mesh gun's reflection while fully aimed in VR (1 = the locked look)
+  const VR_ADS_SHEEN = 0.25;                                       // the mesh gun's reflection while fully aimed in VR (1 = the locked look)
   let glbScale = 0, glbVr = false, glbOn = false;                 // the mesh gun in your hands is true size in a headset, the voxel gun's size on a flat screen
   const CHARGE_REST = new THREE.Vector3(), GP = { gunBody: null, magBase: null, chargeRest: CHARGE_REST, fore: null };   // the gun's parts for the VR hand reload
   // the red dot floats between the scope rings; ADS lines it up with the eye.

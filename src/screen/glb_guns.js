@@ -274,7 +274,7 @@ const GlbGuns = (function () {
     function setSheenK(k) {
       sheenK = k;                                                    // every frame (a few dozen materials), so a gun built mid-aim is right too
       const all = steels.slice(); Object.keys(ready).forEach((id) => { const b = ready[id].mat.userData.brass; if (b) all.push(b); });
-      for (const m of all) { if (m.userData.env0 === undefined) m.userData.env0 = m.envMapIntensity; m.envMapIntensity = m.userData.env0 * k; }
+      for (const m of all) { if (m.userData.env0 === undefined) { m.userData.env0 = m.envMapIntensity; m.userData.coat0 = m.clearcoat || 0; } m.envMapIntensity = m.userData.env0 * k; if (m.isMeshPhysicalMaterial) m.clearcoat = m.userData.coat0 * k; }   // (the lacquer's clearcoat too: it put hot lantern spots on the P90's top)
     }
     function setRenderer(renderer) { if (env || !renderer) return; try { env = envFrom(THREE, renderer); for (const m of steels) wearEnv(m); Object.keys(ready).forEach((id) => wearEnv(ready[id].mat.userData.brass)); } catch (e) { console.warn('GLB guns: no steel reflection (' + e.message + ')'); } }
     function build(id, k) { const r = ready[id]; if (!r || forced) return null; try { return parts(THREE, r.scene, r.spec, k, r.mat); } catch (e) { fail(id, e); return null; } }
