@@ -529,7 +529,7 @@ const XrMode = (function () {
       let y = 40;
       const center = (s, size, col) => { line(s, W / 2, y, size, col, 'center'); y += size + 12; };
       const bn = $('banner');
-      if (bn && bn.classList.contains('show')) { center(txt('bannerT'), 52, '#ff4a4a'); center(txt('bannerS'), 28); }
+      if (bn && bn.classList.contains('show') && adsK < 0.15) { center(txt('bannerT'), 52, '#ff4a4a'); center(txt('bannerS'), 28); }
       if (shown('boss')) center(txt('bossName'), 28, '#ff8a60');
       if (menuPanel(running, 0)) { const toastE = $('padToast'); if (toastE && toastE.classList.contains('show')) center(toastE.textContent, 24, '#cfa54a'); return; }   // the real menu is on its own panel
       if (!running) { center(o.started() ? 'PAUSED' : 'CRIMSON PLAGUE', 56, '#ff4a4a'); center('Point and pull the trigger on the menu    Y: pause', 26, '#ecdfc6'); return; }
@@ -546,8 +546,8 @@ const XrMode = (function () {
       const lb = $('lockBox'); if (lb && getComputedStyle(lb).display !== 'none' && lb.offsetParent !== null) { center(txt('lockTxt'), 24, '#cfa54a'); const b0 = txt('lockB0'), b1 = txt('lockB1'); center((b0 ? 'Grip: ' + b0 : '') + (b1 ? '    Right stick down: ' + b1 : ''), 22); }
       const fc = $('floorCard'); if (fc && fc.offsetParent !== null && txt('floorCard')) center('Grip (reach or point at it): pick up  ' + txt('floorCard').slice(0, 44), 22, '#ecdfc6');
       const sh = $('stashHint'); if (sh && !sh.hidden) center('STASH CHEST: grip', 22, '#cfa54a');
-      const mm = o.map && o.map.small;                                // the corner map, bottom left of the view (turn the LEFT palm up for the whole floor in your hand)
-      if (mm && mm.width && !mapMesh.visible) { hx.shadowBlur = 0; hx.globalAlpha = 0.92; hx.imageSmoothingEnabled = false; hx.drawImage(mm, 24, 140, 280, 280); hx.imageSmoothingEnabled = true; hx.globalAlpha = 1; hx.strokeStyle = '#6a2a2e'; hx.lineWidth = 3; hx.strokeRect(24, 140, 280, 280); hx.shadowBlur = 8; line('Left palm up: full map', 24, 110, 20, '#cfa54a'); }   // 280 px (was 170), clear of the health bar at y 430
+      const mm = o.map && o.map.small;                                // (hidden, with the WAVE banner, while aiming down sights: both sat over the sight picture) the corner map, bottom left of the view (turn the LEFT palm up for the whole floor in your hand)
+      if (mm && mm.width && !mapMesh.visible && adsK < 0.15) { hx.shadowBlur = 0; hx.globalAlpha = 0.92; hx.imageSmoothingEnabled = false; hx.drawImage(mm, 24, 140, 280, 280); hx.imageSmoothingEnabled = true; hx.globalAlpha = 1; hx.strokeStyle = '#6a2a2e'; hx.lineWidth = 3; hx.strokeRect(24, 140, 280, 280); hx.shadowBlur = 8; line('Left palm up: full map', 24, 110, 20, '#cfa54a'); }   // 280 px (was 170), clear of the health bar at y 430
       const toastE = $('padToast'); if (toastE && toastE.classList.contains('show')) center(questText(toastE.textContent), 24, '#e8c890');
     }
 
